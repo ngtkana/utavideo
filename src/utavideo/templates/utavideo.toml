@@ -1,0 +1,29 @@
+# utavideo の設定。全項目の説明:
+# https://github.com/ngtkana/utavideo/blob/main/docs/config-reference.md
+# パスはこのファイルからの相対パス。
+
+[song]
+title = $title
+artist = ""
+label = ""                 # チャンネル名など。曲名表示に使う
+
+[audio]
+# 音源。ファイル名の "vX.Y" が release のバージョンになる
+file = $audio
+
+[video]
+background = $background  # 画像 / GIF / 動画（GIF と動画は繰り返す）
+size = [1920, 1080]        # src/lyrics.ass の PlayRes と同じにする
+fps = 30
+crf = 18
+fit = "cover"              # cover: はみ出しを切る / contain: 余白を pad_color で埋める
+scale_flags = "lanczos"    # ドット絵をくっきり拡大するなら "neighbor"
+
+[lyrics]
+file = "src/lyrics.ass"
+fade_ms = [150, 150]       # \fad が無い行に自動で付ける（[0, 0] で付けない）
+
+[overlay_text]
+# 動画全体に出す曲名表示。{title} {artist} {label} が使える。\\N は改行
+style = "Title"
+text = "{label}\\N{title} / {artist}"
