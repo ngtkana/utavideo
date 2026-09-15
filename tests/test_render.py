@@ -193,3 +193,18 @@ def test_release_copies_once_and_detects_stale_build(project: Path) -> None:
     stale = runner.invoke(app, ["release", "-C", str(project), "--version", "v1.3"])
     assert stale.exit_code == 1
     assert "lyrics.ass" in stale.output
+
+
+def test_locked_output_keeps_partial(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    original = Path.replace
+
+    def replace(self: Path, target: Path) -> Path:
+        if self.name == "bg.partial.mp4":  # 出力先を他のアプリが開いているときの drvfs の挙動
+            raise PermissionError(13, "Permission denied")
+        return original(self, target)
+
+    monkeypatch.setattr(Path, "replace", replace)
+    result = runner.invoke(app, ["preview-bg", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "他のアプリ" in result.output
+    assert (project / "build/preview/bg.partial.mp4").is_file()
