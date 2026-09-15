@@ -9,15 +9,42 @@ permissions:
   contents: read
 
 jobs:
+  # qa は main の必須チェック。paths-ignore でワークフローごと飛ばすと Pending のまま
+  # マージできないので、毎回起動して、変わったファイルに応じて step を飛ばす。
   qa:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # merge base を求めるため
+      - name: QA の範囲を決める
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event.pull_request.head.sha || github.event.after }}
+        # 列挙が漏れても QA が余計に走るだけで済むよう、QA に関わらないとわかっている
+        # ファイルの側を並べる。docs は tests/test_docs.py が読むので、それだけは走らせる。
+        # merge base が求められない（before が全部 0 など）ときや git が失敗したときは full。
+        run: |
+          full=true
+          if git merge-base "$BASE" "$HEAD" > /dev/null \
+            && git diff --quiet "$BASE...$HEAD" -- . \
+              ':!docs/' ':!README.md' ':!CONTRIBUTING.md' ':!CLAUDE.md'; then
+            full=false
+          fi
+          echo "full=$full" | tee -a "$GITHUB_OUTPUT"
       - name: ffmpeg をインストール
+        if: steps.scope.outputs.full != 'false'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - uses: astral-sh/setup-uv@v6
       - run: uv sync --locked
-      - run: uv run ruff format --check
-      - run: uv run ruff check
-      - run: uv run pyright
-      - run: uv run pytest
+      - if: steps.scope.outputs.full != 'false'
+        run: uv run ruff format --check
+      - if: steps.scope.outputs.full != 'false'
+        run: uv run ruff check
+      - if: steps.scope.outputs.full != 'false'
+        run: uv run pyright
+      - if: steps.scope.outputs.full != 'false'
+        run: uv run pytest
+      - if: steps.scope.outputs.full == 'false'
+        run: uv run pytest tests/test_docs.py
