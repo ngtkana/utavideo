@@ -13,8 +13,8 @@ Aegisub の字幕の描画エンジンを **libass** にします。utavideo も
 ## 1. 曲フォルダを用意する
 
 ```sh
-utavideo new "曲名" --root ~/videos   # 新しく作る
-utavideo init ~/videos/制作中の曲      # 既存のフォルダで使い始める
+utavideo new "曲名" --artist "アーティスト" --root ~/videos   # 新しく作る
+utavideo init ~/videos/制作中の曲 --artist "アーティスト"      # 既存のフォルダで使い始める
 ```
 
 `init` は足りないファイルとフォルダを追加するだけで、既存のファイルは移動も上書きもしません。

@@ -119,7 +119,7 @@ def to_windows_path(path: Path) -> str | None:
     return f"{m[1].upper()}:" + (m[2] or "/").replace("/", "\\")
 
 
-def scaffold(root: Path, title: str) -> ScaffoldResult:
+def scaffold(root: Path, title: str, artist: str = "") -> ScaffoldResult:
     """雛形のディレクトリとファイルを作る。既にあるものは移動も上書きもしない。"""
     result = ScaffoldResult()
     audio = _detect_single(root / "src", AUDIO_EXTS) or f"src/mix/{safe_filename(title)} v1.0.wav"
@@ -136,6 +136,7 @@ def scaffold(root: Path, title: str) -> ScaffoldResult:
         PROJECT_CONFIG_NAME: _render_template(
             "utavideo.toml",
             title=_toml_string(title),
+            artist=_toml_string(artist),
             audio=_toml_string(audio),
             background=_toml_string(background),
         ),

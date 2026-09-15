@@ -70,6 +70,7 @@ def test_scaffold_creates_layout(tmp_path: Path) -> None:
     assert result.skipped == []
     config = load_project_config(root / "utavideo.toml")
     assert config.song.title == "新曲"
+    assert config.song.artist == ""
     assert config.audio.file == Path("src/mix/新曲 v1.0.wav")
     assert config.video.background == Path("src/bg/background.png")
     assert "Title: 新曲" in (root / "src/lyrics.ass").read_text(encoding="utf-8")
@@ -97,10 +98,12 @@ def test_scaffold_keeps_existing_files_and_detects_media(tmp_path: Path) -> None
     assert again.created == []
 
 
-def test_scaffold_escapes_title_in_toml(tmp_path: Path) -> None:
+def test_scaffold_escapes_title_and_artist_in_toml(tmp_path: Path) -> None:
     root = tmp_path / "x"
-    scaffold(root, 'say "hi" \\ ok')
-    assert load_project_config(root / "utavideo.toml").song.title == 'say "hi" \\ ok'
+    scaffold(root, 'say "hi" \\ ok', artist="A & 'B'")
+    song = load_project_config(root / "utavideo.toml").song
+    assert song.title == 'say "hi" \\ ok'
+    assert song.artist == "A & 'B'"
 
 
 def test_project_paths_and_release_name(tmp_path: Path) -> None:

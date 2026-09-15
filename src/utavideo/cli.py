@@ -40,6 +40,7 @@ ProjectOption = Annotated[
     Path | None,
     typer.Option("--project", "-C", help="曲フォルダ。省略時はカレントディレクトリから上へ探す。"),
 ]
+ArtistOption = Annotated[str, typer.Option(help="アーティスト名（utavideo.toml の song.artist）")]
 
 
 def _handle_errors[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
@@ -203,7 +204,7 @@ def _print_scaffold(result: ScaffoldResult, root: Path) -> None:
 
 
 _NEXT_STEPS = """次にやること（詳しくは docs/workflow.md）:
-  1. utavideo.toml の audio.file / video.background / song.artist を埋める
+  1. utavideo.toml の audio.file / video.background を合わせ、song を確認する
   2. utavideo preview-bg → Aegisub で src/lyrics.ass と build/preview/bg.mp4 を開いて歌詞を入れる
   3. utavideo check → utavideo build → utavideo release"""
 
@@ -212,6 +213,7 @@ _NEXT_STEPS = """次にやること（詳しくは docs/workflow.md）:
 @_handle_errors
 def new(
     title: Annotated[str, typer.Argument(help="曲名")],
+    artist: ArtistOption = "",
     root: Annotated[Path, typer.Option(help="曲フォルダを作る場所")] = Path("."),
     day: Annotated[str | None, typer.Option("--date", help="YYYYMMDD。省略時は今日")] = None,
 ) -> None:
@@ -223,7 +225,7 @@ def new(
     dest = root / project_dir_name(title, created_on)
     if dest.exists():
         _fail(f"既にあります: {dest}（既存のフォルダに追加するなら utavideo init）")
-    result = scaffold(dest, title)
+    result = scaffold(dest, title, artist)
     console.print(f"作成しました: {dest}", markup=False)
     _print_scaffold(result, dest)
     console.print(_NEXT_STEPS, markup=False)
@@ -234,12 +236,13 @@ def new(
 def init(
     directory: Annotated[Path, typer.Argument(help="既存の曲フォルダ")] = Path("."),
     title: Annotated[str | None, typer.Option(help="曲名。省略時はフォルダ名から日付を除いたもの")] = None,
+    artist: ArtistOption = "",
 ) -> None:
     """既存の曲フォルダに utavideo のファイルを追加する（既存ファイルは移動も上書きもしない）。"""
     if not directory.is_dir():
         _fail(f"ディレクトリがありません: {directory}")
     root = directory.absolute()
-    result = scaffold(root, title or title_from_dir_name(root.name))
+    result = scaffold(root, title or title_from_dir_name(root.name), artist)
     console.print(f"初期化しました: {root}", markup=False)
     _print_scaffold(result, root)
     console.print(_NEXT_STEPS, markup=False)

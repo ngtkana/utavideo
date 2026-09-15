@@ -4,7 +4,7 @@
 
 [song]
 title = $title
-artist = ""
+artist = $artist
 label = ""                 # チャンネル名など。曲名表示に使う
 
 [audio]

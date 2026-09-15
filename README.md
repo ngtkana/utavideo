@@ -35,7 +35,7 @@ uv tool install --editable ./utavideo
 ## 使い方
 
 ```sh
-utavideo new "曲名" --root ~/videos   # 曲フォルダ（YYYYMMDD 曲名/）を作る
+utavideo new "曲名" --artist "アーティスト" --root ~/videos   # 曲フォルダ（YYYYMMDD 曲名/）を作る
 cd ~/videos/20260915\ 曲名
 # 音源と背景を置き、utavideo.toml を編集する
 utavideo preview-bg   # 歌詞以外を合成したプレビュー動画 → build/preview/bg.mp4
