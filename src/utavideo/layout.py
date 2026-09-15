@@ -19,8 +19,6 @@ from fontTools.ttLib import TTCollection, TTFont
 
 from utavideo import subs
 
-_OVERRIDE_BLOCK = re.compile(r"(\{[^}]*\})")
-_POS_TAG = re.compile(r"\\(?:pos|move)\s*\(")
 _WRAP_TAG = re.compile(r"\\q([0-3])")
 # 幅に効く上書きタグ。\fs が \fscx・\fsp を先取りしないよう、長いものを前に置く
 _FORMAT_TAG = re.compile(r"\\(fn|fscx|fsp|fs|r)([^\\}]*)")
@@ -81,54 +79,58 @@ class _Format:
         return cls(style.fontname, style.fontsize, style.scalex, style.spacing)
 
 
-def _number(value: str, default: float) -> float:
+def _number(value: str, current: float, base: float) -> float:
+    if not value:
+        return base  # 引数の無いタグ（\fs など）は基本スタイルの値に戻す
     try:
         return float(value)
-    except ValueError:  # 引数の無いタグ（\fs など）は基本スタイルの値に戻す
-        return default
+    except ValueError:  # \fscy150 のように、幅に効かないタグを先取りしてしまった場合
+        return current
 
 
 def _apply_tags(
     block: str, current: _Format, base: _Format, styles: Mapping[str, pysubs2.SSAStyle]
 ) -> _Format:
-    for name, value in _FORMAT_TAG.findall(block):
-        value = value.strip()
+    for name, raw in _FORMAT_TAG.findall(block):
+        value = raw.strip()
         if name == "r":
             style = styles.get(value)
             current = base if style is None else _Format.of(style)
         elif name == "fn":
             current = replace(current, fontname=value or base.fontname)
         elif name == "fs":
-            current = replace(current, fontsize=_number(value, base.fontsize))
+            current = replace(current, fontsize=_number(value, current.fontsize, base.fontsize))
         elif name == "fscx":
-            current = replace(current, scale_x=_number(value, base.scale_x))
+            current = replace(current, scale_x=_number(value, current.scale_x, base.scale_x))
         elif name == "fsp":
-            current = replace(current, spacing=_number(value, base.spacing))
+            current = replace(current, spacing=_number(value, current.spacing, base.spacing))
     return current
 
 
-def _typeset(text: str, base: _Format, styles: Mapping[str, pysubs2.SSAStyle]) -> list[tuple[str, _Format]]:
-    """1文字ずつ、それを描くときの書式を付けて並べる。改行 \\N / \\n は1つの要素として残す。"""
-    tokens: list[tuple[str, _Format]] = []
+def _units(
+    text: str, base: _Format, styles: Mapping[str, pysubs2.SSAStyle], wrap: int
+) -> list[list[tuple[str, _Format]]]:
+    """折り返せない塊ごとに、(書式が続く間の文字列, その書式) の並びを返す。
+
+    WrapStyle 2 以外は空白でも折り返せる。固定幅空白 \\h は折り返しの対象にしない。
+    """
+    breaks = {"\\N", "\\n"} if wrap == 2 else {"\\N", "\\n", " "}
+    units: list[list[tuple[str, _Format]]] = [[]]
     current = base
-    for part in _OVERRIDE_BLOCK.split(text):
+    for part in subs.OVERRIDE_BLOCK.split(text):
         if part.startswith("{") and part.endswith("}"):
             current = _apply_tags(part, current, base, styles)
             continue
         for token in _TOKEN.findall(part):
-            tokens.append(("\u00a0" if token == "\\h" else token, current))
-    return tokens
-
-
-def _split_units(tokens: list[tuple[str, _Format]], wrap: int) -> list[list[tuple[str, _Format]]]:
-    """折り返せない塊に分ける。WrapStyle 2 以外は空白でも折り返せる。"""
-    breaks = {"\\N", "\\n"} if wrap == 2 else {"\\N", "\\n", " "}
-    units: list[list[tuple[str, _Format]]] = [[]]
-    for token, fmt in tokens:
-        if token in breaks:
-            units.append([])
-        else:
-            units[-1].append((token, fmt))
+            if token in breaks:
+                units.append([])
+                continue
+            unit = units[-1]
+            char = "\u00a0" if token == "\\h" else token
+            if unit and unit[-1][1] == current:
+                unit[-1] = (unit[-1][0] + char, current)
+            else:
+                unit.append((char, current))
     return units
 
 
@@ -147,38 +149,31 @@ def overflows(script: pysubs2.SSAFile, lookup: Callable[[str], Sequence[Path]]) 
     except ValueError:
         default_wrap = 0
 
-    metrics_cache: dict[str, list[FontMetrics]] = {}
+    @cache
+    def metrics_of(fontname: str) -> tuple[FontMetrics, ...]:
+        return tuple(m for p in lookup(fontname) if (m := load_metrics(p, fontname)))
 
-    def metrics_of(fontname: str) -> list[FontMetrics]:
-        if fontname not in metrics_cache:
-            metrics_cache[fontname] = [m for p in lookup(fontname) if (m := load_metrics(p, fontname))]
-        return metrics_cache[fontname]
-
-    def measure(unit: list[tuple[str, _Format]]) -> float | None:
-        """塊の幅。フォントが見つからない文字があれば None。"""
-        total = 0.0
-        for token, fmt in unit:
-            metrics = metrics_of(fmt.fontname)
-            if not metrics:
-                return None
-            total += max(
-                m.text_width(token, size=fmt.fontsize, scale_x=fmt.scale_x, spacing=fmt.spacing)
-                for m in metrics
+    def measure(unit: list[tuple[str, _Format]]) -> float:
+        """塊の幅。フォントが複数見つかったときは、いちばん広いもので見積もる。"""
+        return sum(
+            max(
+                m.text_width(run, size=fmt.fontsize, scale_x=fmt.scale_x, spacing=fmt.spacing)
+                for m in metrics_of(fmt.fontname)
             )
-        return total
+            for run, fmt in unit
+        )
 
     issues: list[subs.Issue] = []
     for event in subs.dialogues(script):
         style = script.styles.get(event.style)
-        if style is None or _POS_TAG.search(event.text):
+        if style is None or subs.POS_TAG.search(event.text):
             continue
         wrap_tags = _WRAP_TAG.findall(event.text)
         wrap = int(wrap_tags[-1]) if wrap_tags else default_wrap
-        units = _split_units(_typeset(event.text, _Format.of(style), script.styles), wrap)
-        widths = [w for unit in units if (w := measure(unit)) is not None]
-        if len(widths) != len(units):
-            continue
-        width = max(widths, default=0.0) + 2 * style.outline
+        units = _units(event.text, _Format.of(style), script.styles, wrap)
+        if any(not metrics_of(fmt.fontname) for unit in units for _, fmt in unit):
+            continue  # フォントの見つからない文字があるので測れない
+        width = max(measure(unit) for unit in units) + 2 * style.outline
 
         available = res[0] - (event.marginl or style.marginl) - (event.marginr or style.marginr)
         if width > available:

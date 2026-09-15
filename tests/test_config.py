@@ -85,7 +85,9 @@ def test_font_dirs_expand_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="fontconfig の既定値は POSIX のもの")
-def test_default_font_dirs_cover_fontconfig_defaults(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_font_dir_candidates_cover_fontconfig_defaults(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
     candidates = _font_dir_candidates()

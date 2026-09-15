@@ -13,11 +13,13 @@ from utavideo.errors import UtavideoError
 
 OVERLAY_LAYER = 100
 
+# POS_TAG と OVERRIDE_BLOCK は layout も使う（.ass のタグの書き方を2か所に持たない）
+POS_TAG = re.compile(r"\\(?:pos|move)\s*\(")
+OVERRIDE_BLOCK = re.compile(r"(\{[^}]*\})")  # 分割にも使うのでブロックを捕捉する
+
 _FADE_TAG = re.compile(r"\\fade?\s*\(")
-_POS_TAG = re.compile(r"\\(?:pos|move)\s*\(")
 _FONT_TAG = re.compile(r"\\fn([^\\}]*)")
 _RESET_TAG = re.compile(r"\\r([^\\}]*)")
-_OVERRIDE_BLOCK = re.compile(r"\{[^}]*\}")
 
 
 class SubtitleError(UtavideoError):
@@ -106,15 +108,16 @@ def compose(
 
 def _reset_styles(text: str) -> set[str]:
     """\\r で切り替えている先のスタイル名。引数の無い \\r は元のスタイルに戻すだけなので含めない。"""
-    return {name.strip() for name in _RESET_TAG.findall(text) if name.strip()}
+    return {name for raw in _RESET_TAG.findall(text) if (name := raw.strip())}
 
 
 def used_fonts(subs: pysubs2.SSAFile) -> set[str]:
     """表示される行が使うフォント名（スタイル、\\r の切替先、\\fn タグ）。"""
     names: set[str] = set()
     for event in dialogues(subs):
-        for style in {event.style, *_reset_styles(event.text)} & set(subs.styles):
-            names.add(subs.styles[style].fontname)
+        for name in {event.style, *_reset_styles(event.text)}:
+            if (style := subs.styles.get(name)) is not None:
+                names.add(style.fontname)
         names.update(name.strip() for name in _FONT_TAG.findall(event.text))
     # 先頭の @ は縦書き指定で、フォント名そのものではない
     return {name.removeprefix("@") for name in names if name}
@@ -144,11 +147,11 @@ def lint(
         issues.append(Issue("error", f"overlay_text.style のスタイル {overlay.style!r} が .ass にありません"))
 
     events = dialogues(subs)
-    used = {e.style for e in events} | {s for e in events for s in _reset_styles(e.text)}
+    used = {s for e in events for s in (e.style, *_reset_styles(e.text))}
     for style in sorted(used - set(subs.styles)):
         issues.append(Issue("error", f"未定義のスタイル {style!r} を使っている行があります"))
 
-    positioned = [e for e in events if _POS_TAG.search(e.text)]
+    positioned = [e for e in events if POS_TAG.search(e.text)]
     if positioned:
         where = ", ".join(describe(e) for e in positioned[:5])
         more = " ほか" if len(positioned) > 5 else ""
@@ -177,7 +180,7 @@ def _overlaps(events: list[pysubs2.SSAEvent]) -> list[Issue]:
     """同じスタイル・レイヤーで時間が重なる行（\\pos の行は意図的とみなして除く）。"""
     groups: dict[tuple[str, int], list[pysubs2.SSAEvent]] = {}
     for event in events:
-        if not _POS_TAG.search(event.text):
+        if not POS_TAG.search(event.text):
             groups.setdefault((event.style, event.layer), []).append(event)
 
     issues: list[Issue] = []
@@ -198,7 +201,7 @@ def _overlaps(events: list[pysubs2.SSAEvent]) -> list[Issue]:
 
 
 def describe(event: pysubs2.SSAEvent) -> str:
-    text = _OVERRIDE_BLOCK.sub("", event.text).replace("\\N", " ").replace("\\n", " ")
+    text = OVERRIDE_BLOCK.sub("", event.text).replace("\\N", " ").replace("\\n", " ")
     if len(text) > 20:
         text = text[:20] + "…"
     return f"{pysubs2.time.ms_to_str(event.start, fractions=True)}「{text}」"

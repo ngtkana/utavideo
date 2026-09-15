@@ -12,6 +12,8 @@ AUDIO_EXTS = frozenset({".wav", ".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"
 PREVIEW_GOP = 15
 
 type Mode = Literal["final", "preview", "overlay"]
+type Fit = Literal["cover", "contain"]
+type ScaleFlags = Literal["lanczos", "bicubic", "bilinear", "area", "neighbor"]
 type Preset = Literal[
     "ultrafast",
     "superfast",
@@ -45,8 +47,8 @@ class RenderSpec:
     subtitles: Path
     fontsdir: Path
     background: Path | None = None
-    fit: Literal["cover", "contain"] = "cover"
-    scale_flags: str = "lanczos"
+    fit: Fit = "cover"
+    scale_flags: ScaleFlags = "lanczos"
     pad_color: str = "black"
     crf: int = 18
     preset: Preset = "slow"

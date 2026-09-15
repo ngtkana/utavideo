@@ -99,10 +99,12 @@ def analyze(project: Project, mode: graph.Mode) -> Analysis:
     if mode != "overlay" and background_ext not in graph.IMAGE_EXTS | graph.ANIMATED_EXTS:
         issues.append(subs.Issue("error", f"video.background の形式に対応していません: {background_ext}"))
 
-    audio = probe_audio(project.audio_path) if project.audio_path.is_file() else None
-    if audio is not None and not audio.has_sound:
-        issues.append(subs.Issue("error", f"audio.file に音声が入っていません: {project.audio_path}"))
-    duration_s = audio.duration_s if audio is not None else None
+    duration_s: float | None = None
+    if project.audio_path.is_file():
+        audio = probe_audio(project.audio_path)
+        duration_s = audio.duration_s
+        if not audio.has_sound:
+            issues.append(subs.Issue("error", f"audio.file に音声が入っていません: {project.audio_path}"))
     lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
     if lyrics is None or duration_s is None:
         return Analysis(issues, duration_s, lyrics, ())
@@ -260,18 +262,19 @@ def check(project_dir: ProjectOption = None) -> None:
         console.print(f"  歌詞: {len(subs.dialogues(analysis.lyrics))} 行", markup=False)
     for file in analysis.font_files:
         console.print(f"  フォント: {file}", markup=False)
+    issues = list(analysis.issues)
     if version := project.version:
         console.print(f"  release 先: {project.release_path(version)}", markup=False)
     else:
         message = "audio.file のファイル名に vX.Y が無いので、release では --version が必要です"
-        analysis.issues.append(subs.Issue("warning", message))
+        issues.append(subs.Issue("warning", message))
     if not config.song.artist:
-        analysis.issues.append(subs.Issue("warning", "song.artist が空です"))
+        issues.append(subs.Issue("warning", "song.artist が空です"))
 
-    _print_issues(analysis.issues)
+    _print_issues(issues)
     if not analysis.ok:
         raise typer.Exit(1)
-    warnings = sum(issue.level == "warning" for issue in analysis.issues)
+    warnings = sum(issue.level == "warning" for issue in issues)
     if warnings:
         console.print(f"[yellow]エラーはありません（警告 {warnings} 件）[/]")
     else:

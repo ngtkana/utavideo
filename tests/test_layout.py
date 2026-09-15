@@ -71,6 +71,7 @@ def lookup(tmp_path: Path, make_font: MakeFont):
         (r"AAA{\fs200}AA", 0, 420),  # 行の途中で変わる
         (r"{\fscx200}AAA", 0, 360),
         (r"{\fsp50}AAA", 0, 330),
+        (r"{\fs200}AAA{\fscy50}AA", 0, 600),  # \fscy は縦だけなので幅は変わらない
     ],
 )
 def test_overflows(lookup, text: str, wrap_style: int, expected_width: int | None) -> None:

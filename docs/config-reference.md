@@ -25,7 +25,7 @@
 | `size` | `[幅, 高さ]` | `[1920, 1080]` | 出力の解像度（偶数）。`src/lyrics.ass` の PlayRes と同じにする |
 | `fps` | 整数 | `30` | フレームレート |
 | `crf` | 整数 0〜51 | `18` | 画質。小さいほど高画質で、ファイルが大きくなる |
-| `preset` | `"ultrafast"` / `"superfast"` / `"veryfast"` / `"faster"` / `"fast"` / `"medium"` / `"slow"` / `"slower"` / `"veryslow"` / `"placebo"` | `"slow"` | x264 のプリセット。速く書き出したいときは `"medium"` や `"fast"` |
+| `preset` | 文字列 | `"slow"` | x264 のプリセット。`ultrafast` / `superfast` / `veryfast` / `faster` / `fast` / `medium` / `slow` / `slower` / `veryslow` / `placebo`。速く書き出したいときは `"medium"` や `"fast"` |
 | `fit` | `"cover"` / `"contain"` | `"cover"` | 背景の縦横比が出力と違うとき。`cover` ははみ出した部分を切り取り、`contain` は余白を `pad_color` で埋める |
 | `scale_flags` | `"lanczos"` / `"bicubic"` / `"bilinear"` / `"area"` / `"neighbor"` | `"lanczos"` | 背景の拡大縮小の方法。ドット絵をくっきり見せたいときは `"neighbor"` |
 | `pad_color` | 文字列 | `"black"` | `fit = "contain"` のときの余白の色（ffmpeg の色指定。例: `"pink"`、`"0xF8D8E8"`） |

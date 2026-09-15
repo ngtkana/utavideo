@@ -5,7 +5,7 @@ import os
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import (
     BaseModel,
@@ -18,7 +18,7 @@ from pydantic import (
 )
 
 from utavideo.errors import UtavideoError
-from utavideo.graph import Preset
+from utavideo.graph import Fit, Preset, ScaleFlags
 
 PROJECT_CONFIG_NAME = "utavideo.toml"
 
@@ -47,8 +47,8 @@ class Video(_Model):
     fps: PositiveInt = 30
     crf: int = Field(default=18, ge=0, le=51)
     preset: Preset = "slow"
-    fit: Literal["cover", "contain"] = "cover"
-    scale_flags: Literal["lanczos", "bicubic", "bilinear", "area", "neighbor"] = "lanczos"
+    fit: Fit = "cover"
+    scale_flags: ScaleFlags = "lanczos"
     pad_color: str = "black"
 
     @field_validator("size")
@@ -78,6 +78,11 @@ class ProjectConfig(_Model):
     overlay_text: OverlayText = Field(default_factory=OverlayText)
 
 
+def _xdg(var: str, fallback: str) -> Path:
+    """XDG の基準ディレクトリ。環境変数が無ければホームディレクトリ下の既定値。"""
+    return Path(os.environ.get(var) or Path.home() / fallback)
+
+
 def _font_dir_candidates() -> list[Path]:
     """Windows 側のシステム・ユーザーフォントと、Linux 側のフォントの場所（存在しないものも含む）。"""
     if sys.platform == "win32":
@@ -88,11 +93,10 @@ def _font_dir_candidates() -> list[Path]:
     dirs = [Path("/mnt/c/Windows/Fonts")]
     dirs += sorted(map(Path, glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts")))
     # fontconfig（/etc/fonts/fonts.conf）が既定で見る 4 か所
-    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
     dirs += [
         Path("/usr/share/fonts"),
         Path("/usr/local/share/fonts"),
-        data_home / "fonts",
+        _xdg("XDG_DATA_HOME", ".local/share") / "fonts",
         Path.home() / ".fonts",
     ]
     return dirs
@@ -107,16 +111,17 @@ class UserConfig(_Model):
 
     @field_validator("font_dirs")
     @classmethod
-    def _expand_home(cls, dirs: list[Path]) -> list[Path]:
-        return [d.expanduser() for d in dirs]
+    def _absolute(cls, dirs: list[Path]) -> list[Path]:
+        # フォント一覧のキャッシュはパス文字列をキーにするので、絶対パスに揃える
+        return [d.expanduser().absolute() for d in dirs]
 
 
 def config_dir() -> Path:
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "utavideo"
+    return _xdg("XDG_CONFIG_HOME", ".config") / "utavideo"
 
 
 def cache_dir() -> Path:
-    return Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "utavideo"
+    return _xdg("XDG_CACHE_HOME", ".cache") / "utavideo"
 
 
 def load_project_config(path: Path) -> ProjectConfig:
