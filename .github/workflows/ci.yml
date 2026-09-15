@@ -13,6 +13,8 @@ jobs:
   # マージできないので、毎回起動して、変わったファイルに応じて step を飛ばす。
   qa:
     runs-on: ubuntu-24.04
+    # 普段は2分以内に終わる。止まったときに既定の6時間まで CI 時間を使い続けないように打ち切る
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
         with:
