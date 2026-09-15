@@ -1,6 +1,6 @@
 # 制作の流れ
 
-1本の動画を作る手順です。フォルダの構成は [project-layout.md](project-layout.md)、設定項目は [config-reference.md](config-reference.md)、やりたいこと別の設定方法は [customization.md](customization.md) を参照してください。
+1本の動画を作る手順です。やりたいこと別の設定方法は [customization.md](customization.md)、設定とコマンドの詳細は [config-reference.md](config-reference.md)・[commands.md](commands.md)、フォルダの構成は [project-layout.md](project-layout.md) を参照してください。
 
 ## 0. 準備（最初に一度だけ）
 
@@ -26,7 +26,7 @@ utavideo init ~/videos/制作中の曲 --artist "アーティスト"      # 既�
 - 背景（画像 / GIF / 動画）を `src/bg/` に置き、`video.background` を合わせる
 - `song.title`・`song.artist`・`song.label` を埋める
 
-音源を差し替えるときは、新しいバージョン名のファイル（`曲名 v1.1.wav`）を置いて `audio.file` を書き換えます。ファイル名の `vX.Y` が、`release` で付くバージョンになります。
+音源を差し替えるときは、新しいバージョン名のファイル（`曲名 v1.1.wav`）を置いて `audio.file` を書き換えます。ファイル名の `vX.Y` が、`release` で付くバージョンになります（規則は [project-layout.md](project-layout.md#名前の付け方)）。
 
 ## 3. プレビュー動画を作る
 
@@ -51,17 +51,18 @@ WSL2 では、Aegisub で開くための Windows のパスも表示されます�
 
 - **位置・大きさ・色はスタイルで決めます。** スタイルマネージャで数値を変えると映像にすぐ反映されるので、完成図を見ながら調整できます
 - 位置が何種類かあるときは、`LyricsLeft` / `LyricsRight` のように**スタイルを分けます**
-- 行ごとのタグ（`\pos`、`\fs`、`\c` など）は、演出上どうしても必要な行だけに使います。`check` は `\pos` を使っている行の数を警告します
-- **長い行は `\N` で改行します。** libass は空白の位置でしか自動改行しないため、空白の無い日本語の長い行は画面の外へはみ出します。`check` が行の幅を概算して、はみ出しそうな行を警告します
-- フェードは書きません。`utavideo.toml` の `lyrics.fade_ms` で全行に自動で付きます（`\fad` を書いた行はそちらが優先されます）
-- 曲名表示は .ass に書きません。`utavideo.toml` の `[overlay_text]` から自動で入ります（見た目は `Title` スタイルで調整します）
+- 行ごとのタグ（`\pos`、`\fs`、`\c` など）は、演出上どうしても必要な行だけに使います
+- **長い行は `\N` で改行します。** libass は空白の位置でしか自動改行しないため、空白の無い日本語の長い行は画面の外へはみ出します
+- フェードと曲名表示は .ass に書きません。`utavideo.toml` の `lyrics.fade_ms` と `[overlay_text]` から自動で入ります
+
+タグ・レイヤー・フェード・曲名表示などの書き方は [customization.md](customization.md) を参照してください。
 
 ### プレビューを作り直すとき
 
 `utavideo.toml`（背景・曲名表示など）を変えたら、`utavideo preview-bg` を実行し直し、Aegisub で動画を開き直します。背景を決めてから歌詞を入れると、作り直しはほとんど要りません。
 フェードも含めた最終的な見え方は、`utavideo build` の結果で確認してください。
 
-WSL2 で曲フォルダが Windows のドライブ（`/mnt/c` など）にあるとき、出力先の動画を他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いたままだと、書き出しの最後に置き換えられずに止まります。書き出した動画は `bg.partial.mp4` のように `.partial` の付いた名前で残っているので、アプリを閉じてから実行し直してください。`build` や `release` でも同じです。
+WSL2 で曲フォルダが Windows のドライブにあるときは、出力先の動画を他のアプリで開いたまま書き出すと止まります（[commands.md](commands.md#共通)）。
 
 ## 5. 検査する
 
@@ -69,10 +70,7 @@ WSL2 で曲フォルダが Windows のドライブ（`/mnt/c` など）にある
 utavideo check
 ```
 
-エラーがあると書き出せません。主な検査項目は次のとおりです。
-
-- エラー: ファイルが無い、`audio.file` に音声が入っていない、PlayRes と `video.size` が違う、未定義のスタイルを使っている、フォントが見つからない
-- 警告: 同じスタイルの行が重なっている、`\pos` を使っている、音声が終わった後に始まる行がある、音声の終わりで途中で切られる行がある、行が画面からはみ出しそう
+エラーがあると書き出せません（警告だけなら書き出せます）。検査項目は [commands.md](commands.md#検査項目) を参照してください。
 
 初回はフォントの一覧を作るので時間がかかります（2回目以降はキャッシュを使います）。
 
@@ -91,8 +89,7 @@ utavideo release                  # release/曲名 vX.Y.mp4（バージョンは
 utavideo release --version v1.0.1 # バージョンを指定する
 ```
 
-- 同じ名前のファイルが既にあるときは止まります（上書きしません）
-- `build/main.mp4` より新しい入力（`utavideo.toml`・音源・背景・歌詞）があるときも止まります。書き出し忘れを防ぐためです
+同じ名前のファイルがあるときや、`build/main.mp4` より新しい入力があるとき（書き出し忘れ）は止まります（[commands.md](commands.md#release)）。
 
 ## 動画編集ソフトと組み合わせる
 

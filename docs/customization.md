@@ -1,6 +1,6 @@
 # カスタマイズ一覧
 
-変えられることの一覧です。項目の型と既定値は [config-reference.md](config-reference.md)、基本の手順は [workflow.md](workflow.md) を参照してください。
+変えられることの一覧です。基本の手順は [workflow.md](workflow.md)、項目の型と既定値は [config-reference.md](config-reference.md)、コマンドの詳細は [commands.md](commands.md) を参照してください。
 
 ## 歌詞の見た目（.ass のスタイル）
 
@@ -62,7 +62,7 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | やりたいこと | 書き方 |
 |---|---|
 | 音源 | `audio.file`。ffmpeg が読める形式なら可（`init` の自動設定は wav / flac / mp3 / m4a / aac / ogg / opus） |
-| バージョン | 音源のファイル名の `v1.2` など。大文字の `V` も可、複数あれば最後、`v1.2a` は対象外 |
+| バージョン | 音源のファイル名の `v1.2` など（規則は [project-layout.md](project-layout.md#名前の付け方)） |
 | バージョンを指定して公開 | `release --version v1.2.1`（小文字の `v`） |
 | 入力の方が新しくても公開 | `release --allow-stale` |
 | 公開ファイル名 | `song.title`（ファイル名に使えない文字は `_` になる） |
@@ -103,18 +103,13 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 | 実際に描画した .ass を見る | `build/.work/final.ass`・`preview.ass`・`overlay.ass`（自動のフェードと曲名表示が入っている） |
 | 書き出す前に検査 | `utavideo check` |
 
-## 環境変数
+## 設定とキャッシュの場所
 
-| 変数 | 内容 |
-|---|---|
-| `UTAVIDEO_FONT_DIRS` | フォントを探す場所 |
-| `XDG_CONFIG_HOME` | ユーザー設定の場所（既定 `~/.config`） |
-| `XDG_CACHE_HOME` | キャッシュの場所（既定 `~/.cache`） |
-| `XDG_DATA_HOME` | `font_dirs` の既定値に含める `fonts/` の場所（既定 `~/.local/share`） |
+環境変数 `XDG_CONFIG_HOME`・`XDG_CACHE_HOME` で変えられます（[一覧](config-reference.md#環境変数)）。
 
 ## 今は変えられないもの
 
-- 出力の形式（[一覧](config-reference.md#書き出しの設定変更不可)）
+- 出力の形式（[一覧](commands.md#出力の形式変更不可)）
 - 曲名表示の区間・レイヤー・フェード・数
 - 背景の重ね合わせ、アバターの合成（[roadmap.md](roadmap.md)）
 - 雛形の中身、1曲で複数の .ass
