@@ -4,7 +4,7 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`release` は曲フォルダで実行します。`-C <曲フォルダ>` で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `check`・`preview-bg`・`build`・`overlay`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
 - `check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
