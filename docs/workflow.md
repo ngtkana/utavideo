@@ -2,11 +2,13 @@
 
 1本の動画を作る手順です。フォルダの構成は [project-layout.md](project-layout.md)、設定項目は [config-reference.md](config-reference.md) を参照してください。
 
-## 0. 準備: Aegisub の設定（最初に一度だけ）
+## 0. 準備（最初に一度だけ）
 
 Aegisub の字幕の描画エンジンを **libass** にします。utavideo も libass で描画するので、Aegisub で見た位置・折り返し・縁取りがそのまま書き出し結果になります。
 
 - 設定（Preferences）→ 詳細（Advanced）→ ビデオ（Video）→ 字幕プロバイダ（Subtitles provider）を `libass` にする
+
+雛形の字幕スタイルは [Zen Maru Gothic](https://fonts.google.com/specimen/Zen+Maru+Gothic) を使います。Aegisub を動かす環境（WSL2 なら Windows 側）にインストールしてください。入っていないと Aegisub では別のフォントで表示され、`utavideo check` はエラーになります。
 
 ## 1. 曲フォルダを用意する
 

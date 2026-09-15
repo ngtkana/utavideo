@@ -14,6 +14,8 @@
   - WSL2 では Windows にインストールしたフォントも自動で探します
   - Windows ネイティブ・macOS は未検証です
 - libass 付きの ffmpeg / ffprobe（Ubuntu なら `sudo apt install ffmpeg`）
+- 雛形の字幕スタイルが使うフォント [Zen Maru Gothic](https://fonts.google.com/specimen/Zen+Maru+Gothic)（無料）
+  - 別のフォントを使う場合は、.ass のスタイルで指定します
 - [uv](https://docs.astral.sh/uv/)
 - 歌詞を作るのに [Aegisub](https://aegisub.org/) 3.4 以降（推奨）
 
