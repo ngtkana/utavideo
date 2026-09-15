@@ -1,0 +1,49 @@
+[project]
+name = "utavideo"
+version = "0.1.0"
+description = "utavideo.toml と歌詞 .ass から ffmpeg で歌動画を書き出す"
+readme = "README.md"
+authors = [
+    { name = "Kana Nagata", email = "ngtkana@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "fonttools>=4.65.0",
+    "pydantic>=2.13.5",
+    "pysubs2>=1.9.0",
+    "rich>=15.0.0",
+    "typer>=0.27.2",
+]
+
+[project.scripts]
+utavideo = "utavideo.cli:app"
+
+[build-system]
+requires = ["uv_build>=0.11.7,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pyright>=1.1.414",
+    "pytest>=9.1.1",
+    "ruff>=0.16.7",
+]
+
+[tool.ruff]
+line-length = 110
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
+# 日本語の全角記号を「紛らわしい文字」として扱わない
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+include = ["src", "tests"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+addopts = ["--import-mode=importlib"]
