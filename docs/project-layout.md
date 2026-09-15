@@ -16,8 +16,10 @@ YYYYMMDD 曲名/
 │   ├── main.mp4
 │   ├── overlay.mov
 │   ├── preview/bg.mp4
+│   ├── title.txt        # utavideo description
+│   ├── description.txt
 │   └── .work/           # 書き出しに使った中間ファイル
-├── release/             # 公開した動画。消さない
+├── release/             # 公開した動画と概要欄。消さない
 └── share/               # 人とやり取りしたファイル
     └── YYYYMMDD-相手/
 ```
@@ -41,6 +43,7 @@ utavideo が読むのは `utavideo.toml` で指定したファイルだけなの
 | フォルダ | `YYYYMMDD 曲名`（`utavideo new` が付ける） | `20260915 曲名/` |
 | 音源 | `曲名 vX.Y.wav` | `src/mix/曲名 v1.2.wav` |
 | 公開する動画 | `曲名 vX.Y.mp4`（`utavideo release` が付ける） | `release/曲名 v1.2.mp4` |
+| 公開したときの概要欄 | `曲名 vX.Y.txt`（`[description]` がある曲で `utavideo release` が書く） | `release/曲名 v1.2.txt` |
 | やり取り | `share/YYYYMMDD-相手/` | `share/20260913-to-mixer/`、`share/20260920-from-illustrator/` |
 
 - バージョンは、音源のファイル名に含まれる `v` と数字（`v1`・`v1.2`・`V1.2.3`）です。複数あれば最後のものを使い、`v1.2a` のように英数字が続くものは対象外です。無いときは `utavideo release --version` で指定します

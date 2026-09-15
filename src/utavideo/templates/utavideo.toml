@@ -6,6 +6,7 @@
 title = $title
 artist = $artist
 label = ""                 # チャンネル名など。曲名表示に使う
+original_urls = []         # 原曲の URL（概要欄に使う）
 
 [audio]
 # 音源。ファイル名の "vX.Y" が release のバージョンになる
@@ -28,3 +29,22 @@ fade_ms = [150, 150]       # \fad が無い行に自動で付ける（[0, 0] で
 # 改行は \N（TOML では "\\N" と書く）。例: text = "{label}\\N{title} / {artist}"
 style = "Title"
 text = "{title} / {artist}"
+
+[description]
+# 概要欄とタイトル（utavideo description）。見出しなどの書式はユーザー設定で変える
+text = """
+"""
+hashtags = $hashtags  # 先頭の # は付けない
+# title = "..."            # 自動で作るタイトルを使わないとき
+
+# 概要欄のクレジット。roles が同じ人は1つの見出しにまとめる
+${credits}# [[credits]]
+# roles = ["Vocal", "Mix"]
+# name = "名前"
+# urls = ["https://..."]
+
+# 使った素材。files はその素材を使ったファイル（check でクレジットの書き忘れを見つける）
+# [[materials]]
+# section = "イラスト"
+# urls = ["https://..."]
+# files = ["src/bg/background.png"]

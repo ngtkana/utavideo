@@ -5,9 +5,10 @@ import os
 import sys
 import tomllib
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any, Literal
 
 from pydantic import (
+    AfterValidator,
     BaseModel,
     ConfigDict,
     Field,
@@ -27,6 +28,15 @@ class ConfigError(UtavideoError):
     """設定ファイルが読めない、または内容が不正。"""
 
 
+def format_setting(template: str, setting: str, **values: str) -> str:
+    """設定に書かれた {名前} を置き換える。"""
+    try:
+        return template.format(**values)
+    except (KeyError, IndexError, ValueError) as e:
+        names = ", ".join(values)
+        raise ConfigError(f"{setting} の書式が不正です（使える名前は {names}）: {e}") from e
+
+
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -35,6 +45,7 @@ class Song(_Model):
     title: str
     artist: str = ""
     label: str = ""
+    original_urls: tuple[str, ...] = ()
 
 
 class Audio(_Model):
@@ -70,12 +81,43 @@ class OverlayText(_Model):
     text: str = "{title} / {artist}"
 
 
+class Credit(_Model):
+    roles: tuple[str, ...] = Field(min_length=1)
+    name: str
+    urls: tuple[str, ...] = ()
+
+
+class Material(_Model):
+    section: str
+    urls: tuple[str, ...] = ()
+    files: tuple[Path, ...] = ()
+
+
+def _check_hashtags(tags: tuple[str, ...]) -> tuple[str, ...]:
+    for tag in tags:
+        if not tag or tag.startswith("#") or any(ch.isspace() for ch in tag):
+            raise ValueError(f"ハッシュタグは # と空白を付けずに書いてください: {tag!r}")
+    return tags
+
+
+Hashtags = Annotated[tuple[str, ...], AfterValidator(_check_hashtags)]
+
+
+class Description(_Model):
+    text: str = ""
+    hashtags: Hashtags = ()
+    title: str | None = None
+
+
 class ProjectConfig(_Model):
     song: Song
     audio: Audio
     video: Video
     lyrics: Lyrics = Field(default_factory=Lyrics)
     overlay_text: OverlayText = Field(default_factory=OverlayText)
+    credits: tuple[Credit, ...] = ()
+    materials: tuple[Material, ...] = ()
+    description: Description | None = None
 
 
 def _xdg(var: str, fallback: str) -> Path:
@@ -106,8 +148,38 @@ def default_font_dirs() -> list[Path]:
     return [d for d in _font_dir_candidates() if d.is_dir()]
 
 
+type Block = Literal["text", "original", "credits", "materials", "hashtags"]
+
+
+class DescriptionFormat(_Model):
+    title: str = "{title} / {artist}（Cover: {singers}）"
+    singer_roles: tuple[str, ...] = ("Vocal",)
+    singer_separator: str = ", "
+    heading: str = "■{section}"
+    original_heading: str = "原曲"
+    role_separator: str = ", "
+    name_url_separator: str = " "
+    section_gap: NonNegativeInt = 0
+    hashtags_gap: NonNegativeInt = 1
+    order: tuple[Block, ...] = ("text", "original", "credits", "materials", "hashtags")
+
+    @field_validator("order")
+    @classmethod
+    def _unique_blocks(cls, order: tuple[Block, ...]) -> tuple[Block, ...]:
+        if len(set(order)) != len(order):
+            raise ValueError("同じブロックを2回書かないでください")
+        return order
+
+
+class Defaults(_Model):
+    credits: tuple[Credit, ...] = ()
+    hashtags: Hashtags = ()
+
+
 class UserConfig(_Model):
     font_dirs: list[Path] = Field(default_factory=default_font_dirs)
+    description: DescriptionFormat = Field(default_factory=DescriptionFormat)
+    defaults: Defaults = Field(default_factory=Defaults)
 
     @field_validator("font_dirs")
     @classmethod

@@ -14,7 +14,7 @@ import typer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from utavideo import fonts, graph, layout, subs
+from utavideo import description, fonts, graph, layout, subs
 from utavideo.config import cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
@@ -70,6 +70,13 @@ def _print_issues(issues: list[subs.Issue]) -> None:
 
 def _load_project(project_dir: Path | None) -> Project:
     return Project.load(find_project_root(project_dir or Path.cwd()))
+
+
+def _write_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = partial_path(path)
+    tmp.write_text(text, encoding="utf-8", newline="\n")
+    replace_partial(tmp, path)
 
 
 @dataclass(frozen=True)
@@ -225,7 +232,7 @@ def new(
     dest = root / project_dir_name(title, created_on)
     if dest.exists():
         _fail(f"既にあります: {dest}（既存のフォルダに追加するなら utavideo init）")
-    result = scaffold(dest, title, artist)
+    result = scaffold(dest, title, artist, load_user_config().defaults)
     console.print(f"作成しました: {dest}", markup=False)
     _print_scaffold(result, dest)
     console.print(_NEXT_STEPS, markup=False)
@@ -242,7 +249,7 @@ def init(
     if not directory.is_dir():
         _fail(f"ディレクトリがありません: {directory}")
     root = directory.absolute()
-    result = scaffold(root, title or title_from_dir_name(root.name), artist)
+    result = scaffold(root, title or title_from_dir_name(root.name), artist, load_user_config().defaults)
     console.print(f"初期化しました: {root}", markup=False)
     _print_scaffold(result, root)
     console.print(_NEXT_STEPS, markup=False)
@@ -273,9 +280,11 @@ def check(project_dir: ProjectOption = None) -> None:
         issues.append(subs.Issue("warning", message))
     if not config.song.artist:
         issues.append(subs.Issue("warning", "song.artist が空です"))
+    if config.description is not None:
+        issues += description.lint(project, load_user_config().description)
 
     _print_issues(issues)
-    if not analysis.ok:
+    if any(issue.level == "error" for issue in issues):
         raise typer.Exit(1)
     warnings = sum(issue.level == "warning" for issue in issues)
     if warnings:
@@ -303,6 +312,25 @@ def build(project_dir: ProjectOption = None) -> None:
 def overlay(project_dir: ProjectOption = None) -> None:
     """歌詞と曲名表示を透過 ProRes 4444（build/overlay.mov）で書き出す。動画編集ソフトで重ねる用。"""
     _render(project_dir, "overlay", "overlay")
+
+
+@app.command("description")
+@_handle_errors
+def description_command(project_dir: ProjectOption = None) -> None:
+    """utavideo.toml のクレジット・素材から、タイトルと概要欄を build/ に書き出す。"""
+    project = _load_project(project_dir)
+    fmt = load_user_config().description
+    title = description.render_title(project.config, fmt)
+    body = description.render_body(project.config, fmt)
+    if project.config.description is not None:
+        _print_issues(description.lint(project, fmt))
+    _write_text(project.title_output, title)
+    _write_text(project.description_output, body)
+    console.print(title, markup=False)
+    console.print()
+    console.print(body, markup=False, end="")
+    for path in (project.title_output, project.description_output):
+        console.print(f"書き出しました: {path}", markup=False)
 
 
 @app.command()
@@ -339,10 +367,21 @@ def release(
         )
 
     dest = project.release_path(version)
-    if dest.exists():
-        _fail(f"既にあります: {dest}（上書きはしません）")
+    # 書式を後で変えても公開したときの文章が残るよう、概要欄も一緒に置く
+    text_dest = dest.with_suffix(".txt")
+    text = None
+    if project.config.description is not None:
+        fmt = load_user_config().description
+        title = description.render_title(project.config, fmt)
+        text = f"{title}\n\n{description.render_body(project.config, fmt)}"
+    for path in [dest, *([text_dest] if text is not None else [])]:
+        if path.exists():
+            _fail(f"既にあります: {path}（上書きはしません）")
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = partial_path(dest)
     shutil.copy2(source, tmp)
     replace_partial(tmp, dest)
     console.print(f"コピーしました: {dest}", markup=False)
+    if text is not None:
+        _write_text(text_dest, text)
+        console.print(f"書き出しました: {text_dest}", markup=False)

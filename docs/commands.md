@@ -4,7 +4,7 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `check`・`preview-bg`・`build`・`overlay`・`description`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
 - `check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
@@ -71,13 +71,24 @@ utavideo overlay [-C <曲フォルダ>]
 - 動画の長さは音源の長さです
 - 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass` に書きます（自動のフェードと曲名表示が入ったもの）
 
+## description
+
+```sh
+utavideo description [-C <曲フォルダ>]
+```
+
+`utavideo.toml` のクレジット・素材から、タイトルを `build/title.txt`、概要欄を `build/description.txt` に書き出し、画面にも表示します。書式はユーザー設定で決まります（[config-reference.md](config-reference.md#ユーザー設定の-description)）。
+
+- `[description]` がある曲では、[概要欄の検査](#検査項目)の結果も表示します
+- ffmpeg は使いません
+
 ## release
 
 ```sh
 utavideo release [-C <曲フォルダ>] [--version <バージョン>] [--allow-stale]
 ```
 
-`build/main.mp4` を `release/<曲名> <バージョン>.mp4` にコピーします。
+`build/main.mp4` を `release/<曲名> <バージョン>.mp4` にコピーします。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を `release/<曲名> <バージョン>.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
@@ -88,7 +99,7 @@ utavideo release [-C <曲フォルダ>] [--version <バージョン>] [--allow-s
 
 - `build/main.mp4` が無い
 - バージョンが決まらない、または形式が違う
-- 同じ名前のファイルが `release/` にある（上書きしない）
+- 同じ名前のファイル（`.mp4`、`[description]` がある曲では `.txt` も）が `release/` にある（上書きしない）
 - `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）
 
 ## 検査項目
@@ -102,6 +113,7 @@ utavideo release [-C <曲フォルダ>] [--version <バージョン>] [--allow-s
 | 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
+| 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
 | 実行環境 | ffmpeg・ffprobe が無い |
 
 ### 警告
@@ -110,6 +122,7 @@ utavideo release [-C <曲フォルダ>] [--version <バージョン>] [--allow-s
 |---|---|
 | 歌詞の行 | `\pos`・`\move` を使っている、表示時間が 0 以下、音声が終わった後に始まる、音声の終わりで途中で切られる、同じスタイル・同じレイヤーで重なる、画面からはみ出しそう |
 | `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空 |
+| 概要欄（`[description]` がある曲の `check`） | `video.background` がどの `materials.files` にも無い、`materials.files` のファイルが無い、タイトルの `{singers}` に入る人がいない、タイトルが 100 文字・概要欄が 5000 バイトを超える、`<` か `>` を含む（YouTube の上限） |
 
 はみ出しの概算で反映するタグは [customization.md](customization.md#utavideo-が読むタグ) を参照してください。
 

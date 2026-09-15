@@ -1,6 +1,7 @@
 """ドキュメントがコードと食い違っていないかを確かめる。"""
 
 import re
+import typing
 from pathlib import Path
 
 import pytest
@@ -28,16 +29,46 @@ def test_commands_doc_lists_every_command_and_option() -> None:
                     assert f"`{opt}" in doc, f"{name} の {opt}"
 
 
+def _section(doc: str, heading: str) -> str:
+    """見出しが heading で始まる節の、次の見出しまでの本文。"""
+    lines = doc.splitlines()
+    starts = [
+        i for i, line in enumerate(lines) if line.startswith("#") and line.lstrip("# ").startswith(heading)
+    ]
+    assert len(starts) == 1, f"見出し {heading!r} が {len(starts)} 個"
+    end = next((j for j in range(starts[0] + 1, len(lines)) if lines[j].startswith("#")), len(lines))
+    return "\n".join(lines[starts[0] + 1 : end])
+
+
+def _nested_model(annotation: object) -> tuple[type[BaseModel], bool] | None:
+    """設定項目が表（[x]）か表の配列（[[x]]）なら、そのモデルと、配列かどうか。"""
+    for candidate in (annotation, *typing.get_args(annotation)):
+        if isinstance(candidate, type) and issubclass(candidate, BaseModel):
+            return candidate, typing.get_origin(annotation) is tuple
+    return None
+
+
+def _assert_documented(doc: str, model: type[BaseModel], heading: str, prefix: str, seen: set[type]) -> None:
+    body = _section(doc, heading)
+    for name, info in model.model_fields.items():
+        nested = _nested_model(info.annotation)
+        if nested is None or nested[0] in seen:  # 説明済みの表は、項目名だけ載っていればよい
+            assert f"| `{name}` |" in body, f"{heading} の {name}"
+            continue
+        sub, is_array = nested
+        seen.add(sub)
+        _assert_documented(doc, sub, f"{prefix}[[{name}]]" if is_array else f"{prefix}[{name}]", prefix, seen)
+
+
 def test_config_reference_lists_every_field() -> None:
     doc = _doc("config-reference.md")
-    for section, info in ProjectConfig.model_fields.items():
-        model = info.annotation
-        assert isinstance(model, type) and issubclass(model, BaseModel)
-        assert f"## [{section}]" in doc
-        for field in model.model_fields:
-            assert f"| `{field}` |" in doc, f"{section}.{field}"
-    for field in UserConfig.model_fields:
-        assert f"| `{field}` |" in doc, field
+    seen: set[type] = set()
+    for name, info in ProjectConfig.model_fields.items():
+        nested = _nested_model(info.annotation)
+        assert nested is not None, name
+        seen.add(nested[0])
+        _assert_documented(doc, nested[0], f"[[{name}]]" if nested[1] else f"[{name}]", "", seen)
+    _assert_documented(doc, UserConfig, "ユーザー設定（", "ユーザー設定の ", seen)
 
 
 def test_config_reference_lists_every_environment_variable() -> None:
