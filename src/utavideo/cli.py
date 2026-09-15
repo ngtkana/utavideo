@@ -17,7 +17,7 @@ from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, T
 from utavideo import fonts, graph, layout, subs
 from utavideo.config import cache_dir, load_user_config
 from utavideo.errors import UtavideoError
-from utavideo.ffmpeg import partial_path, probe_audio, require_tools, run
+from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
 from utavideo.project import (
     Project,
     ScaffoldResult,
@@ -344,5 +344,5 @@ def release(
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = partial_path(dest)
     shutil.copy2(source, tmp)
-    tmp.replace(dest)
+    replace_partial(tmp, dest)
     console.print(f"コピーしました: {dest}", markup=False)

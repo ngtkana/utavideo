@@ -14,6 +14,8 @@ from pathlib import Path
 
 from fontTools.ttLib import TTCollection, TTFont
 
+from utavideo.errors import UtavideoError
+
 FONT_EXTS = frozenset({".ttf", ".otf", ".ttc", ".otc"})
 # libass が照合する名前: family, full name, PostScript name, typographic family
 _NAME_IDS = frozenset({1, 4, 6, 16})
@@ -149,4 +151,10 @@ def _write_cache(cache_file: Path, entries: dict[str, dict]) -> None:
         json.dumps({"format": _CACHE_FORMAT, "files": entries}, ensure_ascii=False),
         encoding="utf-8",
     )
-    tmp.replace(cache_file)
+    try:
+        tmp.replace(cache_file)
+    except PermissionError as e:
+        tmp.unlink(missing_ok=True)
+        raise UtavideoError(
+            f"{cache_file} を置き換えられません。他のアプリで開かれていないか確認してください"
+        ) from e
