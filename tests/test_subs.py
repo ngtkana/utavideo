@@ -2,7 +2,7 @@ import pysubs2
 import pytest
 
 from utavideo import subs
-from utavideo.config import OverlayText, Song
+from utavideo.config import ConfigError, OverlayText, Song
 
 SONG = Song(title="曲", artist="歌手", label="ラベル")
 OVERLAY = OverlayText()
@@ -91,7 +91,7 @@ def test_compose_preview_has_only_overlay() -> None:
 
 
 def test_overlay_text_rejects_unknown_placeholder() -> None:
-    with pytest.raises(subs.SubtitleError, match="title, artist, label"):
+    with pytest.raises(ConfigError, match="title, artist, label"):
         subs.format_overlay_text("{composer}", SONG)
 
 
