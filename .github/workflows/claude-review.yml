@@ -13,6 +13,8 @@ jobs:
     # フォークからの PR には Secrets が渡らず必ず失敗するので、同じリポジトリのブランチからの PR だけにする
     if: ${{ !github.event.pull_request.draft && github.event.pull_request.head.repo.full_name == github.repository }}
     runs-on: ubuntu-latest
+    # 普段は1分ほどで終わる。止まったときに料金と CI 時間を使い続けないように打ち切る
+    timeout-minutes: 10
     permissions:
       contents: read
       pull-requests: write
