@@ -17,7 +17,7 @@ from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, T
 from utavideo import fonts, graph, layout, subs
 from utavideo.config import cache_dir, load_user_config
 from utavideo.errors import UtavideoError
-from utavideo.ffmpeg import partial_path, probe_duration, require_tools, run
+from utavideo.ffmpeg import partial_path, probe_audio, require_tools, run
 from utavideo.project import (
     Project,
     ScaffoldResult,
@@ -47,7 +47,8 @@ def _handle_errors[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
     def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
         try:
             return fn(*args, **kwargs)
-        except UtavideoError as e:
+        # OSError: 権限が無い・パスが長すぎる等。traceback を出さずにメッセージだけにする
+        except (UtavideoError, OSError) as e:
             _fail(str(e))
 
     return wrapper
@@ -98,7 +99,10 @@ def analyze(project: Project, mode: graph.Mode) -> Analysis:
     if mode != "overlay" and background_ext not in graph.IMAGE_EXTS | graph.ANIMATED_EXTS:
         issues.append(subs.Issue("error", f"video.background の形式に対応していません: {background_ext}"))
 
-    duration_s = probe_duration(project.audio_path) if project.audio_path.is_file() else None
+    audio = probe_audio(project.audio_path) if project.audio_path.is_file() else None
+    if audio is not None and not audio.has_sound:
+        issues.append(subs.Issue("error", f"audio.file に音声が入っていません: {project.audio_path}"))
+    duration_s = audio.duration_s if audio is not None else None
     lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
     if lyrics is None or duration_s is None:
         return Analysis(issues, duration_s, lyrics, ())
@@ -267,7 +271,11 @@ def check(project_dir: ProjectOption = None) -> None:
     _print_issues(analysis.issues)
     if not analysis.ok:
         raise typer.Exit(1)
-    console.print("[green]問題ありません[/]")
+    warnings = sum(issue.level == "warning" for issue in analysis.issues)
+    if warnings:
+        console.print(f"[yellow]エラーはありません（警告 {warnings} 件）[/]")
+    else:
+        console.print("[green]問題ありません[/]")
 
 
 @app.command("preview-bg")

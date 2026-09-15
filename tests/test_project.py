@@ -50,6 +50,11 @@ def test_project_dir_name_replaces_invalid_chars() -> None:
     assert safe_filename("新しい曲") == "新しい曲"
 
 
+def test_blank_title_does_not_make_a_name_ending_in_space() -> None:
+    assert safe_filename("   ") == "untitled"
+    assert project_dir_name("   ", date(2026, 9, 15)) == "20260915 untitled"
+
+
 def test_to_windows_path() -> None:
     path = Path("/mnt/d/Videos/20260913 新しい曲/build/preview/bg.mp4")
     assert to_windows_path(path) == r"D:\Videos\20260913 新しい曲\build\preview\bg.mp4"

@@ -16,6 +16,7 @@ OVERLAY_LAYER = 100
 _FADE_TAG = re.compile(r"\\fade?\s*\(")
 _POS_TAG = re.compile(r"\\(?:pos|move)\s*\(")
 _FONT_TAG = re.compile(r"\\fn([^\\}]*)")
+_RESET_TAG = re.compile(r"\\r([^\\}]*)")
 _OVERRIDE_BLOCK = re.compile(r"\{[^}]*\}")
 
 
@@ -103,11 +104,17 @@ def compose(
     return script
 
 
+def _reset_styles(text: str) -> set[str]:
+    """\\r で切り替えている先のスタイル名。引数の無い \\r は元のスタイルに戻すだけなので含めない。"""
+    return {name.strip() for name in _RESET_TAG.findall(text) if name.strip()}
+
+
 def used_fonts(subs: pysubs2.SSAFile) -> set[str]:
-    """表示される行が使うフォント名（スタイルと \\fn タグ）。"""
-    events = dialogues(subs)
-    names = {subs.styles[e.style].fontname for e in events if e.style in subs.styles}
-    for event in events:
+    """表示される行が使うフォント名（スタイル、\\r の切替先、\\fn タグ）。"""
+    names: set[str] = set()
+    for event in dialogues(subs):
+        for style in {event.style, *_reset_styles(event.text)} & set(subs.styles):
+            names.add(subs.styles[style].fontname)
         names.update(name.strip() for name in _FONT_TAG.findall(event.text))
     # 先頭の @ は縦書き指定で、フォント名そのものではない
     return {name.removeprefix("@") for name in names if name}
@@ -137,7 +144,8 @@ def lint(
         issues.append(Issue("error", f"overlay_text.style のスタイル {overlay.style!r} が .ass にありません"))
 
     events = dialogues(subs)
-    for style in sorted({e.style for e in events} - set(subs.styles)):
+    used = {e.style for e in events} | {s for e in events for s in _reset_styles(e.text)}
+    for style in sorted(used - set(subs.styles)):
         issues.append(Issue("error", f"未定義のスタイル {style!r} を使っている行があります"))
 
     positioned = [e for e in events if _POS_TAG.search(e.text)]
@@ -157,6 +165,9 @@ def lint(
             issues.append(Issue("warning", f"表示時間が 0 以下の行があります: {describe(event)}"))
         elif event.start >= duration_ms:
             issues.append(Issue("warning", f"音声が終わった後に始まる行があります: {describe(event)}"))
+        elif event.end > duration_ms:
+            # 書き出しは音源の長さで切られるので、最後まで表示されない
+            issues.append(Issue("warning", f"音声の終わりで途中で切られます: {describe(event)}"))
 
     issues.extend(_overlaps(events))
     return issues

@@ -12,6 +12,18 @@ AUDIO_EXTS = frozenset({".wav", ".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"
 PREVIEW_GOP = 15
 
 type Mode = Literal["final", "preview", "overlay"]
+type Preset = Literal[
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+    "placebo",
+]
 
 _COMMON = ["-hide_banner", "-nostdin", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y"]
 _BT709 = [
@@ -37,7 +49,7 @@ class RenderSpec:
     scale_flags: str = "lanczos"
     pad_color: str = "black"
     crf: int = 18
-    preset: str = "slow"
+    preset: Preset = "slow"
 
 
 def escape_filter_arg(value: str) -> str:

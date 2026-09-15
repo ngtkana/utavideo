@@ -7,9 +7,18 @@ import tomllib
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, PositiveInt, ValidationError, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    NonNegativeInt,
+    PositiveInt,
+    ValidationError,
+    field_validator,
+)
 
 from utavideo.errors import UtavideoError
+from utavideo.graph import Preset
 
 PROJECT_CONFIG_NAME = "utavideo.toml"
 
@@ -37,7 +46,7 @@ class Video(_Model):
     size: tuple[PositiveInt, PositiveInt] = (1920, 1080)
     fps: PositiveInt = 30
     crf: int = Field(default=18, ge=0, le=51)
-    preset: str = "slow"
+    preset: Preset = "slow"
     fit: Literal["cover", "contain"] = "cover"
     scale_flags: Literal["lanczos", "bicubic", "bilinear", "area", "neighbor"] = "lanczos"
     pad_color: str = "black"
@@ -52,13 +61,13 @@ class Video(_Model):
 
 class Lyrics(_Model):
     file: Path = Path("src/lyrics.ass")
-    fade_ms: tuple[int, int] = (150, 150)
+    fade_ms: tuple[NonNegativeInt, NonNegativeInt] = (150, 150)
 
 
 class OverlayText(_Model):
     enabled: bool = True
     style: str = "Title"
-    text: str = "{label}\\N{title} / {artist}"
+    text: str = "{title} / {artist}"
 
 
 class ProjectConfig(_Model):
@@ -69,21 +78,37 @@ class ProjectConfig(_Model):
     overlay_text: OverlayText = Field(default_factory=OverlayText)
 
 
-def default_font_dirs() -> list[Path]:
-    """Windows 側のシステム・ユーザーフォントと、Linux 側のフォントの場所。"""
+def _font_dir_candidates() -> list[Path]:
+    """Windows 側のシステム・ユーザーフォントと、Linux 側のフォントの場所（存在しないものも含む）。"""
     if sys.platform == "win32":
         dirs = [Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"]
         if local := os.environ.get("LOCALAPPDATA"):
             dirs.append(Path(local) / "Microsoft" / "Windows" / "Fonts")
-    else:
-        dirs = [Path("/mnt/c/Windows/Fonts")]
-        dirs += sorted(map(Path, glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts")))
-        dirs += [Path.home() / ".local/share/fonts", Path("/usr/share/fonts")]
-    return [d for d in dirs if d.is_dir()]
+        return dirs
+    dirs = [Path("/mnt/c/Windows/Fonts")]
+    dirs += sorted(map(Path, glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts")))
+    # fontconfig（/etc/fonts/fonts.conf）が既定で見る 4 か所
+    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+    dirs += [
+        Path("/usr/share/fonts"),
+        Path("/usr/local/share/fonts"),
+        data_home / "fonts",
+        Path.home() / ".fonts",
+    ]
+    return dirs
+
+
+def default_font_dirs() -> list[Path]:
+    return [d for d in _font_dir_candidates() if d.is_dir()]
 
 
 class UserConfig(_Model):
     font_dirs: list[Path] = Field(default_factory=default_font_dirs)
+
+    @field_validator("font_dirs")
+    @classmethod
+    def _expand_home(cls, dirs: list[Path]) -> list[Path]:
+        return [d.expanduser() for d in dirs]
 
 
 def config_dir() -> Path:
@@ -101,11 +126,10 @@ def load_project_config(path: Path) -> ProjectConfig:
 def load_user_config() -> UserConfig:
     """~/.config/utavideo/config.toml を読む。環境変数 UTAVIDEO_FONT_DIRS があれば優先する。"""
     path = config_dir() / "config.toml"
-    config = _validate(UserConfig, _read_toml(path) if path.is_file() else {}, path)
+    data = _read_toml(path) if path.is_file() else {}
     if env := os.environ.get("UTAVIDEO_FONT_DIRS"):
-        dirs = [Path(p) for p in env.split(os.pathsep) if p]
-        config = config.model_copy(update={"font_dirs": dirs})
-    return config
+        data = {**data, "font_dirs": [p for p in env.split(os.pathsep) if p]}
+    return _validate(UserConfig, data, path)
 
 
 def _read_toml(path: Path) -> dict[str, Any]:

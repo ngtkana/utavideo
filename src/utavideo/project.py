@@ -87,7 +87,8 @@ def extract_version(stem: str) -> str | None:
 
 
 def safe_filename(name: str) -> str:
-    return _INVALID_FILENAME_CHARS.sub("_", name).strip()
+    """ファイル名に使えない文字を潰す。空白だけの名前は末尾が空白のフォルダ名になるので避ける。"""
+    return _INVALID_FILENAME_CHARS.sub("_", name).strip() or "untitled"
 
 
 def project_dir_name(title: str, day: date) -> str:

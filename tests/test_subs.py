@@ -74,7 +74,11 @@ def test_compose_keeps_source_and_appends_overlay() -> None:
     overlay = script.events[-1]
     assert (overlay.start, overlay.end, overlay.style) == (0, 5000, "Title")
     assert overlay.layer == subs.OVERLAY_LAYER
-    assert overlay.text == r"ラベル\N曲 / 歌手"
+    assert overlay.text == "曲 / 歌手"
+
+
+def test_overlay_text_can_put_label_on_its_own_line() -> None:
+    assert subs.format_overlay_text(r"{label}\N{title} / {artist}", SONG) == r"ラベル\N曲 / 歌手"
 
 
 def test_compose_preview_has_only_overlay() -> None:
@@ -99,6 +103,14 @@ def test_used_fonts_from_used_styles_and_fn_tags() -> None:
     assert subs.used_fonts(script) == {"Noto Sans JP", "縦書き", "Yu Gothic"}
 
 
+def test_used_fonts_follows_style_reset_tag() -> None:
+    script = _make(
+        [_line("0:00:01.00", "0:00:02.00", r"あ{\rTitle}い")],
+        styles=[_style("Lyrics", "Noto Sans JP"), _style("Title", "Yu Mincho")],
+    )
+    assert subs.used_fonts(script) == {"Noto Sans JP", "Yu Mincho"}
+
+
 def test_lint_clean_script_has_no_issues() -> None:
     script = _make([_line("0:00:01.00", "0:00:02.00", "あ"), _line("0:00:02.00", "0:00:03.00", "い")])
     assert subs.lint(script, size=(1920, 1080), duration_ms=10_000, overlay=OVERLAY) == []
@@ -116,12 +128,19 @@ def test_lint_errors() -> None:
     assert any("overlay_text.style" in m for m in errors)
 
 
+def test_lint_reports_misspelled_style_reset_tag() -> None:
+    script = _make([_line("0:00:01.00", "0:00:02.00", r"あ{\rTitel}い")])
+    errors = _messages(subs.lint(script, size=(1920, 1080), duration_ms=10_000, overlay=OVERLAY), "error")
+    assert any("'Titel'" in m for m in errors)
+
+
 def test_lint_warnings() -> None:
     script = _make(
         [
             _line("0:00:01.00", "0:00:05.00", "長い行"),
             _line("0:00:02.00", "0:00:03.00", "重なる行"),
             _line("0:00:02.00", "0:00:03.00", r"{\pos(100,100)}位置指定"),
+            _line("0:00:09.00", "0:00:12.00", "終わりを跨ぐ行"),
             _line("0:00:20.00", "0:00:21.00", "音声の後"),
         ]
     )
@@ -129,4 +148,5 @@ def test_lint_warnings() -> None:
     assert any("重なっています" in m and "長い行" in m and "重なる行" in m for m in warnings)
     assert any("1 行で \\pos" in m for m in warnings)
     assert any("音声が終わった後" in m for m in warnings)
+    assert any("途中で切られます" in m and "終わりを跨ぐ行" in m for m in warnings)
     assert not any("位置指定" in m and "重なって" in m for m in warnings)

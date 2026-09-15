@@ -24,6 +24,7 @@ file = "src/lyrics.ass"
 fade_ms = [150, 150]       # \fad が無い行に自動で付ける（[0, 0] で付けない）
 
 [overlay_text]
-# 動画全体に出す曲名表示。{title} {artist} {label} が使える。\\N は改行
+# 動画全体に出す曲名表示。{title} {artist} {label} が使える
+# 改行は \N（TOML では "\\N" と書く）。例: text = "{label}\\N{title} / {artist}"
 style = "Title"
-text = "{label}\\N{title} / {artist}"
+text = "{title} / {artist}"

@@ -5,6 +5,7 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from pathlib import Path
 
 from utavideo.errors import UtavideoError
@@ -14,17 +15,26 @@ class FFmpegError(UtavideoError):
     """ffmpeg / ffprobe が無い、または失敗した。"""
 
 
+@dataclass(frozen=True)
+class AudioInfo:
+    duration_s: float
+    has_sound: bool
+
+
 def require_tools() -> None:
     missing = [tool for tool in ("ffmpeg", "ffprobe") if shutil.which(tool) is None]
     if missing:
         raise FFmpegError(f"{', '.join(missing)} が見つかりません（例: sudo apt install ffmpeg）")
 
 
-def probe_duration(path: Path) -> float:
-    cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)]
+def probe_audio(path: Path) -> AudioInfo:
+    """音源の長さと、音声ストリームが入っているか。"""
+    cmd = ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries",
+           "format=duration:stream=index", "-of", "json", str(path)]  # fmt: skip
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        return float(json.loads(out.stdout)["format"]["duration"])
+        info = json.loads(out.stdout)
+        return AudioInfo(float(info["format"]["duration"]), bool(info.get("streams")))
     except subprocess.CalledProcessError as e:
         raise FFmpegError(f"{path} を読めません: {e.stderr.strip()}") from e
     except (KeyError, ValueError) as e:

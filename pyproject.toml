@@ -11,6 +11,7 @@ dependencies = [
     "fonttools>=4.65.0",
     "pydantic>=2.13.5",
     "pysubs2>=1.9.0",
+    "rich>=15.0.0",
     "typer>=0.27.2",
 ]
 

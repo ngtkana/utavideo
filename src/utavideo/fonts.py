@@ -87,9 +87,12 @@ def load_index(dirs: Iterable[Path], cache_file: Path) -> FontIndex:
                 "size": stat.st_size,
                 "names": sorted(read_font_names(path)),
             }
-    if entries != cached:
-        _write_cache(cache_file, entries)
+    # 今回見なかったディレクトリのエントリは残す（探索先を変えて実行しても読み直しにならないように）
+    merged = cached | entries
+    if merged != cached:
+        _write_cache(cache_file, merged)
 
+    # 対応表は今回見つかったファイルだけから作る
     files_by_name: dict[str, list[Path]] = {}
     for key, entry in entries.items():
         for name in entry["names"]:
@@ -111,7 +114,8 @@ def resolve(index: FontIndex, names: Iterable[str]) -> FontResolution:
 
 def prepare_fontsdir(files: Iterable[Path], base_dir: Path) -> Path:
     """files へのリンクだけを置いたディレクトリ。同じ組み合わせなら使い回す。"""
-    unique = sorted(set(files))
+    # 相対パスのまま張ると、リンク先がリンク自身の位置から解決されてリンク切れになる
+    unique = sorted({file.absolute() for file in files})
     digest = hashlib.sha256("\n".join(map(str, unique)).encode()).hexdigest()[:16]
     dest = base_dir / digest
     if dest.is_dir():

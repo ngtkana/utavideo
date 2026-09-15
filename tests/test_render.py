@@ -110,6 +110,32 @@ def test_check_passes(project: Path) -> None:
     assert "問題ありません" in _invoke("check", "-C", str(project)).output
 
 
+def test_check_counts_warnings_instead_of_saying_ok(project: Path) -> None:
+    # 音源は 2 秒。その終わりを跨ぐ行を足す
+    lyrics = LYRICS.format(font="Test Sans") + "Dialogue: 0,0:00:01.80,0:00:03.00,Lyrics,,0,0,0,,BBBB\n"
+    (project / "src/lyrics.ass").write_text(lyrics, encoding="utf-8")
+
+    output = _invoke("check", "-C", str(project)).output
+    assert "問題ありません" not in output
+    assert "警告 1 件" in output
+
+
+def test_check_reports_audio_without_sound(project: Path) -> None:
+    _ffmpeg(
+        "-f", "lavfi", "-i", "testsrc=size=64x36:rate=10:duration=2", "-an",
+        str(project / "src/mix/noaudio.mp4"),
+    )  # fmt: skip
+    config = (project / "utavideo.toml").read_text(encoding="utf-8")
+    (project / "utavideo.toml").write_text(
+        config.replace('file = "src/mix/テスト v1.2.wav"', 'file = "src/mix/noaudio.mp4"'),
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "音声" in result.output
+
+
 def test_check_reports_missing_font(project: Path) -> None:
     (project / "src/lyrics.ass").write_text(LYRICS.format(font="Nope Sans"), encoding="utf-8")
     result = runner.invoke(app, ["check", "-C", str(project)])

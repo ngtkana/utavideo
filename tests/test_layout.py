@@ -10,7 +10,21 @@ from utavideo import layout
 # → フォントサイズ 100 で "A" は 60px、空白は 30px。表示幅は 320 - 10 - 10 = 300px。
 
 
-def _script(text: str, *, wrap_style: int = 0, margin_l: int = 0, font: str = "Test Sans"):
+def _style(name: str = "Lyrics", font: str = "Test Sans", size: int = 100) -> str:
+    return (
+        f"Style: {name},{font},{size},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
+        "0,0,0,0,100,100,0,0,1,0,0,2,10,10,10,1"
+    )
+
+
+def _script(
+    text: str,
+    *,
+    wrap_style: int = 0,
+    margin_l: int = 0,
+    font: str = "Test Sans",
+    styles: list[str] | None = None,
+):
     return pysubs2.SSAFile.from_string(
         "\n".join(
             [
@@ -24,8 +38,7 @@ def _script(text: str, *, wrap_style: int = 0, margin_l: int = 0, font: str = "T
                 "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
                 "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
                 "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-                f"Style: Lyrics,{font},100,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
-                "0,0,0,0,100,100,0,0,1,0,0,2,10,10,10,1",
+                *(styles if styles is not None else [_style(font=font)]),
                 "",
                 "[Events]",
                 "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
@@ -53,6 +66,11 @@ def lookup(tmp_path: Path, make_font: MakeFont):
         (r"AAAAA\NAAAAA", 0, None),
         (r"{\fad(150,150)}AAAAAA", 0, 360),
         (r"{\pos(10,10)}AAAAAAAAAA", 0, None),  # \pos の行は対象外
+        (r"{\fs200}AAA", 0, 360),  # \fs でサイズを上げた行
+        (r"{\fs20}AAAAAAAAAA", 0, None),  # \fs で下げた行は収まる
+        (r"AAA{\fs200}AA", 0, 420),  # 行の途中で変わる
+        (r"{\fscx200}AAA", 0, 360),
+        (r"{\fsp50}AAA", 0, 330),
     ],
 )
 def test_overflows(lookup, text: str, wrap_style: int, expected_width: int | None) -> None:
@@ -70,5 +88,15 @@ def test_event_margin_overrides_style(lookup) -> None:
     assert "表示幅 210px" in issues[0].message
 
 
+def test_style_reset_tag_switches_size(lookup) -> None:
+    styles = [_style(), _style("Small", size=20)]
+    assert layout.overflows(_script(r"{\rSmall}AAAAAAAAAA", styles=styles), lookup) == []
+
+    issues = layout.overflows(_script(r"{\rSmall}AAAAA{\r}AAAAA", styles=styles), lookup)
+    assert len(issues) == 1
+    assert "推定 360px" in issues[0].message
+
+
 def test_unknown_font_is_skipped(lookup) -> None:
     assert layout.overflows(_script("AAAAAAAAAA", font="Other"), lookup) == []
+    assert layout.overflows(_script(r"AAAAAAAAAA{\fnOther}A"), lookup) == []
