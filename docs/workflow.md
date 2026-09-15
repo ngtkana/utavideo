@@ -1,6 +1,6 @@
 # 制作の流れ
 
-1本の動画を作る手順です。フォルダの構成は [project-layout.md](project-layout.md)、設定項目は [config-reference.md](config-reference.md) を参照してください。
+1本の動画を作る手順です。フォルダの構成は [project-layout.md](project-layout.md)、設定項目は [config-reference.md](config-reference.md)、やりたいこと別の設定方法は [customization.md](customization.md) を参照してください。
 
 ## 0. 準備（最初に一度だけ）
 

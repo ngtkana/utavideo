@@ -33,6 +33,6 @@
 挙動や仕様を変えたら、対応するドキュメントも同じ変更で直す。
 
 - `README.md`：初めて使う人向け（概要・インストール・コマンド一覧）
-- `docs/workflow.md`（制作の流れ）、`docs/project-layout.md`（曲フォルダの構成）、`docs/config-reference.md`（設定の全項目）：仕様。コードと食い違わないようにする
+- `docs/workflow.md`（制作の流れ）、`docs/project-layout.md`（曲フォルダの構成）、`docs/config-reference.md`（設定の全項目）、`docs/customization.md`（やりたいこと別の設定方法）：仕様。コードと食い違わないようにする
 - `docs/roadmap.md`：今後の予定
 - `docs/verification/YYYYMMDD-*.md`：検証記録。設計の前提にした実測や挙動を、日付ごとのファイルに追記していく（既存の記録は書き換えない）
