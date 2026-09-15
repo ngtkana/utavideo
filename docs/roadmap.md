@@ -9,6 +9,25 @@
 
 ## 予定
 
+### 概要欄の文章
+
+`utavideo.toml` に書いたクレジットと素材から、動画投稿サイトの概要欄とタイトルを作る。
+
+- `utavideo description`：概要欄とタイトルを `build/description.txt` に書き出し、画面にも表示する
+- `release` のとき `release/<曲名> <バージョン>.txt` にも保存する（書式を後で変えても、公開したときの文章が残る）
+- `utavideo.toml`
+  - `song.original_urls`：原曲の URL（複数可）
+  - `[[credits]]`：`roles`・`name`・`urls`。`roles` の組み合わせが同じ人は1つの見出しにまとめる（例: 見出し「Vocal」の下に2人、見出し「Vocal, Mix」の下に1人）
+  - `[[materials]]`：`section`（例: イラスト、Inst、動画素材）・`urls`・`files`（対応する素材ファイル）。同じ `section` は書いた順に1つの見出しにまとめる
+  - `[description]`：`text`（冒頭の手書きの文章）・`hashtags`（曲ごとに足すもの）・`title`（自動で作るタイトルを使わないとき）
+- ユーザー設定（`~/.config/utavideo/config.toml`）
+  - 書式：見出しの形（例: `"■{section}"`）、原曲の見出しの名前、ブロックの順番、末尾に付ける固定の文、タイトルの形（`{title}`・`{artist}`・`{singers}`）と `{singers}` に入れる役割（例: Vocal）。変えられるのは設定項目の範囲だけにして、テンプレートエンジンは使わない
+  - 毎回同じもの：`credits` と `hashtags` の既定値。`new` / `init` のときに曲の `utavideo.toml` にコピーする（ユーザー設定を後で変えても、既存の曲は変わらない）
+- `check`：`src/bg/`・`src/avatar/` のファイルが `materials.files` に無ければ警告する
+- 後回し
+  - 通し番号、前後の動画へのリンク、他サイト版へのリンク（他の曲フォルダの情報や投稿後に決まる URL が要る。手で書くと番号や URL を間違えやすいので、いずれ自動にしたい）
+  - よく使う素材をユーザー設定に登録し、名前で参照する
+
 ### アバターの合成
 
 ブルーバック・グリーンバックで録画したアバター動画を背景に合成する。
@@ -33,11 +52,10 @@
 
 ### カラオケ用の音源動画
 
-- `[credits]`：作詞・作曲・歌などのクレジットを並べた画面を自動で作る
+- 概要欄と同じ `[[credits]]` から、クレジットを並べた画面を自動で作る
 - `utavideo inst --keys -1,-2,-3`：ffmpeg の `rubberband` でキーを変えた版を書き出す
 - 音量をそろえる（`loudnorm`）
 
 ### その他
 
 - `utavideo still --at 1:23`：サムネイル用の静止画（歌詞・曲名表示の有無を選べる）
-- 動画の概要欄に使うクレジット文を `utavideo.toml` から作る
