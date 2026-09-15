@@ -13,17 +13,19 @@
 
 `utavideo.toml` に書いたクレジットと素材から、動画投稿サイトの概要欄とタイトルを作る。
 
-- `utavideo description`：概要欄とタイトルを `build/description.txt` に書き出し、画面にも表示する
-- `release` のとき `release/<曲名> <バージョン>.txt` にも保存する（書式を後で変えても、公開したときの文章が残る）
+- `utavideo description`：タイトルを `build/title.txt`、概要欄を `build/description.txt` に書き出し、画面にも表示する（投稿画面の欄ごとに、ファイルを丸ごとコピーできるように分ける）
+- `release`：`[description]` がある曲では `release/<曲名> <バージョン>.txt`（タイトル、空行、概要欄）も置く。書式を後で変えても、公開したときの文章が残る
 - `utavideo.toml`
   - `song.original_urls`：原曲の URL（複数可）
-  - `[[credits]]`：`roles`・`name`・`urls`。`roles` の組み合わせが同じ人は1つの見出しにまとめる（例: 見出し「Vocal」の下に2人、見出し「Vocal, Mix」の下に1人）
-  - `[[materials]]`：`section`（例: イラスト、Inst、動画素材）・`urls`・`files`（対応する素材ファイル）。同じ `section` は書いた順に1つの見出しにまとめる
-  - `[description]`：`text`（冒頭の手書きの文章）・`hashtags`（曲ごとに足すもの）・`title`（自動で作るタイトルを使わないとき）
+  - `[[credits]]`：`roles`・`name`・`urls`。`roles` の並びが同じ人は1つの見出しにまとめる（例: 見出し「歌唱」の下に2人、見出し「Vocal, Mix」の下に1人）
+  - `[[materials]]`：`section`（例: イラスト、Inst、使用素材）・`urls`・`files`（その素材を使ったファイル）。同じ `section` は1つの見出しにまとめる。`urls` が空のもの（自作の素材など）は出力しない
+  - `[description]`：`text`（冒頭の手書きの文章）・`hashtags`（その曲のハッシュタグすべて）・`title`（自動で作るタイトルを使わないとき）
 - ユーザー設定（`~/.config/utavideo/config.toml`）
-  - 書式：見出しの形（例: `"■{section}"`）、原曲の見出しの名前、ブロックの順番、末尾に付ける固定の文、タイトルの形（`{title}`・`{artist}`・`{singers}`）と `{singers}` に入れる役割（例: Vocal）。変えられるのは設定項目の範囲だけにして、テンプレートエンジンは使わない
-  - 毎回同じもの：`credits` と `hashtags` の既定値。`new` / `init` のときに曲の `utavideo.toml` にコピーする（ユーザー設定を後で変えても、既存の曲は変わらない）
-- `check`：`src/bg/`・`src/avatar/` のファイルが `materials.files` に無ければ警告する
+  - `[description]`：書式。タイトルの形（`{title}`・`{artist}`・`{singers}`）、`{singers}` に入れる役割と名前の区切り、見出しの形（例: `"■{section}"`）、原曲の見出しの名前、役割の区切り、名前と URL の区切り（`"\n"` なら別の行）、ブロックの順番、見出し同士とハッシュタグの前の空行の数。変えられるのは設定項目の範囲だけにして、テンプレートエンジンは使わない
+  - `[defaults]`：`credits` と `hashtags` の既定値。`new` / `init` のときに曲の `utavideo.toml` にコピーする（ユーザー設定を後で変えても、既存の曲は変わらない）
+- `check`
+  - 使っている素材ファイル（`video.background` など）が、どの `materials.files` にも無ければ警告する
+  - `materials.files` のファイルが無い、`{singers}` に入る人がいない、投稿サイトの文字数の上限を超える、のいずれかで警告する。タイトルの形に使えない名前があればエラー
 - 後回し
   - 通し番号、前後の動画へのリンク、他サイト版へのリンク（他の曲フォルダの情報や投稿後に決まる URL が要る。手で書くと番号や URL を間違えやすいので、いずれ自動にしたい）
   - よく使う素材をユーザー設定に登録し、名前で参照する
