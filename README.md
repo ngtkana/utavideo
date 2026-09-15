@@ -25,13 +25,6 @@
 uv tool install git+https://github.com/ngtkana/utavideo
 ```
 
-開発する場合は、クローンして編集可能モードで入れます。
-
-```sh
-git clone https://github.com/ngtkana/utavideo
-uv tool install --editable ./utavideo
-```
-
 ## 使い方
 
 ```sh
@@ -60,15 +53,12 @@ utavideo release      # release/曲名 v1.0.mp4 にコピー
 ## ドキュメント
 
 - [制作の流れ](docs/workflow.md)
-- [曲フォルダの構成](docs/project-layout.md)
-- [utavideo.toml リファレンス](docs/config-reference.md)
 - [カスタマイズ一覧](docs/customization.md)（やりたいこと別の設定方法）
+- [設定リファレンス](docs/config-reference.md)
+- [コマンドリファレンス](docs/commands.md)
+- [曲フォルダの構成](docs/project-layout.md)
 - [ロードマップ](docs/roadmap.md)
 
 ## 開発
 
-```sh
-uv run pytest          # ffmpeg があれば、実際に書き出す結合テストも実行される
-uv run ruff check && uv run ruff format
-uv run pyright
-```
+[CONTRIBUTING.md](CONTRIBUTING.md) を参照してください。

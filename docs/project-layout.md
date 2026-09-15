@@ -43,6 +43,7 @@ utavideo が読むのは `utavideo.toml` で指定したファイルだけなの
 | 公開する動画 | `曲名 vX.Y.mp4`（`utavideo release` が付ける） | `release/曲名 v1.2.mp4` |
 | やり取り | `share/YYYYMMDD-相手/` | `share/20260913-to-mixer/`、`share/20260920-from-illustrator/` |
 
+- バージョンは、音源のファイル名に含まれる `v` と数字（`v1`・`v1.2`・`V1.2.3`）です。複数あれば最後のものを使い、`v1.2a` のように英数字が続くものは対象外です。無いときは `utavideo release --version` で指定します
 - 公開する動画のバージョンは、音源のバージョンにそろえます。歌詞や見た目だけを直したときは `utavideo release --version v1.2.1` のように枝番を付けます
 - `build/main.mp4` は書き出すたびに上書きされます。残したい版は `release/` にコピーしてください
 

@@ -33,6 +33,12 @@
 挙動や仕様を変えたら、対応するドキュメントも同じ変更で直す。
 
 - `README.md`：初めて使う人向け（概要・インストール・コマンド一覧）
-- `docs/workflow.md`（制作の流れ）、`docs/project-layout.md`（曲フォルダの構成）、`docs/config-reference.md`（設定の全項目）、`docs/customization.md`（やりたいこと別の設定方法）：仕様。コードと食い違わないようにする
+- `CONTRIBUTING.md`：開発する人向け（準備・QA・変更の送り方・ドキュメントの分担）
+- 仕様。コードと食い違わないようにする。1つの事実は1か所に書き、他の文書からはリンクする
+  - `docs/workflow.md`：制作の流れ（手順だけ）
+  - `docs/customization.md`：やりたいこと別の設定方法（変えられることを網羅する）
+  - `docs/config-reference.md`：設定（utavideo.toml・ユーザー設定・環境変数）の全項目
+  - `docs/commands.md`：コマンドのオプション・検査項目・出力の形式
+  - `docs/project-layout.md`：曲フォルダの構成と名前の規則
 - `docs/roadmap.md`：今後の予定
 - `docs/verification/YYYYMMDD-*.md`：検証記録。設計の前提にした実測や挙動を、日付ごとのファイルに追記していく（既存の記録は書き換えない）

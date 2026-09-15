@@ -1,6 +1,8 @@
-# utavideo.toml リファレンス
+# 設定リファレンス
 
-曲フォルダの直下に置く設定ファイルです。パスは `utavideo.toml` からの相対パスで書きます（絶対パスも使えます）。
+曲ごとの `utavideo.toml`、すべての曲に共通するユーザー設定、環境変数の全項目です。やりたいこと別の書き方は [customization.md](customization.md) を参照してください。
+
+`utavideo.toml` は曲フォルダの直下に置く設定ファイルです。パスは `utavideo.toml` からの相対パスで書きます（絶対パスも使えます）。
 存在しない項目を書くとエラーになります（書き間違いに気づけるようにするためです）。
 
 ## [song]
@@ -47,14 +49,6 @@
 | `style` | 文字列 | `"Title"` | 使う .ass のスタイル。位置・フォント・色はスタイルで調整する |
 | `text` | 文字列 | `"{title} / {artist}"` | 表示する文字。`{title}`・`{artist}`・`{label}` が使える。改行は `\N`（TOML では `"\\N"` と書く） |
 
-## 書き出しの設定（変更不可）
-
-| 出力 | 映像 | 音声 |
-|---|---|---|
-| `build/main.mp4` | H.264（`crf`・`preset`）、yuv420p、BT.709 | AAC 320kbps、48kHz |
-| `build/preview/bg.mp4` | H.264（ultrafast、CRF 28、15 フレームごとにキーフレーム） | AAC 160kbps、48kHz |
-| `build/overlay.mov` | ProRes 4444（アルファ付き）、BT.709 | PCM 24bit、48kHz |
-
 ## ユーザー設定（~/.config/utavideo/config.toml）
 
 すべての曲に共通する設定です。ファイルが無くても動きます。
@@ -70,5 +64,13 @@
 
 `~` から始まるパスはホームディレクトリに展開されます。
 
-環境変数 `UTAVIDEO_FONT_DIRS`（`:` 区切り。Windows では `;`）を設定すると、`font_dirs` より優先されます。
 フォントの一覧は `~/.cache/utavideo/` にキャッシュされます（消しても次回作り直されます）。
+
+## 環境変数
+
+| 変数 | 内容 |
+|---|---|
+| `UTAVIDEO_FONT_DIRS` | フォントを探すディレクトリ（`:` 区切り。Windows では `;`）。`font_dirs` より優先 |
+| `XDG_CONFIG_HOME` | ユーザー設定の場所（既定は `~/.config`。`utavideo/config.toml` を読む） |
+| `XDG_CACHE_HOME` | キャッシュの場所（既定は `~/.cache`。`utavideo/` の下に置く） |
+| `XDG_DATA_HOME` | `font_dirs` の既定値に含める `fonts/` の場所（既定は `~/.local/share`） |
