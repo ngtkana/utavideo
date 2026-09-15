@@ -62,6 +62,7 @@ utavideo release      # release/曲名 v1.0.mp4 にコピー
 - [制作の流れ](docs/workflow.md)
 - [曲フォルダの構成](docs/project-layout.md)
 - [utavideo.toml リファレンス](docs/config-reference.md)
+- [カスタマイズ一覧](docs/customization.md)（やりたいこと別の設定方法）
 - [ロードマップ](docs/roadmap.md)
 
 ## 開発
