@@ -82,7 +82,17 @@ utavideo build
 
 `build/main.mp4` ができます。`build/` の中身は utavideo がいつでも作り直せるので、消してもかまいません。
 
-## 7. 公開用にコピーする
+## 7. 概要欄とタイトルを作る
+
+`utavideo.toml` の `song.original_urls`・`[[credits]]`・`[[materials]]`・`[description]` を埋めてから実行します。
+
+```sh
+utavideo description
+```
+
+`build/title.txt` と `build/description.txt` を、投稿画面のタイトルと説明の欄に貼ります。見出しの形などは [customization.md](customization.md#概要欄とタイトル) を参照してください。
+
+## 8. 公開用にコピーする
 
 ```sh
 utavideo release                  # release/曲名 vX.Y.mp4（バージョンは音源のファイル名から）

@@ -8,7 +8,7 @@ from typing import Literal
 
 import pysubs2
 
-from utavideo.config import OverlayText, Song
+from utavideo.config import OverlayText, Song, format_setting
 from utavideo.errors import UtavideoError
 
 OVERLAY_LAYER = 100
@@ -73,12 +73,9 @@ def add_fades(subs: pysubs2.SSAFile, fade_ms: tuple[int, int]) -> None:
 
 
 def format_overlay_text(template: str, song: Song) -> str:
-    try:
-        return template.format(title=song.title, artist=song.artist, label=song.label)
-    except (KeyError, IndexError, ValueError) as e:
-        raise SubtitleError(
-            f"overlay_text.text の書式が不正です（使える名前は title, artist, label）: {e}"
-        ) from e
+    return format_setting(
+        template, "overlay_text.text", title=song.title, artist=song.artist, label=song.label
+    )
 
 
 def compose(

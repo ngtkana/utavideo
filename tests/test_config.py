@@ -98,3 +98,8 @@ def test_font_dir_candidates_cover_fontconfig_defaults(
         tmp_path / ".fonts",
     ]:
         assert expected in candidates
+
+
+def test_hashtags_are_written_without_hash(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match=r"description\.hashtags"):
+        load_project_config(_write(tmp_path, MINIMAL + '[description]\nhashtags = ["#歌ってみた"]\n'))

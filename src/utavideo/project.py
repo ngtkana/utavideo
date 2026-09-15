@@ -3,12 +3,20 @@
 import json
 import re
 import string
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
 from importlib import resources
 from pathlib import Path
 
-from utavideo.config import PROJECT_CONFIG_NAME, ConfigError, ProjectConfig, load_project_config
+from utavideo.config import (
+    PROJECT_CONFIG_NAME,
+    ConfigError,
+    Credit,
+    Defaults,
+    ProjectConfig,
+    load_project_config,
+)
 from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
 
 SCAFFOLD_DIRS = ("src/mix", "src/bg", "src/avatar", "src/ref", "build", "release", "share")
@@ -67,6 +75,14 @@ class Project:
         return self.build_dir / "preview" / "bg.mp4"
 
     @property
+    def title_output(self) -> Path:
+        return self.build_dir / "title.txt"
+
+    @property
+    def description_output(self) -> Path:
+        return self.build_dir / "description.txt"
+
+    @property
     def version(self) -> str | None:
         return extract_version(self.audio_path.stem)
 
@@ -119,8 +135,10 @@ def to_windows_path(path: Path) -> str | None:
     return f"{m[1].upper()}:" + (m[2] or "/").replace("/", "\\")
 
 
-def scaffold(root: Path, title: str, artist: str = "") -> ScaffoldResult:
+def scaffold(root: Path, title: str, artist: str = "", defaults: Defaults | None = None) -> ScaffoldResult:
     """雛形のディレクトリとファイルを作る。既にあるものは移動も上書きもしない。"""
+    if defaults is None:
+        defaults = Defaults()
     result = ScaffoldResult()
     audio = _detect_single(root / "src", AUDIO_EXTS) or f"src/mix/{safe_filename(title)} v1.0.wav"
     background = _detect_single(root / "src", IMAGE_EXTS | ANIMATED_EXTS) or "src/bg/background.png"
@@ -139,6 +157,8 @@ def scaffold(root: Path, title: str, artist: str = "") -> ScaffoldResult:
             artist=_toml_string(artist),
             audio=_toml_string(audio),
             background=_toml_string(background),
+            hashtags=_toml_array(defaults.hashtags),
+            credits=_toml_credits(defaults.credits),
         ),
         "src/lyrics.ass": _render_template("lyrics.ass", title=one_line_title),
         "README.md": _render_template("README.md", title=one_line_title),
@@ -176,3 +196,15 @@ def _render_template(name: str, **values: str) -> str:
 def _toml_string(value: str) -> str:
     # JSON の文字列リテラルは TOML の basic string としても有効
     return json.dumps(value, ensure_ascii=False)
+
+
+def _toml_array(values: Iterable[str]) -> str:
+    return json.dumps(list(values), ensure_ascii=False)
+
+
+def _toml_credits(credits: Iterable[Credit]) -> str:
+    return "".join(
+        f"[[credits]]\nroles = {_toml_array(c.roles)}\n"
+        f"name = {_toml_string(c.name)}\nurls = {_toml_array(c.urls)}\n\n"
+        for c in credits
+    )

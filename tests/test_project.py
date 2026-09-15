@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from utavideo.config import load_project_config
+from utavideo.config import Credit, Defaults, load_project_config
 from utavideo.project import (
     SCAFFOLD_DIRS,
     Project,
@@ -119,3 +119,13 @@ def test_project_paths_and_release_name(tmp_path: Path) -> None:
     assert project.version == "v3.4"
     assert project.release_path("v3.4") == root / "release" / "サンプル v3.4.mp4"
     assert project.main_output == root / "build" / "main.mp4"
+
+
+def test_scaffold_copies_default_credits_and_hashtags(tmp_path: Path) -> None:
+    credit = Credit(roles=("Vocal", "Mix"), name='歌う "人"', urls=("https://example.com/a",))
+    defaults = Defaults(credits=(credit, credit), hashtags=("歌ってみた", "cover"))
+    scaffold(tmp_path / "x", "曲", defaults=defaults)
+    config = load_project_config(tmp_path / "x" / "utavideo.toml")
+    assert config.credits == defaults.credits
+    assert config.description is not None
+    assert config.description.hashtags == defaults.hashtags

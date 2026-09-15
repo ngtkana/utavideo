@@ -79,6 +79,22 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 
 Aegisub で同じ見た目にするには、Aegisub 側にもフォントをインストールします。
 
+## 概要欄とタイトル
+
+`utavideo description` で `build/title.txt`・`build/description.txt` に書き出します。
+
+| やりたいこと | 書き方 |
+|---|---|
+| 原曲・クレジット・素材を載せる | `song.original_urls`・`[[credits]]`・`[[materials]]` |
+| 冒頭の文章・ハッシュタグ | `[description]` の `text`・`hashtags` |
+| タイトルを手で決める | 曲の `description.title` |
+| 同じ見出しに複数人を並べる / 役割ごとに分ける | `roles` の並びが同じ人は1つの見出しにまとまる |
+| 見出しの記号・区切り・空行・順番 | ユーザー設定の `[description]`（`heading`・`original_heading`・`role_separator`・`name_url_separator`・`section_gap`・`hashtags_gap`・`order`） |
+| タイトルの形 | ユーザー設定の `description.title`（`{title}`・`{artist}`・`{label}`・`{singers}`）・`singer_roles`・`singer_separator` |
+| 毎回同じクレジット・ハッシュタグ | ユーザー設定の `[defaults]`（`new` / `init` が曲の toml にコピーする） |
+| 自作の素材を検査で扱う | `[[materials]]` に `urls` を書かず `files` だけ書く（概要欄には出ない） |
+| 公開したときの文章を残す | `[description]` があれば `release` が `release/<曲名> <バージョン>.txt` を書く |
+
 ## 曲フォルダとコマンド
 
 | やりたいこと | 書き方 |
@@ -113,3 +129,4 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 - 曲名表示の区間・レイヤー・フェード・数
 - 背景の重ね合わせ、アバターの合成（[roadmap.md](roadmap.md)）
 - 雛形の中身、1曲で複数の .ass
+- 概要欄の通し番号・前後の動画へのリンク（[roadmap.md](roadmap.md)）
