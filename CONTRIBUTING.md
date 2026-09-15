@@ -10,7 +10,7 @@ uv tool install --editable .   # utavideo コマンドが手元のコードで�
 
 ## 確認
 
-commit の前に通してください。CI（`.github/workflows/ci.yml`）も同じ確認をします（format は `--check` で実行）。
+commit の前に通してください。CI（`.github/workflows/ci.yml`）も同じ確認をします（format は `--check` で実行）。変わったのが `docs/`・`README.md`・`CONTRIBUTING.md`・`CLAUDE.md` だけなら、CI は `tests/test_docs.py` だけを実行します。
 
 ```sh
 uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
