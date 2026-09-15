@@ -32,7 +32,8 @@ def format_setting(template: str, setting: str, **values: str) -> str:
     """設定に書かれた {名前} を置き換える。"""
     try:
         return template.format(**values)
-    except (KeyError, IndexError, ValueError) as e:
+    # {section.foo} は AttributeError、{section[a]} は TypeError になる
+    except (KeyError, IndexError, ValueError, AttributeError, TypeError) as e:
         names = ", ".join(values)
         raise ConfigError(f"{setting} の書式が不正です（使える名前は {names}）: {e}") from e
 

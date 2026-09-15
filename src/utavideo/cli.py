@@ -378,10 +378,17 @@ def release(
         if path.exists():
             _fail(f"既にあります: {path}（上書きはしません）")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    tmp = partial_path(dest)
-    shutil.copy2(source, tmp)
-    replace_partial(tmp, dest)
-    console.print(f"コピーしました: {dest}", markup=False)
+    # 片方だけ残ると再実行が「既にあります」で止まるので、.txt を先に書き、動画のコピーに失敗したら消す
     if text is not None:
         _write_text(text_dest, text)
+    try:
+        tmp = partial_path(dest)
+        shutil.copy2(source, tmp)
+        replace_partial(tmp, dest)
+    except BaseException:
+        if text is not None:
+            text_dest.unlink(missing_ok=True)
+        raise
+    console.print(f"コピーしました: {dest}", markup=False)
+    if text is not None:
         console.print(f"書き出しました: {text_dest}", markup=False)

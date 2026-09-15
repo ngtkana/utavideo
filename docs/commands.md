@@ -88,7 +88,7 @@ utavideo description [-C <曲フォルダ>]
 utavideo release [-C <曲フォルダ>] [--version <バージョン>] [--allow-stale]
 ```
 
-`build/main.mp4` を `release/<曲名> <バージョン>.mp4` にコピーします。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を `release/<曲名> <バージョン>.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。
+`build/main.mp4` を `release/<曲名> <バージョン>.mp4` にコピーします。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を `release/<曲名> <バージョン>.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。動画のコピーに失敗したときは `.txt` も残さないので、原因を取り除けばそのまま実行し直せます。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|

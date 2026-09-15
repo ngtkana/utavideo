@@ -139,11 +139,16 @@ def test_lint_warns_youtube_limits(tmp_path: Path) -> None:
     assert "<" in levels_and_messages[2][1]
 
 
-def test_lint_reports_broken_format_as_error(tmp_path: Path) -> None:
+@pytest.mark.parametrize("heading", ["■{sectoin}", "■{section.foo}", "■{section[a]}", "■{section"])
+def test_lint_reports_broken_format_as_error(tmp_path: Path, heading: str) -> None:
     project = _project(tmp_path)
-    [issue] = description.lint(project, DescriptionFormat(heading="■{sectoin}"))
+    [issue] = description.lint(project, DescriptionFormat(heading=heading))
     assert issue.level == "error"
     assert "description.heading" in issue.message
+
+
+def _raise_oserror(*_: object) -> None:
+    raise OSError("容量が足りません")
 
 
 def test_description_command_and_release_use_user_defaults(
@@ -168,6 +173,15 @@ def test_description_command_and_release_use_user_defaults(
     assert (root / "build/description.txt").read_text(encoding="utf-8") == body
 
     (root / "build/main.mp4").write_bytes(b"mp4")
+    # .txt と動画のどちらの書き出しに失敗しても片方だけ残らず、そのまま再実行できる
+    for target in ["utavideo.cli._write_text", "utavideo.cli.shutil.copy2"]:
+        with monkeypatch.context() as m:
+            m.setattr(target, _raise_oserror)
+            failed = runner.invoke(app, ["release", "-C", str(root)])
+        assert failed.exit_code == 1, target
+        assert not (root / "release/曲 v1.0.mp4").exists(), target
+        assert not (root / "release/曲 v1.0.txt").exists(), target
+
     result = runner.invoke(app, ["release", "-C", str(root)])
     assert result.exit_code == 0, result.output
     assert (root / "release/曲 v1.0.txt").read_text(encoding="utf-8") == "曲\n\n" + body
