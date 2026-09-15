@@ -5,6 +5,7 @@ import pytest
 
 from tests.conftest import MakeFont
 from utavideo import fonts
+from utavideo.errors import UtavideoError
 
 
 def test_index_looks_up_family_case_insensitively(tmp_path: Path, make_font: MakeFont) -> None:
@@ -70,3 +71,17 @@ def test_fontsdir_links_work_for_relative_paths(
     link = next(iter(fontsdir.iterdir()))
     assert link.is_file(), "リンク先を解決できない（相対パスのまま symlink を張っている）"
     assert link.resolve() == font.resolve()
+
+
+def test_cache_write_reports_locked_file(
+    tmp_path: Path, make_font: MakeFont, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    make_font(tmp_path / "fonts" / "TestSans.ttf", "Test Sans")
+
+    def locked(self: Path, target: Path) -> Path:
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(Path, "replace", locked)
+    with pytest.raises(UtavideoError, match="他のアプリ"):
+        fonts.load_index([tmp_path / "fonts"], tmp_path / "cache.json")
+    assert list(tmp_path.glob("cache.json*")) == []

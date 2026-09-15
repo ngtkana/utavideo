@@ -45,6 +45,20 @@ def partial_path(output: Path) -> Path:
     return output.with_name(f"{output.stem}.partial{output.suffix}")
 
 
+def replace_partial(tmp: Path, output: Path) -> None:
+    """書き終えた tmp で output を置き換える。失敗しても tmp は残す。"""
+    try:
+        tmp.replace(output)
+    except PermissionError as e:
+        # WSL の drvfs では Windows のアプリが output を開いていると、権限に関係なく EACCES になる。
+        # tmp は同じフォルダに書けているので、原因はほぼこれ（docs/verification/20260916-locked-output.md）
+        raise UtavideoError(
+            f"{output} を置き換えられません。他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）"
+            "で開かれていないか確認してください。\n"
+            f"書き出した動画は {tmp} に残っています。閉じてから再実行するか、名前を変えてください"
+        ) from e
+
+
 def run(
     args: Sequence[str],
     output: Path,
@@ -84,4 +98,4 @@ def run(
             detail = stderr.read().strip()[-2000:]
             raise FFmpegError(f"ffmpeg が失敗しました（終了コード {code}）:\n{detail}")
 
-    tmp.replace(output)
+    replace_partial(tmp, output)
