@@ -22,6 +22,7 @@ uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
 ## 変更の送り方
 
 - ブランチで変更して PR を出す（main には直接 push できない）
+- PR を出すと、Claude が差分をレビューしてコメントする（`.github/workflows/claude-review.yml`。draft の間とフォークからの PR では動かない）
 - 挙動や仕様を変えたら、下の分担に従って、対応するドキュメントも同じ PR で直す
 - 利用者向けのメッセージとドキュメントは日本語で書く
 
