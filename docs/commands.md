@@ -4,8 +4,8 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`description`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`description`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail` には ffmpeg と ffprobe が必要です
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
@@ -54,7 +54,7 @@ utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>] [--slug <�
 utavideo check [-C <曲フォルダ>]
 ```
 
-[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前を表示します。
+[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさを表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。
 
 ## preview-bg / build / overlay
 
@@ -74,6 +74,35 @@ utavideo overlay [-C <曲フォルダ>]
 - `preview-bg` は、歌詞の行についての検査を行いません
 - 動画の長さは音源の長さです
 - 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass` に書きます（自動のフェードと曲名表示が入ったもの）
+
+## thumbnail
+
+```sh
+utavideo thumbnail [-C <曲フォルダ>] [--name <name>] [--bg-only]
+```
+
+`[[thumbnails]]`（[config-reference.md](config-reference.md#thumbnails)）ごとに、背景の1フレームにサムネイル用の .ass を描いた PNG を書き出します。
+
+| オプション | 既定値 | 内容 |
+|---|---|---|
+| `--name` | すべて | この `name` のサムネイルだけを検査して書き出す |
+| `--bg-only` | 無効 | 文字を描かず、背景だけを書き出す（Aegisub で文字を組むときの下敷き） |
+
+| 出力 | 入るもの |
+|---|---|
+| `build/thumbnail/<name>.png` | 背景のフレーム＋ .ass |
+| `build/thumbnail/bg/<name>.png`（`--bg-only`） | 背景のフレームだけ |
+
+- 背景が GIF・動画のときは、`at` 秒以降の最初のフレームを使います（繰り返しません）
+- .ass は加工せずに、**0 秒**の状態を描きます。`lyrics.fade_ms` の自動フェードと `[overlay_text]` の曲名表示は入りません。`\t`・`\move`・`\k` なども 0 秒の状態になります
+- 書き出したら、パスとバイト数を表示します
+- 書き出す前に[検査](#検査項目)し、エラーがあれば1枚も書き出しません。`--bg-only` では、背景と `at` だけを検査します（.ass はまだ無くてよい）
+
+次のときは止まります。
+
+- `[[thumbnails]]` が無い（書き足し方を表示します）
+- `--name` の名前が `[[thumbnails]]` に無い（ある名前を表示します）
+- ffmpeg が正常に終わっても何も書き出さなかった（背景の終わり近くの `at` で、それ以降のフレームが無いとき）
 
 ## description
 
@@ -105,7 +134,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 - 音源のバージョンが決まらない、または `vX.Y` の形でない
 - 同じ音源のバージョンで、`build/main.mp4` と中身が同じ動画を既に公開している
 - 同じ名前の `.mp4` が `release/` にある（上書きしない）
-- `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）
+- `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）。ファイルの更新時刻で比べるので、`build` の後に `utavideo.toml` の動画に効かない項目（`[[thumbnails]]`・`[description]`・`[[credits]]` など）だけを変えたときも止まります。このときは `--allow-stale` を付けます
 
 ## 検査項目
 
@@ -113,11 +142,13 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 
 | 対象 | 内容 |
 |---|---|
-| 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある。ユーザー設定も同じ |
+| 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある（`[[thumbnails]]` の `name` の文字・重複、`focus` の範囲、`at` の書式を含む）。ユーザー設定も同じ |
 | 素材 | `audio.file`・`lyrics.file`・`video.background`（`overlay` では不要）のファイルが無い、背景の形式に対応していない、音源に音声が入っていない |
 | 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
+| サムネイル（`thumbnail`・`check`） | 背景が画像なのに `at` を書いた、`at` が背景の長さ以上（長さは ffprobe で取る） |
+| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、未定義のスタイルを使っている、フォントが見つからない |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
 | 実行環境 | ffmpeg・ffprobe が無い |
 
@@ -126,6 +157,8 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | 対象 | 内容 |
 |---|---|
 | 歌詞の行 | `\pos`・`\move` を使っている、表示時間が 0 以下、音声が終わった後に始まる、音声の終わりで途中で切られる、同じスタイル・同じレイヤーで重なる、画面からはみ出しそう |
+| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | 0 秒に表示されない行（始まりが 0 秒より後、または終わりが 0 秒以前）、`\fad`・`\fade` のフェードインが 0 秒で終わっていない、画面からはみ出しそう（`\pos` の行は対象外なので、サムネイルではほとんど検査されない） |
+| サムネイル（`thumbnail`・`check`） | 背景の長さを取得できず、`at` を確かめられない |
 | `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空 |
 | 概要欄（`[description]` がある曲の `check`） | `video.background` がどの `materials.files` にも無い、`materials.files` のファイルが無い、タイトルの `{singers}` に入る人がいない、タイトルが 100 文字・概要欄が 5000 バイトを超える、`<` か `>` を含む（YouTube の上限） |
 
@@ -138,3 +171,4 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | `build/main.mp4` | H.264（`video.crf`・`video.preset`）、yuv420p、BT.709 | AAC 320kbps、48kHz |
 | `build/preview/bg.mp4` | H.264（ultrafast、CRF 28、15 フレームごとにキーフレーム） | AAC 160kbps、48kHz |
 | `build/overlay.mov` | ProRes 4444（アルファ付き）、BT.709 | PCM 24bit、48kHz |
+| `build/thumbnail/<name>.png`・`build/thumbnail/bg/<name>.png` | PNG（RGB 8bit、圧縮レベル 9） | なし |

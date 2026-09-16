@@ -150,3 +150,60 @@ def test_lint_warnings() -> None:
     assert any("音声が終わった後" in m for m in warnings)
     assert any("途中で切られます" in m and "終わりを跨ぐ行" in m for m in warnings)
     assert not any("位置指定" in m and "重なって" in m for m in warnings)
+
+
+def test_lint_still_checks_what_is_drawn_at_zero() -> None:
+    script = _make(
+        [
+            _line("0:00:00.00", "9:59:59.99", r"{\pos(10,10)}曲名", style="Title"),
+            _line("0:00:00.00", "9:59:59.99", "重なっても警告しない", style="Title"),
+            _line("0:00:01.00", "9:59:59.99", "後から始まる"),
+            _line("0:00:00.00", "0:00:00.00", "長さ 0"),
+            _line("0:00:00.00", "9:59:59.99", r"{\fad(150,0)}フェードイン"),
+            _line("0:00:00.00", "9:59:59.99", r"{\fad(0,150)}フェードアウトだけ"),
+            _line("0:00:00.00", "9:59:59.99", "未定義", style="Nope"),
+        ],
+        play_res="1080x1080",
+    )
+    issues = subs.lint_still(script, size=(1080, 1080))
+    assert _messages(issues, "error") == ["未定義のスタイル 'Nope' を使っている行があります"]
+    warnings = _messages(issues, "warning")
+    assert len(warnings) == 3
+    assert "後から始まる" in warnings[0] and "長さ 0" in warnings[1]
+    assert "フェードイン" in warnings[2]
+
+
+def test_lint_still_compares_play_res_with_size() -> None:
+    issues = subs.lint_still(_make([]), size=(1080, 1080))
+    assert _messages(issues, "error") == ["PlayRes 1920x1080 がサイズ 1080x1080 と一致しません"]
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (r"{\fad(150,0)}あ", True),
+        (r"{\fad(0,150)}あ", False),
+        (r"{\fade(255,0,0,0,150,1000,2000)}あ", True),
+        (r"{\fade(255,0,0,-100,-50,1000,2000)}あ", False),  # 0 秒より前にフェードインが終わる
+        (r"{\fade(0,0,255,0,150,1000,2000)}あ", False),  # 不透明度が変わらない
+        (r"{\fad(x,0)}あ", False),
+        ("あ", False),
+    ],
+)
+def test_fades_in_at_zero(text: str, expected: bool) -> None:
+    assert subs.fades_in_at_zero(text) is expected
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("曲名 / Artist", "曲名 / Artist"),
+        ("{a}", r"\{a\}"),
+        (r"a\Nb", "a\\⁠Nb"),
+        (r"a\b", r"a\b"),
+        (r"a\{b", r"a\\{b"),
+        ("1行目\r\n2行目", r"1行目\N2行目"),
+    ],
+)
+def test_escape_text(text: str, expected: str) -> None:
+    assert subs.escape_text(text) == expected

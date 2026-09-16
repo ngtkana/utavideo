@@ -8,6 +8,7 @@
 ├── README.md            # 作業のチェックリストとメモ
 ├── src/                 # 動画の材料（自分で用意するもの）
 │   ├── lyrics.ass       # 歌詞・コメント（Aegisub で編集）
+│   ├── thumbnail.ass    # サムネイルの文字（Aegisub で編集。サイズ違いは thumbnail-square.ass など）
 │   ├── mix/             # 音源
 │   ├── bg/              # 背景の画像 / GIF / 動画
 │   ├── avatar/          # アバターなどの動画素材
@@ -18,6 +19,9 @@
 │   ├── preview/bg.mp4
 │   ├── title.txt        # utavideo description
 │   ├── description.txt
+│   ├── thumbnail/       # utavideo thumbnail
+│   │   ├── main.png     # [[thumbnails]] の name ごと
+│   │   └── bg/main.png  # --bg-only（Aegisub の下敷き）
 │   └── .work/           # 書き出しに使った中間ファイル
 ├── release/             # 公開した動画（概要欄を残すなら自分でコピー）。消さない
 └── share/               # 人とやり取りしたファイル
@@ -45,6 +49,7 @@ utavideo が読むのは `utavideo.toml` で指定したファイルだけなの
 | フォルダ | 自由（`utavideo new` に渡したパスのまま） | `20260915-song/` |
 | 音源 | `<slug>-vX.Y.wav` | `src/mix/song-v1.2.wav` |
 | 公開する動画 | `<slug>-vX.Y.N.mp4`（`utavideo release` が付ける） | `release/song-v1.2.0.mp4` |
+| サムネイル | `build/thumbnail/<name>.png`（`name` は `[[thumbnails]]` に書く。使える文字は slug と同じ） | `build/thumbnail/square.png` |
 | やり取り | `share/YYYYMMDD-相手/` | `share/20260913-to-mixer/`、`share/20260920-from-illustrator/` |
 
 - slug は `new` / `init` が `utavideo.toml` に書きます。省略したときはフォルダ名（先頭に `YYYYMMDD` があれば除いたもの）です

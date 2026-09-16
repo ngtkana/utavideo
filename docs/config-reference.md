@@ -31,6 +31,7 @@
 | `crf` | 整数 0〜51 | `18` | 画質。小さいほど高画質で、ファイルが大きくなる |
 | `preset` | 文字列 | `"slow"` | x264 のプリセット。`ultrafast` / `superfast` / `veryfast` / `faster` / `fast` / `medium` / `slow` / `slower` / `veryslow` / `placebo`。速く書き出したいときは `"medium"` や `"fast"` |
 | `fit` | `"cover"` / `"contain"` | `"cover"` | 背景の縦横比が出力と違うとき。`cover` ははみ出した部分を切り取り、`contain` は余白を `pad_color` で埋める |
+| `focus` | `[x, y]`（0〜1 の数） | `[0.5, 0.5]` | 背景の縦横比が出力と違うとき、どこを基準に合わせるか（CSS の `object-position` と同じ考え方。`[0, 0]` が左上、`[1, 1]` が右下）。`cover` では切り取って残す位置、`contain` では余白の中で背景を寄せる位置。サムネイルにも使う |
 | `scale_flags` | `"lanczos"` / `"bicubic"` / `"bilinear"` / `"area"` / `"neighbor"` | `"lanczos"` | 背景の拡大縮小の方法。ドット絵をくっきり見せたいときは `"neighbor"` |
 | `pad_color` | 文字列 | `"black"` | `fit = "contain"` のときの余白の色（ffmpeg の色指定。例: `"pink"`、`"0xF8D8E8"`） |
 
@@ -80,6 +81,18 @@
 | `text` | 文字列 | `""` | 冒頭の文章（TOML の `"""` で複数行を書ける）。前後の空行は取り除く |
 | `hashtags` | 文字列の配列 | `[]` | ハッシュタグ。`#` と空白は付けない |
 | `title` | 文字列 | なし | タイトル。書くと、ユーザー設定の `description.title` から作るタイトルの代わりに使う |
+
+## [[thumbnails]]
+
+サムネイル（`utavideo thumbnail`）です。サイズ違いなど、1枚につき1つ書きます。背景・`fit`・`scale_flags`・`pad_color` は `[video]` のものを使います。
+
+| 項目 | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `name` | 文字列 | 必須 | 出力の名前（`build/thumbnail/<name>.png`）。使える文字は `song.slug` と同じ（[名前の付け方](project-layout.md#名前の付け方)）で、末尾に `.partial` は付けられない。大文字小文字を区別せずに比べて、重複はエラー（Windows のファイルシステムで同じ名前になるため） |
+| `file` | パス | 必須 | サムネイル用の .ass。0 秒の状態を描く |
+| `size` | `[幅, 高さ]` | `video.size` | 出力の大きさ。.ass の PlayRes と同じにする。動画と違い奇数でもよい |
+| `at` | `"M:SS"`・`"M:SS.fff"` の文字列、または秒の数 | `0` | 背景が GIF・動画のとき、使うフレームの時刻（例: `"1:23.5"`、`83.5`）。背景が画像なら書けない。背景の長さ以上はエラー |
+| `focus` | `[x, y]`（0〜1 の数） | `video.focus` | `[video]` の `focus` を上書きする |
 
 ## ユーザー設定（~/.config/utavideo/config.toml）
 

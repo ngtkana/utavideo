@@ -14,10 +14,12 @@ from utavideo.config import (
     Credit,
     Defaults,
     ProjectConfig,
+    Thumbnail,
     load_project_config,
 )
 from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
 from utavideo.names import legacy_name_from_title, slug_error, slug_from_title
+from utavideo.subs import escape_text
 
 SCAFFOLD_DIRS = ("src/mix", "src/bg", "src/avatar", "src/ref", "build", "release", "share")
 
@@ -26,6 +28,13 @@ _INT = r"(?:0|[1-9][0-9]*)"
 VERSION_PATTERN = rf"v{_INT}\.{_INT}"
 _VERSION_RE = re.compile(rf"(?<![0-9A-Za-z]){VERSION_PATTERN}(?![0-9A-Za-z]|\.[0-9A-Za-z])", re.IGNORECASE)
 _REVISION_RE = re.compile(_INT)
+
+THUMBNAIL_TEMPLATE_PATH = "src/thumbnail.ass"
+# utavideo.toml を書き換えない場面（既存の曲フォルダでの init、[[thumbnails]] が無いときの thumbnail）で見せる
+THUMBNAIL_EXAMPLE = f"""[[thumbnails]]
+name = "main"
+file = "{THUMBNAIL_TEMPLATE_PATH}"
+"""
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,26 @@ class Project:
     @property
     def preview_bg_output(self) -> Path:
         return self.build_dir / "preview" / "bg.mp4"
+
+    @property
+    def thumbnail_dir(self) -> Path:
+        return self.build_dir / "thumbnail"
+
+    def thumbnail_output(self, thumbnail: Thumbnail) -> Path:
+        return self.thumbnail_dir / f"{thumbnail.name}.png"
+
+    def thumbnail_bg_output(self, thumbnail: Thumbnail) -> Path:
+        # 別のフォルダに置く。<name>-bg.png だと、name = "main-bg" のサムネイルとぶつかる
+        return self.thumbnail_dir / "bg" / f"{thumbnail.name}.png"
+
+    def thumbnail_file(self, thumbnail: Thumbnail) -> Path:
+        return self.resolve(thumbnail.file)
+
+    def thumbnail_size(self, thumbnail: Thumbnail) -> tuple[int, int]:
+        return thumbnail.size or self.config.video.size
+
+    def thumbnail_focus(self, thumbnail: Thumbnail) -> tuple[float, float]:
+        return thumbnail.focus or self.config.video.focus
 
     @property
     def title_output(self) -> Path:
@@ -184,6 +213,8 @@ def scaffold(
             directory.mkdir(parents=True)
             result.created.append(directory)
 
+    # 既にある utavideo.toml は書き換えないので、[[thumbnails]] から参照されない .ass を残さないよう作らない
+    config_exists = (root / PROJECT_CONFIG_NAME).exists()
     files = {
         PROJECT_CONFIG_NAME: _render_template(
             "utavideo.toml",
@@ -198,6 +229,10 @@ def scaffold(
         "src/lyrics.ass": _render_template("lyrics.ass"),
         "README.md": _render_template("README.md"),
     }
+    if not config_exists:
+        files[THUMBNAIL_TEMPLATE_PATH] = _render_template(
+            "thumbnail.ass", title=escape_text(title), artist=escape_text(artist)
+        )
     for rel, content in files.items():
         path = root / rel
         if path.exists():

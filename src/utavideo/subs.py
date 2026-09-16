@@ -18,6 +18,7 @@ POS_TAG = re.compile(r"\\(?:pos|move)\s*\(")
 OVERRIDE_BLOCK = re.compile(r"(\{[^}]*\})")  # 分割にも使うのでブロックを捕捉する
 
 _FADE_TAG = re.compile(r"\\fade?\s*\(")
+_FADE_ARGS = re.compile(r"\\fade?\s*\(([^)]*)\)")
 _FONT_TAG = re.compile(r"\\fn([^\\}]*)")
 _RESET_TAG = re.compile(r"\\r([^\\}]*)")
 
@@ -26,9 +27,12 @@ class SubtitleError(UtavideoError):
     """.ass が読めない、または合成できない。"""
 
 
+type IssueLevel = Literal["error", "warning"]
+
+
 @dataclass(frozen=True)
 class Issue:
-    level: Literal["error", "warning"]
+    level: IssueLevel
     message: str
 
 
@@ -120,6 +124,24 @@ def used_fonts(subs: pysubs2.SSAFile) -> set[str]:
     return {name.removeprefix("@") for name in names if name}
 
 
+def _play_res_issues(subs: pysubs2.SSAFile, size: tuple[int, int], label: str) -> list[Issue]:
+    res = play_res(subs)
+    if res is None:
+        return [Issue("error", "PlayResX / PlayResY がありません（Aegisub の解像度設定を確認）")]
+    if res != size:
+        message = f"PlayRes {res[0]}x{res[1]} が{label} {size[0]}x{size[1]} と一致しません"
+        return [Issue("error", message)]
+    return []
+
+
+def _undefined_style_issues(subs: pysubs2.SSAFile) -> list[Issue]:
+    used = {s for e in dialogues(subs) for s in (e.style, *_reset_styles(e.text))}
+    return [
+        Issue("error", f"未定義のスタイル {style!r} を使っている行があります")
+        for style in sorted(used - set(subs.styles))
+    ]
+
+
 def lint(
     subs: pysubs2.SSAFile,
     *,
@@ -127,26 +149,13 @@ def lint(
     duration_ms: int,
     overlay: OverlayText,
 ) -> list[Issue]:
-    issues: list[Issue] = []
-
-    res = play_res(subs)
-    if res is None:
-        issues.append(Issue("error", "PlayResX / PlayResY がありません（Aegisub の解像度設定を確認）"))
-    elif res != size:
-        issues.append(
-            Issue(
-                "error",
-                f"PlayRes {res[0]}x{res[1]} が動画サイズ {size[0]}x{size[1]} と一致しません",
-            )
-        )
+    issues = _play_res_issues(subs, size, "動画サイズ")
 
     if overlay.enabled and overlay.style not in subs.styles:
         issues.append(Issue("error", f"overlay_text.style のスタイル {overlay.style!r} が .ass にありません"))
 
     events = dialogues(subs)
-    used = {s for e in events for s in (e.style, *_reset_styles(e.text))}
-    for style in sorted(used - set(subs.styles)):
-        issues.append(Issue("error", f"未定義のスタイル {style!r} を使っている行があります"))
+    issues += _undefined_style_issues(subs)
 
     positioned = [e for e in events if POS_TAG.search(e.text)]
     if positioned:
@@ -202,3 +211,53 @@ def describe(event: pysubs2.SSAEvent) -> str:
     if len(text) > 20:
         text = text[:20] + "…"
     return f"{pysubs2.time.ms_to_str(event.start, fractions=True)}「{text}」"
+
+
+def fades_in_at_zero(text: str) -> bool:
+    """\\fad・\\fade で、行の始まりにフェードインの途中（またはその前）の状態になるか。
+
+    \\fad(イン,アウト) はイン > 0 のとき。\\fade(a1,a2,a3,t1,t2,t3,t4) は、t2 までに不透明度が
+    a1 から a2 へ変わるので、t2 > 0 かつ a1 ≠ a2 のとき。読めない引数の行は対象にしない。
+    """
+    for raw in _FADE_ARGS.findall(text):
+        try:
+            args = [float(arg) for arg in raw.split(",")]
+        except ValueError:
+            continue
+        if len(args) == 2 and args[0] > 0:
+            return True
+        if len(args) == 7 and args[4] > 0 and args[0] != args[1]:
+            return True
+    return False
+
+
+def lint_still(subs: pysubs2.SSAFile, *, size: tuple[int, int]) -> list[Issue]:
+    """1枚の画像に描く .ass の検査。描くのは 0 秒の状態で、音源とは関係しない。
+
+    歌詞の lint にある、音源の長さとの比較・行の重なり・\\pos の警告は、ここでは的外れなので行わない。
+    """
+    issues = _play_res_issues(subs, size, "サイズ")
+    issues += _undefined_style_issues(subs)
+    for event in dialogues(subs):
+        if event.start > 0 or event.end <= 0:
+            # 何行かだけ描かれないときにも気づけるよう、行ごとに出す
+            message = (
+                f"0 秒に表示されない行は描かれません（0:00:00.00 から始めてください）: {describe(event)}"
+            )
+            issues.append(Issue("warning", message))
+        elif fades_in_at_zero(event.text):
+            message = f"\\fad・\\fade のフェードインが終わる前の状態で描かれます: {describe(event)}"
+            issues.append(Issue("warning", message))
+    return issues
+
+
+# 曲名などを .ass の行に埋めるとき、{ } はタグとして読まれる。libass は \{ \} を括弧そのものとして描く。
+# \ に続く N n h はエスケープできないので、間に幅の無い WORD JOINER を挟む
+# （docs/verification/20260917-thumbnail.md）
+_WORD_JOINER = "\u2060"
+
+
+def escape_text(text: str) -> str:
+    """文字列を、.ass の行でそのまま表示されるように書き換える。改行は \\N にする。"""
+    text = re.sub(r"\\(?=[Nnh])", "\\\\" + _WORD_JOINER, text)
+    return text.translate({ord("{"): r"\{", ord("}"): r"\}", ord("\r"): None, ord("\n"): r"\N"})

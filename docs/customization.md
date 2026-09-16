@@ -26,7 +26,8 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 
 | タグ | 扱い |
 |---|---|
-| `\pos`・`\move` | `check` が警告する。重なりとはみ出しの検査から外す |
+| `\pos`・`\move` | `check` が歌詞で警告する（サムネイルでは警告しない）。重なりとはみ出しの検査から外す |
+| `\fad`・`\fade` | 歌詞では自動のフェードを付けない。サムネイルでは、0 秒にフェードインが終わっていない行を警告する |
 | `\fn` | そのフォントも探す。見つからなければエラー |
 | `\r<スタイル名>` | そのスタイルが無ければエラー。フォントも探す |
 | `\fs`・`\fscx`・`\fsp`・`\q`・`\N`・`\n`・`\h` | はみ出しの概算に反映する |
@@ -52,10 +53,27 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 |---|---|
 | 背景 | `background`。画像・GIF・動画（GIF と動画は繰り返す。動画の音声は使わない） |
 | 縦横比が違う背景 | `fit`（`cover` で切り取り / `contain` で余白）・`pad_color` |
+| 背景のどこを残すか・寄せるか | `focus`（`[0, 0.5]` で左端、`[1, 0.5]` で右端。既定は中央） |
 | 拡大の方法 | `scale_flags`（ドット絵は `neighbor`） |
 | 解像度・縦長 | `size` と .ass の `PlayResX`・`PlayResY` を同じ偶数にする。歌詞を入れた後は Aegisub の「解像度の変換（Resample Resolution）」 |
 | フレームレート | `fps` |
 | 画質・書き出しの速さ | `crf`（小さいほど高画質）・`preset` |
+
+## サムネイル
+
+`utavideo thumbnail` で `build/thumbnail/<name>.png` に書き出します。手順は [workflow.md](workflow.md#9-サムネイルを作る)。
+
+| やりたいこと | 書き方 |
+|---|---|
+| 文字の位置・見た目 | `[[thumbnails]]` の `file` の .ass。Aegisub で `utavideo thumbnail --bg-only` の下敷き（`build/thumbnail/bg/<name>.png`）を開いて組む |
+| 背景の GIF・動画のどの時刻を使うか | `at`（`"1:23.5"` か秒の数） |
+| 正方形などのサイズ違いを足す | `[[thumbnails]]` をもう1つ書き、`name`・`file`・`size` を変える。.ass の PlayRes も `size` に合わせる |
+| サイズ違いで背景の残す位置を変える | そのサムネイルの `focus` |
+| 1枚だけ書き出す | `thumbnail --name <name>` |
+| 曲名・アーティストを直す | 雛形の `src/thumbnail.ass` には作ったときの `song` が書き込まれている。`song` を直しても変わらないので、.ass も直す |
+| 図形 | .ass の `\p`・`\clip` |
+
+画像を重ねること、サムネイルごとに別の背景を使うことはまだできません（[roadmap.md](roadmap.md)）。
 
 ## 音源と公開
 
@@ -117,6 +135,7 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 
 | やりたいこと | 書き方 |
 |---|---|
+| サムネイルの下敷き | `utavideo thumbnail --bg-only` → `build/thumbnail/bg/<name>.png` |
 | 実際に描画した .ass を見る | `build/.work/final.ass`・`preview.ass`・`overlay.ass`（自動のフェードと曲名表示が入っている） |
 | 書き出す前に検査 | `utavideo check` |
 
@@ -128,6 +147,8 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 
 - 出力の形式（[一覧](commands.md#出力の形式変更不可)）
 - 曲名表示の区間・レイヤー・フェード・数
-- 背景の重ね合わせ、アバターの合成（[roadmap.md](roadmap.md)）
+- 背景の重ね合わせ、アバターの合成、サムネイルごとの背景（[roadmap.md](roadmap.md)）
+- サムネイルの形式（PNG だけ）
 - 雛形の中身、1曲で複数の .ass
+- サムネイルに描く .ass の時刻と加工の有無（[commands.md](commands.md#thumbnail)）
 - 概要欄の通し番号・前後の動画へのリンク（[roadmap.md](roadmap.md)）
