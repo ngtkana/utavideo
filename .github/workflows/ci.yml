@@ -38,7 +38,8 @@ jobs:
       - name: ffmpeg をインストール
         if: steps.scope.outputs.full != 'false'
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - uses: astral-sh/setup-uv@v6
+      # v8 から major のタグ（@v10）が publish されないので、版を全部書いて手で上げる
+      - uses: astral-sh/setup-uv@v10.1.0
       - run: uv sync --locked
       - if: steps.scope.outputs.full != 'false'
         run: uv run ruff format --check
