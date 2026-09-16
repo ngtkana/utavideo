@@ -93,7 +93,6 @@ utavideo thumbnail [-C <曲フォルダ>] [--name <name>] [--bg-only]
 | `build/thumbnail/<name>.png` | 背景のフレーム＋ .ass |
 | `build/thumbnail/bg/<name>.png`（`--bg-only`） | 背景のフレームだけ |
 
-- 背景・`fit`・`scale_flags`・`pad_color` は `[video]` のものを使います。大きさは `size`、背景の残す位置は `focus` です
 - 背景が GIF・動画のときは、`at` 秒以降の最初のフレームを使います（繰り返しません）
 - .ass は加工せずに、**0 秒**の状態を描きます。`lyrics.fade_ms` の自動フェードと `[overlay_text]` の曲名表示は入りません。`\t`・`\move`・`\k` なども 0 秒の状態になります
 - 書き出したら、パスとバイト数を表示します
@@ -135,7 +134,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 - 音源のバージョンが決まらない、または `vX.Y` の形でない
 - 同じ音源のバージョンで、`build/main.mp4` と中身が同じ動画を既に公開している
 - 同じ名前の `.mp4` が `release/` にある（上書きしない）
-- `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）
+- `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）。ファイルの更新時刻で比べるので、`build` の後に `utavideo.toml` の動画に効かない項目（`[[thumbnails]]`・`[description]`・`[[credits]]` など）だけを変えたときも止まります。このときは `--allow-stale` を付けます
 
 ## 検査項目
 

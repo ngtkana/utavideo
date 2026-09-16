@@ -111,14 +111,15 @@ utavideo thumbnail --bg-only    # build/thumbnail/bg/main.png（文字を組む�
 
 1. 背景が GIF・動画なら、使うフレームの時刻を `[[thumbnails]]` の `at` に書いてから実行する
 2. Aegisub で `src/thumbnail.ass` を開き、ビデオ → ビデオを開く で `build/thumbnail/bg/main.png` を開く（雛形の .ass には下敷きのパスが書いてあり、開くと読み込まれることがあります）
-3. 文字の位置・大きさ・色を決める。描かれるのは **0 秒**の状態なので、行は `0:00:00.00` から始める（雛形の行は `9:59:59.99` まで）
+3. 文字の位置・大きさ・色を決める。行は `0:00:00.00` から始める（描かれる状態は [commands.md](commands.md#thumbnail)。雛形の行は `9:59:59.99` まで）
 4. 保存して書き出す
 
 ```sh
 utavideo thumbnail              # build/thumbnail/main.png
 ```
 
-- 雛形の曲名とアーティストは、作ったときの `song` です。後で `song` を直しても変わらないので、.ass も直します
+- `build` の後に `[[thumbnails]]` を書き足したり変えたりしてから `release` するときは、`--allow-stale` が要ります（[commands.md](commands.md#release)）
+- 曲名・アーティストを直すときは [customization.md](customization.md#サムネイル)
 - 正方形などのサイズ違いは、`[[thumbnails]]` を足します（[customization.md](customization.md#サムネイル)）
 - 投稿先には容量の上限があります。書き出したときに表示されるバイト数で確かめてください
 

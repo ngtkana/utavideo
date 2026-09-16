@@ -46,9 +46,10 @@ class RenderSpec:
     audio: Path
     subtitles: Path
     fontsdir: Path
+    # 既定値を置かない。渡し忘れると video.focus が黙って効かなくなるため
+    focus: tuple[float, float]
     background: Path | None = None
     fit: Fit = "cover"
-    focus: tuple[float, float] = (0.5, 0.5)
     scale_flags: ScaleFlags = "lanczos"
     pad_color: str = "black"
     crf: int = 18
@@ -96,7 +97,7 @@ def _ratio(value: float) -> str:
 
 
 def fit_filter(
-    size: tuple[int, int], fit: str, flags: str, pad_color: str, focus: tuple[float, float] = (0.5, 0.5)
+    size: tuple[int, int], fit: str, flags: str, pad_color: str, focus: tuple[float, float]
 ) -> str:
     """背景を size に合わせる。focus は cover で切り取って残す位置、contain で余白の中に寄せる位置。
 
@@ -168,11 +169,11 @@ class StillSpec:
 
     size: tuple[int, int]
     background: Path
+    focus: tuple[float, float]  # RenderSpec と同じく既定値を置かない
     at: float | None = None
     subtitles: Path | None = None
     fontsdir: Path | None = None
     fit: Fit = "cover"
-    focus: tuple[float, float] = (0.5, 0.5)
     scale_flags: ScaleFlags = "lanczos"
     pad_color: str = "black"
 

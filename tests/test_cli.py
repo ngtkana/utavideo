@@ -1,11 +1,14 @@
-"""new / init の引数と既定値。"""
+"""new / init の引数と既定値、サムネイルの検査。"""
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
-from utavideo.cli import app
+from utavideo.cli import analyze_thumbnails, app
 from utavideo.config import load_project_config
+from utavideo.ffmpeg import FFmpegError
+from utavideo.project import Project
 
 runner = CliRunner()
 
@@ -87,3 +90,25 @@ def test_init_in_a_configured_folder_explains_how_to_add_a_thumbnail(tmp_path: P
     assert result.exit_code == 0, result.output
     assert "[[thumbnails]]" in result.output
     assert not (root / "src/thumbnail.ass").exists()
+
+
+def test_unreadable_background_becomes_an_issue_instead_of_stopping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "utavideo.toml").write_text(
+        '[song]\ntitle = "曲"\n[audio]\nfile = "a.wav"\n[video]\nbackground = "bg.mp4"\n'
+        '[[thumbnails]]\nname = "main"\nfile = "t.ass"\nat = "0:01"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "bg.mp4").write_bytes(b"not a video")
+
+    def unreadable(path: Path) -> float:
+        raise FFmpegError(f"{path} を読めません")
+
+    monkeypatch.setattr("utavideo.cli.probe_duration", unreadable)
+    project = Project.load(tmp_path)
+    issues = analyze_thumbnails(project, project.config.thumbnails, bg_only=True).issues
+
+    # 背景の長さの警告を重ねず、読めないエラーを1件だけ出す
+    assert len(issues) == 1
+    assert issues[0].level == "error" and "を読めません" in issues[0].message

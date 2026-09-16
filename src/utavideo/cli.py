@@ -20,6 +20,7 @@ from utavideo import description, fonts, graph, layout, subs
 from utavideo.config import PROJECT_CONFIG_NAME, Thumbnail, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import (
+    FFmpegError,
     NoOutputError,
     partial_path,
     probe_audio,
@@ -513,8 +514,14 @@ def analyze_thumbnails(
     background = project.background_path
     usable = not _background_issues(project)
     # GIF・動画の長さは、at を書いたサムネイルがあるときだけ、1回だけ調べる
-    probe = usable and not graph.is_image(background) and any(t.at is not None for t in thumbnails)
-    duration = probe_duration(background) if probe else None
+    duration = None
+    if usable and not graph.is_image(background) and any(t.at is not None for t in thumbnails):
+        try:
+            duration = probe_duration(background)
+        except FFmpegError as e:
+            # check で歌詞やフォントの検査結果まで出なくならないよう、止めずに検査の問題にする
+            issues.append(subs.Issue("error", f"{e}（サムネイルの at を確かめられません）"))
+            usable = False
     if not bg_only and search is None:
         search = _FontSearch.load()
 

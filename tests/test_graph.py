@@ -13,6 +13,7 @@ SPEC = RenderSpec(
     audio=Path("/a/mix v1.0.wav"),
     subtitles=Path("/w/final.ass"),
     fontsdir=Path("/c/fonts"),
+    focus=(0.5, 0.5),
     background=Path("/a/bg.png"),
 )
 
@@ -86,6 +87,7 @@ def test_focus_moves_crop_and_pad() -> None:
 STILL = StillSpec(
     size=(1080, 1080),
     background=Path("/a/bg.png"),
+    focus=(0.5, 0.5),
     subtitles=Path("/s/thumbnail.ass"),
     fontsdir=Path("/c/fonts"),
 )

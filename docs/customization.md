@@ -66,7 +66,6 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | やりたいこと | 書き方 |
 |---|---|
 | 文字の位置・見た目 | `[[thumbnails]]` の `file` の .ass。Aegisub で `utavideo thumbnail --bg-only` の下敷き（`build/thumbnail/bg/<name>.png`）を開いて組む |
-| 描かれる状態 | .ass の 0 秒。行は `0:00:00.00` から始める。自動のフェードと曲名表示は入らない |
 | 背景の GIF・動画のどの時刻を使うか | `at`（`"1:23.5"` か秒の数） |
 | 正方形などのサイズ違いを足す | `[[thumbnails]]` をもう1つ書き、`name`・`file`・`size` を変える。.ass の PlayRes も `size` に合わせる |
 | サイズ違いで背景の残す位置を変える | そのサムネイルの `focus` |
@@ -151,4 +150,5 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 - 背景の重ね合わせ、アバターの合成、サムネイルごとの背景（[roadmap.md](roadmap.md)）
 - サムネイルの形式（PNG だけ）
 - 雛形の中身、1曲で複数の .ass
+- サムネイルに描く .ass の時刻と加工の有無（[commands.md](commands.md#thumbnail)）
 - 概要欄の通し番号・前後の動画へのリンク（[roadmap.md](roadmap.md)）
