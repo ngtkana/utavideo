@@ -13,8 +13,8 @@ Aegisub の字幕の描画エンジンを **libass** にします。utavideo も
 ## 1. 曲フォルダを用意する
 
 ```sh
-utavideo new "曲名" --artist "アーティスト" --root ~/videos   # 新しく作る
-utavideo init ~/videos/制作中の曲 --artist "アーティスト"      # 既存のフォルダで使い始める
+utavideo new ~/videos/20260915-song --title "曲名" --artist "アーティスト"  # 新しく作る
+utavideo init ~/videos/制作中の曲 --artist "アーティスト"                    # 既存のフォルダで使い始める
 ```
 
 `init` は足りないファイルとフォルダを追加するだけで、既存のファイルは移動も上書きもしません。
@@ -22,11 +22,11 @@ utavideo init ~/videos/制作中の曲 --artist "アーティスト"      # 既�
 
 ## 2. 素材を置いて utavideo.toml を編集する
 
-- 音源（ミックス済みの wav など）を `src/mix/曲名 v1.0.wav` のように置き、`audio.file` を合わせる
+- 音源（ミックス済みの wav など）を `src/mix/song-v1.0.wav` のように置き、`audio.file` を合わせる
 - 背景（画像 / GIF / 動画）を `src/bg/` に置き、`video.background` を合わせる
 - `song.title`・`song.artist`・`song.label` を埋める
 
-音源を差し替えるときは、新しいバージョン名のファイル（`曲名 v1.1.wav`）を置いて `audio.file` を書き換えます。ファイル名の `vX.Y` が、`release` で付く名前に使われます（規則は [project-layout.md](project-layout.md#名前の付け方)）。
+音源を差し替えるときは、新しいバージョン名のファイル（`song-v1.1.wav`）を置いて `audio.file` を書き換えます。ファイル名の `vX.Y` が、`release` で付く名前に使われます（規則は [project-layout.md](project-layout.md#名前の付け方)）。
 
 ## 3. プレビュー動画を作る
 
@@ -95,7 +95,7 @@ utavideo description
 ## 8. 公開用にコピーする
 
 ```sh
-utavideo release                # release/曲名 vX.Y.N.mp4（vX.Y は音源のファイル名から、N はその音源で何本目か）
+utavideo release                # release/song-vX.Y.N.mp4（vX.Y は音源のファイル名から、N はその音源で何本目か）
 utavideo release --version v1.0 # 音源のバージョンを指定する
 ```
 

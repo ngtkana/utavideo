@@ -1,4 +1,4 @@
-# $title
+# 曲フォルダ
 
 utavideo の曲フォルダ。制作の流れ: https://github.com/ngtkana/utavideo/blob/main/docs/workflow.md
 

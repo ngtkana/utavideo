@@ -4,6 +4,8 @@
 
 [song]
 title = $title
+# フォルダ名・ファイル名に使う識別子。曲名を直してもファイル名が変わらないよう、分けてある
+slug = $slug
 artist = $artist
 label = ""                 # チャンネル名など。曲名表示に使う
 original_urls = []         # 原曲の URL（概要欄に使う）

@@ -20,6 +20,7 @@ from pydantic import (
 
 from utavideo.errors import UtavideoError
 from utavideo.graph import Fit, Preset, ScaleFlags
+from utavideo.names import slug_error
 
 PROJECT_CONFIG_NAME = "utavideo.toml"
 
@@ -44,9 +45,18 @@ class _Model(BaseModel):
 
 class Song(_Model):
     title: str
+    slug: str = ""  # 空なら title から作る（この項目より前に作った曲フォルダとの互換）
     artist: str = ""
     label: str = ""
     original_urls: tuple[str, ...] = ()
+
+    @field_validator("slug")
+    @classmethod
+    def _usable_as_a_name(cls, slug: str) -> str:
+        # 黙って直すと、指定した名前と違うファイルができるのでエラーにする
+        if slug and (reason := slug_error(slug)):
+            raise ValueError(reason)
+        return slug
 
 
 class Audio(_Model):

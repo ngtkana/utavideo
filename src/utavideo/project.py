@@ -5,7 +5,6 @@ import re
 import string
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from datetime import date
 from importlib import resources
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from utavideo.config import (
     load_project_config,
 )
 from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
+from utavideo.names import legacy_name_from_title, slug_error, slug_from_title
 
 SCAFFOLD_DIRS = ("src/mix", "src/bg", "src/avatar", "src/ref", "build", "release", "share")
 
@@ -26,8 +26,6 @@ _INT = r"(?:0|[1-9][0-9]*)"
 VERSION_PATTERN = rf"v{_INT}\.{_INT}"
 _VERSION_RE = re.compile(rf"(?<![0-9A-Za-z]){VERSION_PATTERN}(?![0-9A-Za-z]|\.[0-9A-Za-z])", re.IGNORECASE)
 _REVISION_RE = re.compile(_INT)
-_DATE_PREFIX_RE = re.compile(r"^\d{8}[\s_-]*")
-_INVALID_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\r\n]')
 
 
 @dataclass(frozen=True)
@@ -91,30 +89,40 @@ class Project:
         return extract_version(self.audio_path.stem)
 
     @property
+    def slug(self) -> str:
+        """ファイル名に使う識別子。song.slug の無い曲フォルダでは曲名から作る。"""
+        return self.config.song.slug or slug_from_title(self.config.song.title)
+
+    @property
     def release_dir(self) -> Path:
         return self.root / "release"
 
     def release_path(self, version: str, revision: int) -> Path:
-        return self.release_dir / f"{safe_filename(self.config.song.title)} {version}.{revision}.mp4"
+        return self.release_dir / f"{self.slug}-{version}.{revision}.mp4"
 
     def released(self, version: str) -> list[tuple[int, Path]]:
         """同じ音源のバージョンで公開済みの動画を、(何本目か, パス) の一覧で返す。
 
-        枝番を手で付けていた頃の <曲名> vX.Y.mp4 は、1本目（0）とみなす。
+        枝番を手で付けていた頃の <名前> vX.Y.mp4 は、1本目（0）とみなす。
+        song.slug より前に公開した <曲名> vX.Y[.N].mp4 も、同じ音源のものとして数える
+        （見落とすと、同じ動画が別の名前でもう一度 release されてしまう）。
         番号が同じファイルが両方あることもあるので、番号ごとに1つに絞らない。
         """
-        base = f"{safe_filename(self.config.song.title)} {version}"
+        bases = {f"{self.slug}-{version}", f"{legacy_name_from_title(self.config.song.title)} {version}"}
         found: list[tuple[int, Path]] = []
         if not self.release_dir.is_dir():
             return found
         for path in self.release_dir.iterdir():
             if path.suffix.lower() != ".mp4" or not path.is_file():
                 continue
-            rest = path.stem.removeprefix(f"{base}.")
-            if path.stem == base:
+            if path.stem in bases:
                 found.append((0, path))
-            elif rest != path.stem and _REVISION_RE.fullmatch(rest):
-                found.append((int(rest), path))
+                continue
+            for base in bases:
+                rest = path.stem.removeprefix(f"{base}.")
+                if rest != path.stem and _REVISION_RE.fullmatch(rest):
+                    found.append((int(rest), path))
+                    break
         return sorted(found)
 
 
@@ -135,18 +143,9 @@ def next_revision(released: list[tuple[int, Path]]) -> int:
     return max((revision for revision, _ in released), default=-1) + 1
 
 
-def safe_filename(name: str) -> str:
-    """ファイル名に使えない文字を潰す。空白だけの名前は末尾が空白のフォルダ名になるので避ける。"""
-    return _INVALID_FILENAME_CHARS.sub("_", name).strip() or "untitled"
-
-
-def project_dir_name(title: str, day: date) -> str:
-    return f"{day:%Y%m%d} {safe_filename(title)}"
-
-
-def title_from_dir_name(name: str) -> str:
-    """例: "20260913 新しい曲" → "新しい曲"。"""
-    return _DATE_PREFIX_RE.sub("", name) or name
+def require_usable_slug(slug: str) -> None:
+    if reason := slug_error(slug):
+        raise ConfigError(f"song.slug に使えません（{reason}）: {slug!r}")
 
 
 def find_project_root(start: Path) -> Path:
@@ -168,12 +167,15 @@ def to_windows_path(path: Path) -> str | None:
     return f"{m[1].upper()}:" + (m[2] or "/").replace("/", "\\")
 
 
-def scaffold(root: Path, title: str, artist: str = "", defaults: Defaults | None = None) -> ScaffoldResult:
+def scaffold(
+    root: Path, title: str, slug: str, artist: str = "", defaults: Defaults | None = None
+) -> ScaffoldResult:
     """雛形のディレクトリとファイルを作る。既にあるものは移動も上書きもしない。"""
     if defaults is None:
         defaults = Defaults()
     result = ScaffoldResult()
-    audio = _detect_single(root / "src", AUDIO_EXTS) or f"src/mix/{safe_filename(title)} v1.0.wav"
+    require_usable_slug(slug)
+    audio = _detect_single(root / "src", AUDIO_EXTS) or f"src/mix/{slug}-v1.0.wav"
     background = _detect_single(root / "src", IMAGE_EXTS | ANIMATED_EXTS) or "src/bg/background.png"
 
     for rel in SCAFFOLD_DIRS:
@@ -182,19 +184,19 @@ def scaffold(root: Path, title: str, artist: str = "", defaults: Defaults | None
             directory.mkdir(parents=True)
             result.created.append(directory)
 
-    one_line_title = " ".join(title.split())
     files = {
         PROJECT_CONFIG_NAME: _render_template(
             "utavideo.toml",
             title=_toml_string(title),
+            slug=_toml_string(slug),
             artist=_toml_string(artist),
             audio=_toml_string(audio),
             background=_toml_string(background),
             hashtags=_toml_array(defaults.hashtags),
             credits=_toml_credits(defaults.credits),
         ),
-        "src/lyrics.ass": _render_template("lyrics.ass", title=one_line_title),
-        "README.md": _render_template("README.md", title=one_line_title),
+        "src/lyrics.ass": _render_template("lyrics.ass"),
+        "README.md": _render_template("README.md"),
     }
     for rel, content in files.items():
         path = root / rel

@@ -14,33 +14,37 @@
 ## new
 
 ```sh
-utavideo new <曲名> [--artist <名前>] [--root <場所>] [--date YYYYMMDD]
+utavideo new <パス> [--title <曲名>] [--artist <名前>] [--slug <名前>]
 ```
 
-`<場所>/YYYYMMDD 曲名/` を作り、雛形のフォルダとファイルを置きます（構成は [project-layout.md](project-layout.md)）。
+渡したパスに曲フォルダを作り、雛形のフォルダとファイルを置きます（構成は [project-layout.md](project-layout.md)）。フォルダ名はパスのままで、日付などは付けません。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
+| `<パス>` | 必須 | 作る曲フォルダのパス（例: `work/20260916-song`） |
+| `--title` | slug と同じ | `song.title` に書く |
 | `--artist` | `""` | `song.artist` に書く |
-| `--root` | `.` | 曲フォルダを作る場所 |
-| `--date` | 今日 | フォルダ名の日付 |
+| `--slug` | フォルダ名（先頭の `YYYYMMDD` は除く） | `song.slug` に書く（[名前の付け方](project-layout.md#名前の付け方)） |
 
+- 省略したオプションは、端末で実行したときは入力を促します。パイプや CI から実行したときは聞かずに既定値を使います
+- 決まった値は `utavideo.toml` に書き込みます。後から曲名を変えても、ファイル名は変わりません
 - フォルダが既にあるとエラーです（既存のフォルダには `init` を使います）
-- フォルダ名では、ファイル名に使えない文字を `_` にします
+- slug がファイル名に使えないとエラーです（端末では入力を促します）
 
 ## init
 
 ```sh
-utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>]
+utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>] [--slug <名前>]
 ```
 
-既存のフォルダに、足りないフォルダとファイルだけを作ります。既にあるファイルは移動も上書きもしません。
+既存のフォルダに、足りないフォルダとファイルだけを作ります。既にあるファイルは移動も上書きもしません。オプションの決め方は `new` と同じです。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
 | `<フォルダ>` | `.` | 対象のフォルダ（存在しないとエラー） |
-| `--title` | フォルダ名から先頭の日付を除いたもの | `song.title` に書く |
+| `--title` | slug と同じ | `song.title` に書く |
 | `--artist` | `""` | `song.artist` に書く |
+| `--slug` | フォルダ名（先頭の `YYYYMMDD` は除く） | `song.slug` に書く |
 
 `src/`（`src/ref/` を除く）に音源と背景がちょうど1つずつあれば、`utavideo.toml` の `audio.file`・`video.background` に設定します。対象の拡張子は、音源が wav / flac / mp3 / m4a / aac / ogg / opus、背景が [config-reference.md](config-reference.md#video) の `background` と同じです。
 
@@ -88,7 +92,7 @@ utavideo description [-C <曲フォルダ>]
 utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [--allow-stale] [--description-only]
 ```
 
-`build/main.mp4` を `release/<曲名> <音源のバージョン>.<何本目か>.mp4` にコピーします。何本目かは `release/` にある同じ音源の動画から決まります（規則は [project-layout.md](project-layout.md#名前の付け方)）。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を `release/<曲名> <音源のバージョン>.<何本目か>.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。動画のコピーに失敗したときは `.txt` も残さないので、原因を取り除けばそのまま実行し直せます。
+`build/main.mp4` を `release/<slug>-<音源のバージョン>.<何本目か>.mp4` にコピーします。何本目かは `release/` にある同じ音源の動画から決まります（規則は [project-layout.md](project-layout.md#名前の付け方)）。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を同じ名前の `.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。動画のコピーに失敗したときは `.txt` も残さないので、原因を取り除けばそのまま実行し直せます。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
