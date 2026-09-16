@@ -105,9 +105,14 @@ class Material(_Model):
 
 
 def _check_hashtags(tags: tuple[str, ...]) -> tuple[str, ...]:
+    seen: set[str] = set()
     for tag in tags:
         if not tag or tag.startswith("#") or any(ch.isspace() for ch in tag):
             raise ValueError(f"ハッシュタグは # と空白を付けずに書いてください: {tag!r}")
+        # YouTube も X も大文字と小文字を区別しないので、違いがそれだけなら同じタグ
+        if (key := tag.casefold()) in seen:
+            raise ValueError(f"ハッシュタグが重複しています: {tag!r}")
+        seen.add(key)
     return tags
 
 
@@ -120,6 +125,15 @@ class Description(_Model):
     title: str | None = None
 
 
+class Upload(_Model):
+    url: str
+
+
+class Announce(_Model):
+    text: str = ""
+    hashtags: Hashtags = ()
+
+
 class ProjectConfig(_Model):
     song: Song
     audio: Audio
@@ -129,6 +143,8 @@ class ProjectConfig(_Model):
     credits: tuple[Credit, ...] = ()
     materials: tuple[Material, ...] = ()
     description: Description | None = None
+    uploads: tuple[Upload, ...] = ()
+    announce: Announce | None = None
 
 
 def _xdg(var: str, fallback: str) -> Path:
@@ -182,14 +198,38 @@ class DescriptionFormat(_Model):
         return order
 
 
+type Site = Literal["youtube", "niconico"]
+type AnnounceBlock = Literal["header", "text", "work", "links", "hashtags", ""]
+
+
+class AnnounceFormat(_Model):
+    header: str = "【動画投稿】"
+    work: str = "『{title} / {artist}』"
+    link: str = "{site} » {url}"
+    # 書いた順にリンクを並べる（tomllib も pydantic の dict も順番を保つ）
+    sites: dict[Site, str] = Field(default_factory=lambda: {"youtube": "YouTube", "niconico": "ニコニコ動画"})
+    order: tuple[AnnounceBlock, ...] = ("header", "text", "", "work", "", "links", "", "hashtags")
+    max_weight: PositiveInt = 280
+
+    @field_validator("order")
+    @classmethod
+    def _unique_blocks(cls, order: tuple[AnnounceBlock, ...]) -> tuple[AnnounceBlock, ...]:
+        blocks = [block for block in order if block]  # 空行（""）は何度書いてもよい
+        if len(set(blocks)) != len(blocks):
+            raise ValueError('同じブロックを2回書かないでください（空行の "" は除く）')
+        return order
+
+
 class Defaults(_Model):
     credits: tuple[Credit, ...] = ()
     hashtags: Hashtags = ()
+    announce_hashtags: Hashtags = ()
 
 
 class UserConfig(_Model):
     font_dirs: list[Path] = Field(default_factory=default_font_dirs)
     description: DescriptionFormat = Field(default_factory=DescriptionFormat)
+    announce: AnnounceFormat = Field(default_factory=AnnounceFormat)
     defaults: Defaults = Field(default_factory=Defaults)
 
     @field_validator("font_dirs")

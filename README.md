@@ -37,6 +37,8 @@ utavideo check        # 設定・素材・歌詞・フォントを検査
 utavideo build        # 書き出し → build/main.mp4
 utavideo description  # タイトルと概要欄 → build/title.txt・build/description.txt
 utavideo release      # release/song-v1.0.0.mp4 にコピー
+# 動画を投稿し、utavideo.toml の [[uploads]] に URL を書く
+utavideo announce     # SNS の告知文 → build/announce.txt
 ```
 
 | コマンド | 内容 |
@@ -49,6 +51,7 @@ utavideo release      # release/song-v1.0.0.mp4 にコピー
 | `overlay` | 歌詞と曲名表示だけを透過 ProRes 4444 で書き出す |
 | `description` | クレジット・素材から、タイトルと概要欄を書き出す |
 | `release` | 書き出した動画を、バージョン付きの名前で `release/` にコピーする |
+| `announce` | 投稿した動画の URL と曲の情報から、SNS の告知文を書き出す |
 
 どのコマンドも曲フォルダの中で実行します（`-C <曲フォルダ>` でも指定できます）。
 

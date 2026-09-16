@@ -4,7 +4,7 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`description`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `check`・`preview-bg`・`build`・`overlay`・`description`・`release`・`announce` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
 - `check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
@@ -110,18 +110,56 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 
 `--description-only` のときは、`[description]` が無い曲と、その音源でまだ動画を公開していないときに止まります。文章が今の `.txt` と同じなら、何も書きません。
 
+## announce
+
+```sh
+utavideo announce [-C <曲フォルダ>]
+```
+
+`utavideo.toml` の曲の情報・`[announce]`・`[[uploads]]` の URL から、SNS の告知文を `build/announce.txt` に書き出し、画面にも表示します。X の数え方での長さも表示します。書式はユーザー設定で決まります（[config-reference.md](config-reference.md#ユーザー設定の-announce)）。
+
+- 書き出す前に[告知文の検査](#検査項目)をします。エラーがあれば `build/announce.txt` を書かず、終了コード 1 で止まります（`description` と違い、誤った URL の告知文を投稿しないため）。警告だけなら書き出します
+- `[[uploads]]` が無いときは「リンクがありません」と警告し、リンクの無い下書きを書き出します（投稿前に文章だけ作れます）。`check` はこの警告を出しません
+- URL を開いて確かめることはしません（動画の公開と告知を同時に予約できるように）
+- ffmpeg は使いません
+
+### 受け付ける URL
+
+サイトは URL のホストで判定します。ホストは完全一致か、そのサブドメインで比べます（`youtube.com.example` は通しません）。`https://` で始まらない URL はエラーです。
+
+| サイト（`sites` のキー） | ホスト | 受け付ける形 |
+|---|---|---|
+| `youtube` | `youtube.com`・`*.youtube.com`・`youtu.be` | `/watch?v=ID`・`youtu.be/ID`。ID は `[A-Za-z0-9_-]` の 11 文字。`si` などの共有用のパラメータは無視する。`t`・`list` が付いていたら警告（動画の頭から再生されない）。`/shorts/`・`/live/` などはエラー |
+| `niconico` | `nicovideo.jp`・`*.nicovideo.jp`・`nico.ms` | `/watch/ID`・`nico.ms/ID`。ID は `sm`・`so`・`nm` と数字。パラメータは無視する |
+
+リンクは、ユーザー設定の `announce.sites` に書いた順に並べます。同じサイトの URL が2つあるとき、`sites` に無いサイトの URL があるときはエラーです（メッセージに `sites` に足す行の例を出します）。
+
+### ハッシュタグ
+
+X（twitter-text）でハッシュタグとしてつながる文字は、文字・結合文字・数字と、`_`・`・`・`〜`・`～`・`゛`・`゜`・`゠`・`〃`・`·` など一部の記号だけです。`[announce].hashtags` に `-`・`.`・`!`・`&`・`'`・`♪` などそれ以外の文字があるとき（そこでタグが切れる）と、文字を1つも含まない（数字や `_` だけの）ときはエラーです。
+
+### 長さの数え方
+
+[twitter-text の config/v3.json](https://github.com/twitter/twitter-text/blob/master/config/v3.json) の規則で数えます（[検証記録](verification/20260917-announce.md)）。
+
+- 書き出す全文から末尾の改行を除き、NFC に正規化してから数えます
+- 1文字（コードポイント）の重みは 2 です。U+0000–U+10FF・U+2000–U+200D・U+2010–U+201F・U+2032–U+2037 だけ 1 です（`»` と改行は 1、`【】『』・…` と全角空白は 2）
+- URL は長さによらず 23 です。`https://`・`http://` で始まるものと、`example.com` のようなスキームの無いドメインを URL とみなします。`text` に手で書いた URL も数えます。この判定は twitter-text より簡易な概算です
+- X は ZWJ でつないだ絵文字や肌の色の付いた絵文字を1つで 2 と数えますが、utavideo は部品ごとに数えるので多めになります（上限を超えない側に倒れます）
+
 ## 検査項目
 
 ### エラー（書き出さない）
 
 | 対象 | 内容 |
 |---|---|
-| 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある。ユーザー設定も同じ |
+| 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある（ハッシュタグの重複、`announce.order` の `""` 以外の重複、`announce.sites` の知らないキーを含む）。ユーザー設定も同じ |
 | 素材 | `audio.file`・`lyrics.file`・`video.background`（`overlay` では不要）のファイルが無い、背景の形式に対応していない、音源に音声が入っていない |
 | 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
+| 告知文（`announce`、`[announce]` がある曲の `check`） | ユーザー設定の `announce.work`・`announce.link` の書式が不正、`[[uploads]]` の URL が[受け付ける形](#受け付ける-url)でない・同じサイトが2つある・サイトが `announce.sites` に無い、`[announce].hashtags` に [X でタグが切れる文字](#ハッシュタグ)がある |
 | 実行環境 | ffmpeg・ffprobe が無い |
 
 ### 警告
@@ -131,6 +169,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | 歌詞の行 | `\pos`・`\move` を使っている、表示時間が 0 以下、音声が終わった後に始まる、音声の終わりで途中で切られる、同じスタイル・同じレイヤーで重なる、画面からはみ出しそう |
 | `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空 |
 | 概要欄（`[description]` がある曲の `check`） | `video.background` がどの `materials.files` にも無い、`materials.files` のファイルが無い、タイトルの `{singers}` に入る人がいない、タイトルが 100 文字・概要欄が 5000 バイトを超える、`<` か `>` を含む（YouTube の上限） |
+| 告知文（`announce`、`[announce]` がある曲の `check`） | `[[uploads]]` が無い（`announce` だけ）、YouTube の URL に `t`・`list` が付いている、`work` の `{singers}` に入る人がいない、[長さ](#長さの数え方)が `announce.max_weight` を超える |
 
 はみ出しの概算で反映するタグは [customization.md](customization.md#utavideo-が読むタグ) を参照してください。
 
