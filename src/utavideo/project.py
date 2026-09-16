@@ -116,11 +116,6 @@ class Project:
                 found[int(path.stem[len(prefix) :])] = path
         return found
 
-    def next_revision(self, version: str) -> int:
-        """次に公開する動画が何本目か。数ではなく最大値から決めるので、消しても番号がぶつからない。"""
-        revisions = self.released(version)
-        return max(revisions) + 1 if revisions else 0
-
 
 @dataclass
 class ScaffoldResult:
@@ -132,6 +127,11 @@ def extract_version(stem: str) -> str | None:
     """例: "曲名 v3.4" → "v3.4"。vX.Y の形だけを読み、複数あれば最後のもの。"""
     matches = _VERSION_RE.findall(stem)
     return "v" + matches[-1][1:] if matches else None
+
+
+def next_revision(released: dict[int, Path]) -> int:
+    """次に公開する動画が何本目か。数ではなく最大値から決めるので、消しても番号がぶつからない。"""
+    return max(released, default=-1) + 1
 
 
 def safe_filename(name: str) -> str:

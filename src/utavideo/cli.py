@@ -24,6 +24,7 @@ from utavideo.project import (
     Project,
     ScaffoldResult,
     find_project_root,
+    next_revision,
     project_dir_name,
     scaffold,
     title_from_dir_name,
@@ -276,7 +277,7 @@ def check(project_dir: ProjectOption = None) -> None:
         console.print(f"  フォント: {file}", markup=False)
     issues = list(analysis.issues)
     if version := project.version:
-        dest = project.release_path(version, project.next_revision(version))
+        dest = project.release_path(version, next_revision(project.released(version)))
         console.print(f"  release 先: {dest}", markup=False)
     else:
         message = "audio.file のファイル名に vX.Y が無いので、release では --version が必要です"
@@ -377,7 +378,7 @@ def release(
     if same is not None:
         _fail(f"同じ内容が既にあります: {same}（コピーしません）")
 
-    dest = project.release_path(version, project.next_revision(version))
+    dest = project.release_path(version, next_revision(released))
     # 書式を後で変えても公開したときの文章が残るよう、概要欄も一緒に置く
     text_dest = dest.with_suffix(".txt")
     text = None

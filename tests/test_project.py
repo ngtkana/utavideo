@@ -9,6 +9,7 @@ from utavideo.project import (
     Project,
     extract_version,
     find_project_root,
+    next_revision,
     project_dir_name,
     safe_filename,
     scaffold,
@@ -134,7 +135,7 @@ def test_next_revision_counts_released_videos(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     project = Project.load(root)
-    assert project.next_revision("v3.4") == 0
+    assert next_revision(project.released("v3.4")) == 0
 
     for name in [
         "サンプル v3.4.mp4",  # 枝番を手で付けていた頃の1本目
@@ -146,8 +147,8 @@ def test_next_revision_counts_released_videos(tmp_path: Path) -> None:
     ]:
         (root / "release" / name).write_bytes(b"")
     assert sorted(project.released("v3.4")) == [0, 2]
-    assert project.next_revision("v3.4") == 3
-    assert project.next_revision("v3.5") == 5
+    assert next_revision(project.released("v3.4")) == 3
+    assert next_revision(project.released("v3.5")) == 5
 
 
 def test_scaffold_copies_default_credits_and_hashtags(tmp_path: Path) -> None:
