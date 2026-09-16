@@ -93,7 +93,7 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 | タイトルの形 | ユーザー設定の `description.title`（`{title}`・`{artist}`・`{label}`・`{singers}`）・`singer_roles`・`singer_separator` |
 | 毎回同じクレジット・ハッシュタグ | ユーザー設定の `[defaults]`（`new` / `init` が曲の toml にコピーする） |
 | 自作の素材を検査で扱う | `[[materials]]` に `urls` を書かず `files` だけ書く（概要欄には出ない） |
-| 公開したときの文章を残す | `build/description.txt` を自分で `release/` にコピーする（`release` は `.mp4` 以外を読まず、書き換えない） |
+| 公開したときの文章を残す | `build/title.txt`・`build/description.txt` を自分で `release/` にコピーする（`release` がそれらをどう扱うかは [commands.md](commands.md#release)） |
 
 ## 曲フォルダとコマンド
 
