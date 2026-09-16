@@ -161,8 +161,7 @@ def test_scaffold_copies_default_credits_and_hashtags(tmp_path: Path) -> None:
 
 def test_scaffold_creates_thumbnail_with_escaped_title(tmp_path: Path) -> None:
     root = tmp_path / "x"
-    result = scaffold(root, "{曲}", "x", artist="A\\N")
-    assert not result.kept_config
+    scaffold(root, "{曲}", "x", artist="A\\N")
     config = load_project_config(root / "utavideo.toml")
     (thumbnail,) = config.thumbnails
     assert (thumbnail.name, thumbnail.file) == ("main", Path("src/thumbnail.ass"))
@@ -179,7 +178,7 @@ def test_init_with_existing_config_does_not_create_thumbnail(tmp_path: Path) -> 
     root.mkdir()
     (root / "utavideo.toml").write_text("# 自分の設定\n", encoding="utf-8")
     result = scaffold(root, "曲", "x")
-    assert result.kept_config
+    assert root / "utavideo.toml" in result.skipped
     assert not (root / "src/thumbnail.ass").exists()
     assert (root / "utavideo.toml").read_text(encoding="utf-8") == "# 自分の設定\n"
 

@@ -73,7 +73,7 @@ def is_image(path: Path) -> bool:
 
 
 def background_input(path: Path, fps: int) -> list[str]:
-    if path.suffix.lower() in ANIMATED_EXTS:
+    if not is_image(path):
         return ["-stream_loop", "-1", "-i", str(path)]
     return ["-loop", "1", "-framerate", str(fps), "-i", str(path)]
 
@@ -179,9 +179,9 @@ class StillSpec:
 
 def build_still_args(spec: StillSpec) -> list[str]:
     """出力ファイル名（.png）を除いた ffmpeg の引数。"""
-    video = f"[0:v]{fit_filter(spec.size, spec.fit, spec.scale_flags, spec.pad_color, spec.focus)},setsar=1"
     # 動画と同じく RGB で合成する。PNG なので YUV には戻さない
-    video += ",format=rgb24"
+    fit = fit_filter(spec.size, spec.fit, spec.scale_flags, spec.pad_color, spec.focus)
+    video = f"[0:v]{fit},setsar=1,format=rgb24"
     if spec.subtitles is not None:
         if spec.fontsdir is None:
             raise ValueError("subtitles には fontsdir が必要です")

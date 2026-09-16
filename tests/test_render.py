@@ -159,6 +159,21 @@ def test_build_writes_main_mp4(project: Path) -> None:
     assert not (project / "build/main.partial.mp4").exists()
 
 
+def test_video_focus_moves_the_background(project: Path) -> None:
+    frames = []
+    for focus in ("[0, 0.5]", "[1, 0.5]"):
+        config = TOML.format(background="bg.png").replace(
+            "size = [320, 180]", f"size = [180, 180]\nfocus = {focus}"
+        )
+        (project / "utavideo.toml").write_text(config, encoding="utf-8")
+        (project / "src/lyrics.ass").write_text(
+            LYRICS.format(font="Test Sans").replace("PlayResX: 320", "PlayResX: 180"), encoding="utf-8"
+        )
+        _invoke("build", "-C", str(project))
+        frames.append(_pixels(project / "build/main.mp4"))
+    assert frames[0] != frames[1]
+
+
 def test_gif_background_loops_for_whole_audio(project: Path) -> None:
     (project / "utavideo.toml").write_text(TOML.format(background="loop.gif"), encoding="utf-8")
     _invoke("build", "-C", str(project))
@@ -241,7 +256,20 @@ def _with_thumbnail(project: Path, background: str = "bg.png", extra: str = "siz
 
 def _pixels(path: Path) -> bytes:
     out = subprocess.run(
-        ["ffmpeg", "-v", "error", "-i", str(path), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-",
+        ],
         capture_output=True,
         check=True,
     )

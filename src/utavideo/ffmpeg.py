@@ -15,6 +15,10 @@ class FFmpegError(UtavideoError):
     """ffmpeg / ffprobe が無い、または失敗した。"""
 
 
+class NoOutputError(FFmpegError):
+    """ffmpeg が正常に終わったのに、何も書き出さなかった。"""
+
+
 @dataclass(frozen=True)
 class AudioInfo:
     duration_s: float
@@ -27,29 +31,29 @@ def require_tools() -> None:
         raise FFmpegError(f"{', '.join(missing)} が見つかりません（例: sudo apt install ffmpeg）")
 
 
-def probe_audio(path: Path) -> AudioInfo:
-    """音源の長さと、音声ストリームが入っているか。"""
-    cmd = ["ffprobe", "-v", "error", "-select_streams", "a", "-show_entries",
-           "format=duration:stream=index", "-of", "json", str(path)]  # fmt: skip
+def _probe_format(path: Path, entries: str, *extra: str) -> dict:
+    cmd = ["ffprobe", "-v", "error", *extra, "-show_entries", entries, "-of", "json", str(path)]
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        info = json.loads(out.stdout)
-        return AudioInfo(float(info["format"]["duration"]), bool(info.get("streams")))
+        return json.loads(out.stdout)
     except subprocess.CalledProcessError as e:
         raise FFmpegError(f"{path} を読めません: {e.stderr.strip()}") from e
+
+
+def probe_audio(path: Path) -> AudioInfo:
+    """音源の長さと、音声ストリームが入っているか。"""
+    info = _probe_format(path, "format=duration:stream=index", "-select_streams", "a")
+    try:
+        return AudioInfo(float(info["format"]["duration"]), bool(info.get("streams")))
     except (KeyError, ValueError) as e:
         raise FFmpegError(f"{path} の長さを取得できません") from e
 
 
 def probe_duration(path: Path) -> float | None:
     """GIF・動画の長さ（秒）。長さの情報が無ければ None（画像など）。"""
-    cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)]
+    duration = _probe_format(path, "format=duration").get("format", {}).get("duration")
     try:
-        out = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        duration = json.loads(out.stdout).get("format", {}).get("duration")
         return float(duration) if duration not in (None, "N/A") else None
-    except subprocess.CalledProcessError as e:
-        raise FFmpegError(f"{path} を読めません: {e.stderr.strip()}") from e
     except ValueError as e:
         raise FFmpegError(f"{path} の長さを取得できません") from e
 
@@ -78,11 +82,10 @@ def run(
     *,
     total_s: float,
     on_progress: Callable[[float], None] | None = None,
-    no_output_hint: str = "",
 ) -> None:
     """args の末尾に一時ファイル名を足して実行し、成功したときだけ output に置き換える。
 
-    no_output_hint は、ffmpeg が正常に終わっても何も書かなかったときのエラーに添える説明。
+    ffmpeg が正常に終わっても何も書かなかったときは NoOutputError（原因の説明は呼び出し側で足す）。
     """
     output.parent.mkdir(parents=True, exist_ok=True)
     tmp = partial_path(output)
@@ -119,6 +122,5 @@ def run(
     # （docs/verification/20260917-thumbnail.md）。そのまま置き換えると分かりにくいエラーになる
     if not tmp.is_file() or tmp.stat().st_size == 0:
         tmp.unlink(missing_ok=True)
-        hint = f"。{no_output_hint}" if no_output_hint else ""
-        raise FFmpegError(f"ffmpeg は正常に終了しましたが、何も書き出しませんでした: {output}{hint}")
+        raise NoOutputError(f"ffmpeg は正常に終了しましたが、何も書き出しませんでした: {output}")
     replace_partial(tmp, output)

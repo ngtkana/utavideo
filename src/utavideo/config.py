@@ -22,7 +22,7 @@ from pydantic import (
 
 from utavideo.errors import UtavideoError
 from utavideo.graph import Fit, Preset, ScaleFlags
-from utavideo.names import casefold_duplicates, slug_error
+from utavideo.names import casefold_duplicates, output_name_error, slug_error
 from utavideo.timecode import parse_time
 
 PROJECT_CONFIG_NAME = "utavideo.toml"
@@ -57,11 +57,8 @@ Time = Annotated[float, BeforeValidator(parse_time)]
 
 def _check_output_name(name: str) -> str:
     # 黙って直すと、指定した名前と違うファイルができるのでエラーにする
-    if reason := slug_error(name):
+    if reason := output_name_error(name):
         raise ValueError(reason)
-    # <name>.partial.png は、name から "partial" を除いた出力の書きかけと同じ名前になる
-    if name.casefold().endswith(".partial"):
-        raise ValueError("末尾の .partial は、書き出し途中のファイルの名前と重なります")
     return name
 
 

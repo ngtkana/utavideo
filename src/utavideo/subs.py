@@ -259,16 +259,5 @@ _WORD_JOINER = "\u2060"
 
 def escape_text(text: str) -> str:
     """文字列を、.ass の行でそのまま表示されるように書き換える。改行は \\N にする。"""
-    out: list[str] = []
-    for i, ch in enumerate(text):
-        if ch == "\\":
-            out.append("\\" + (_WORD_JOINER if text[i + 1 : i + 2] in {"N", "n", "h"} else ""))
-        elif ch in "{}":
-            out.append("\\" + ch)
-        elif ch == "\r":
-            continue
-        elif ch == "\n":
-            out.append("\\N")
-        else:
-            out.append(ch)
-    return "".join(out)
+    text = re.sub(r"\\(?=[Nnh])", "\\\\" + _WORD_JOINER, text)
+    return text.translate({ord("{"): r"\{", ord("}"): r"\}", ord("\r"): None, ord("\n"): r"\N"})

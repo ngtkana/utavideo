@@ -159,8 +159,6 @@ class Project:
 class ScaffoldResult:
     created: list[Path] = field(default_factory=list)
     skipped: list[Path] = field(default_factory=list)
-    # utavideo.toml が既にあったので、サムネイルの雛形を作らなかった
-    kept_config: bool = False
 
 
 def extract_version(stem: str) -> str | None:
@@ -216,7 +214,7 @@ def scaffold(
             result.created.append(directory)
 
     # 既にある utavideo.toml は書き換えないので、[[thumbnails]] から参照されない .ass を残さないよう作らない
-    result.kept_config = (root / PROJECT_CONFIG_NAME).exists()
+    config_exists = (root / PROJECT_CONFIG_NAME).exists()
     files = {
         PROJECT_CONFIG_NAME: _render_template(
             "utavideo.toml",
@@ -231,7 +229,7 @@ def scaffold(
         "src/lyrics.ass": _render_template("lyrics.ass"),
         "README.md": _render_template("README.md"),
     }
-    if not result.kept_config:
+    if not config_exists:
         files[THUMBNAIL_TEMPLATE_PATH] = _render_template(
             "thumbnail.ass", title=escape_text(title), artist=escape_text(artist)
         )
