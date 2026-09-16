@@ -5,6 +5,8 @@ import re
 import unicodedata
 from collections import Counter
 from dataclasses import dataclass
+from functools import cache
+from importlib import resources
 from urllib.parse import parse_qs, urlsplit
 
 from utavideo.config import (
@@ -28,13 +30,25 @@ URL_WEIGHT = 23
 _YOUTUBE_ID = re.compile(r"[A-Za-z0-9_-]{11}")
 _NICONICO_ID = re.compile(r"(?:sm|so|nm)[0-9]+")
 
-# 長さの概算に使う URL の簡易な判定。スキームの無い「example.com」も X は URL として数える。
+# 長さの概算に使う URL の判定。スキームの無い「example.com」は、TLD が twitter-text の一覧
+# （npm の twitter-text 3.1.0 の validGTLD・validCCTLD。tlds.txt）にあるときだけ URL とみなす。
+# 一覧に無い「Mr.Children」「feat.Ado」まで 23 と数えると、280 付近で誤った警告になるため。
 # 末尾の句読点は URL に含めない（twitter-text も含めない）
-_URL = re.compile(
-    r"(?:https?://[!-~]+|(?<![A-Za-z0-9@$#.\-_/])(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?:/[!-~]*)?)",
-    re.IGNORECASE,
-)
 _URL_TRAILING = ".,:;!?'\"()[]"
+
+
+@cache
+def _url() -> re.Pattern[str]:
+    # TLD の一覧は 1574 件あり、読み込みと compile に数 ms かかるので、告知文を数えるときだけ作る
+    tlds = resources.files("utavideo").joinpath("tlds.txt").read_text(encoding="utf-8").split()
+    return re.compile(
+        r"(?:https?://[!-~]+"
+        r"|(?<![A-Za-z0-9@$#.\-_/])(?:[A-Za-z0-9-]+\.)+"
+        rf"(?:{'|'.join(map(re.escape, tlds))}|xn--[A-Za-z0-9-]+)(?![A-Za-z0-9@+-])"
+        r"(?:/[!-~]*)?)",
+        re.IGNORECASE,
+    )
+
 
 # twitter-text の hashtagSpecialChars。文字・結合文字・数字のほかに、ハッシュタグに使える記号
 _HASHTAG_SPECIAL = frozenset(
@@ -63,6 +77,7 @@ def classify(url: str) -> Upload:
         has_extra = parts.port is not None or parts.username is not None
     except ValueError:
         return error("URL の形が不正です")
+    query = parse_qs(parts.query)
 
     def on(domain: str) -> bool:
         # 部分一致にすると youtube.com.example まで通るので、完全一致かサブドメインだけ
@@ -79,7 +94,6 @@ def classify(url: str) -> Upload:
             return error("ショート動画（/shorts/）の告知は、今は対象外です")
         if has_extra:
             return unsupported(youtube_forms)
-        query = parse_qs(parts.query)
         if host == "youtu.be":
             video_id = parts.path.removeprefix("/") if parts.path.count("/") == 1 else None
         elif parts.path == "/watch" and len(query.get("v", [])) == 1:
@@ -88,12 +102,11 @@ def classify(url: str) -> Upload:
             return unsupported(youtube_forms)
         if video_id is None or not _YOUTUBE_ID.fullmatch(video_id):
             return error("YouTube の動画 ID が不正です（英数字・_・- の 11 文字）")
-        issues: list[Issue] = []
-        if extra := [name for name in ("t", "list") if name in query]:
-            names = "・".join(extra)
-            message = f"uploads.url に {names} が付いています（動画の頭から再生されません）: {url}"
-            issues.append(Issue("warning", message))
-        return Upload(url, "youtube", tuple(issues))
+        # YouTube は query の t だけでなく、fragment の t（#t=30）でも途中から再生する
+        extra = [name for name in ("t", "list") if name in query]
+        if "t" in parse_qs(parts.fragment):
+            extra.append("#t")
+        return Upload(url, "youtube", _not_from_the_beginning(extra, url))
     if on("nicovideo.jp") or host == "nico.ms":
         prefix = "/" if host == "nico.ms" else "/watch/"
         video_id = parts.path.removeprefix(prefix)
@@ -101,8 +114,17 @@ def classify(url: str) -> Upload:
             return unsupported(niconico_forms)
         if not _NICONICO_ID.fullmatch(video_id):
             return error("ニコニコ動画の動画 ID が不正です（sm・so・nm と数字）")
-        return Upload(url, "niconico", ())
+        # from は再生を始める秒数（「動画の再生位置」を指定して共有した URL に付く）
+        extra = [name for name in ("from",) if name in query]
+        return Upload(url, "niconico", _not_from_the_beginning(extra, url))
     return error(f"サイトを判定できません（対応しているのは {youtube_forms}・{niconico_forms}）")
+
+
+def _not_from_the_beginning(names: list[str], url: str) -> tuple[Issue, ...]:
+    if not names:
+        return ()
+    message = f"uploads.url に {'・'.join(names)} が付いています（動画の頭から再生されません）: {url}"
+    return (Issue("warning", message),)
 
 
 def render(config: ProjectConfig, fmt: AnnounceFormat, description_fmt: DescriptionFormat) -> str:
@@ -158,7 +180,7 @@ def weight(text: str) -> int:
     text = unicodedata.normalize("NFC", text).removesuffix("\n")
     total = 0
     position = 0
-    for match in _URL.finditer(text):
+    for match in _url().finditer(text):
         total += _chars_weight(text[position : match.start()]) + URL_WEIGHT
         position = match.start() + len(match.group().rstrip(_URL_TRAILING))
     return total + _chars_weight(text[position:])

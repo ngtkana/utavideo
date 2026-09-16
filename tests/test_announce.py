@@ -146,12 +146,24 @@ def test_classify_rejects_other_urls(url: str, message: str) -> None:
     assert url in issue.message
 
 
-@pytest.mark.parametrize("query", ["t=30", "list=PL123", "t=30&list=PL123"])
-def test_classify_warns_links_that_do_not_start_at_the_beginning(query: str) -> None:
-    upload = classify(f"https://www.youtube.com/watch?v=abcdefghijk&{query}")
-    assert upload.site == "youtube"
+@pytest.mark.parametrize(
+    ("url", "site"),
+    [
+        ("https://www.youtube.com/watch?v=abcdefghijk&t=30", "youtube"),
+        ("https://www.youtube.com/watch?v=abcdefghijk&list=PL123", "youtube"),
+        ("https://www.youtube.com/watch?v=abcdefghijk&t=30&list=PL123", "youtube"),
+        ("https://www.youtube.com/watch?v=abcdefghijk#t=30", "youtube"),
+        ("https://youtu.be/abcdefghijk?t=30", "youtube"),
+        ("https://www.nicovideo.jp/watch/sm9?from=90", "niconico"),
+        ("https://nico.ms/sm9?from=90", "niconico"),
+    ],
+)
+def test_classify_warns_links_that_do_not_start_at_the_beginning(url: str, site: str) -> None:
+    upload = classify(url)
+    assert upload.site == site
     [issue] = upload.issues
     assert issue.level == "warning"
+    assert "頭から再生されません" in issue.message
 
 
 @pytest.mark.parametrize(
@@ -183,6 +195,21 @@ def test_classify_warns_links_that_do_not_start_at_the_beginning(query: str) -> 
         ("https://youtu.be/abcdefghijk", 23),
         ("http://example.com/a/very/long/path/that/is/longer/than/twenty-three", 23),
         ("example.com", 23),
+        # スキームの無いものは TLD が一覧にあるときだけ URL（twitter-text 3.1.0 で確かめた値）
+        ("nicovideo.jp", 23),
+        ("www.nicovideo.jp", 23),
+        ("nico.ms/sm9", 23),
+        ("Example.COM", 23),
+        ("example.みんな", 23),
+        ("『Mr.Children』", 15),
+        ("feat.Ado", 8),
+        ("St.Vincent", 10),
+        ("utavideo.toml", 13),
+        ("example.com+1", 13),
+        ("_example.com", 12),
+        ("＠example.com", 2 + 23),
+        ("foo.com.xyzq", 23 + 5),
+        ("見て example.com。", 2 + 2 + 1 + 23 + 2),
         ("告知 https://x.com/a。", 2 + 2 + 1 + 23 + 2),
         ("見て https://x.com/a.", 2 + 2 + 1 + 23 + 1),
         ("v1.0", 4),

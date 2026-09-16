@@ -126,8 +126,8 @@ utavideo announce [-C <曲フォルダ>]
 
 | サイト（`sites` のキー） | ホスト | 受け付ける形 |
 |---|---|---|
-| `youtube` | `youtube.com`・`*.youtube.com`・`youtu.be` | `/watch?v=ID`・`youtu.be/ID`。ID は `[A-Za-z0-9_-]` の 11 文字。`si` などの共有用のパラメータは無視する。`t`・`list` が付いていたら警告（動画の頭から再生されない）。`/shorts/`・`/live/` などはエラー |
-| `niconico` | `nicovideo.jp`・`*.nicovideo.jp`・`nico.ms` | `/watch/ID`・`nico.ms/ID`。ID は `sm`・`so`・`nm` と数字。パラメータは無視する |
+| `youtube` | `youtube.com`・`*.youtube.com`・`youtu.be` | `/watch?v=ID`・`youtu.be/ID`。ID は `[A-Za-z0-9_-]` の 11 文字。`si` などの共有用のパラメータは無視する。`t`・`list`（`#t=30` のような fragment の `t` も）が付いていたら警告（動画の頭から再生されない）。`/shorts/`・`/live/` などはエラー |
+| `niconico` | `nicovideo.jp`・`*.nicovideo.jp`・`nico.ms` | `/watch/ID`・`nico.ms/ID`。ID は `sm`・`so`・`nm` と数字。`from` が付いていたら警告（動画の頭から再生されない）。ほかのパラメータは無視する |
 
 リンクは、ユーザー設定の `announce.sites` に書いた順に並べます。同じサイトの URL が2つあるとき、`sites` に無いサイトの URL があるときはエラーです（メッセージに `sites` に足す行の例を出します）。
 
@@ -141,7 +141,7 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 
 - 書き出す全文から末尾の改行を除き、NFC に正規化してから数えます
 - 1文字（コードポイント）の重みは 2 です。U+0000–U+10FF・U+2000–U+200D・U+2010–U+201F・U+2032–U+2037 だけ 1 です（`»` と改行は 1、`【】『』・…` と全角空白は 2）
-- URL は長さによらず 23 です。`https://`・`http://` で始まるものと、`example.com` のようなスキームの無いドメインを URL とみなします。`text` に手で書いた URL も数えます。この判定は twitter-text より簡易な概算です
+- URL は長さによらず 23 です。`https://`・`http://` で始まるものと、`example.com` のようなスキームの無いドメインを URL とみなします。スキームの無いものは、TLD が twitter-text の一覧にあるときだけ URL とみなします（`Mr.Children`・`feat.Ado` は URL ではない）。`text` に手で書いた URL も数えます。URL の形の細かい判定（使える文字・パスの終わり）は twitter-text より簡易です
 - X は ZWJ でつないだ絵文字や肌の色の付いた絵文字を1つで 2 と数えますが、utavideo は部品ごとに数えるので多めになります（上限を超えない側に倒れます）
 
 ## 検査項目
@@ -166,7 +166,7 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 | 歌詞の行 | `\pos`・`\move` を使っている、表示時間が 0 以下、音声が終わった後に始まる、音声の終わりで途中で切られる、同じスタイル・同じレイヤーで重なる、画面からはみ出しそう |
 | `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空 |
 | 概要欄（`[description]` がある曲の `check`） | `video.background` がどの `materials.files` にも無い、`materials.files` のファイルが無い、タイトルの `{singers}` に入る人がいない、タイトルが 100 文字・概要欄が 5000 バイトを超える、`<` か `>` を含む（YouTube の上限） |
-| 告知文（`announce`、`[announce]` がある曲の `check`） | `[[uploads]]` が無い（`announce` だけ）、YouTube の URL に `t`・`list` が付いている、`work` の `{singers}` に入る人がいない、[長さ](#長さの数え方)が `announce.max_weight` を超える |
+| 告知文（`announce`、`[announce]` がある曲の `check`） | `[[uploads]]` が無い（`announce` だけ）、URL に動画の頭から再生されないパラメータが付いている（[受け付ける URL](#受け付ける-url)）、`work` の `{singers}` に入る人がいない、[長さ](#長さの数え方)が `announce.max_weight` を超える |
 
 はみ出しの概算で反映するタグは [customization.md](customization.md#utavideo-が読むタグ) を参照してください。
 
