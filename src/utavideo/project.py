@@ -17,11 +17,15 @@ from utavideo.config import (
     load_project_config,
 )
 from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
-from utavideo.names import slug_error, slug_from_title
+from utavideo.names import legacy_name_from_title, slug_error, slug_from_title
 
 SCAFFOLD_DIRS = ("src/mix", "src/bg", "src/avatar", "src/ref", "build", "release", "share")
 
-_VERSION_RE = re.compile(r"(?<![0-9A-Za-z])v(\d+(?:\.\d+)*)(?![0-9A-Za-z]|\.[0-9A-Za-z])", re.IGNORECASE)
+# 先頭に 0 の付かない整数。v1.02 を許すと v1.2 と別の音源として数えてしまう
+_INT = r"(?:0|[1-9][0-9]*)"
+VERSION_PATTERN = rf"v{_INT}\.{_INT}"
+_VERSION_RE = re.compile(rf"(?<![0-9A-Za-z]){VERSION_PATTERN}(?![0-9A-Za-z]|\.[0-9A-Za-z])", re.IGNORECASE)
+_REVISION_RE = re.compile(_INT)
 
 
 @dataclass(frozen=True)
@@ -89,8 +93,37 @@ class Project:
         """ファイル名に使う識別子。song.slug の無い曲フォルダでは曲名から作る。"""
         return self.config.song.slug or slug_from_title(self.config.song.title)
 
-    def release_path(self, version: str) -> Path:
-        return self.root / "release" / f"{self.slug}-{version}.mp4"
+    @property
+    def release_dir(self) -> Path:
+        return self.root / "release"
+
+    def release_path(self, version: str, revision: int) -> Path:
+        return self.release_dir / f"{self.slug}-{version}.{revision}.mp4"
+
+    def released(self, version: str) -> list[tuple[int, Path]]:
+        """同じ音源のバージョンで公開済みの動画を、(何本目か, パス) の一覧で返す。
+
+        枝番を手で付けていた頃の <名前> vX.Y.mp4 は、1本目（0）とみなす。
+        song.slug より前に公開した <曲名> vX.Y[.N].mp4 も、同じ音源のものとして数える
+        （見落とすと、同じ動画が別の名前でもう一度 release されてしまう）。
+        番号が同じファイルが両方あることもあるので、番号ごとに1つに絞らない。
+        """
+        bases = {f"{self.slug}-{version}", f"{legacy_name_from_title(self.config.song.title)} {version}"}
+        found: list[tuple[int, Path]] = []
+        if not self.release_dir.is_dir():
+            return found
+        for path in self.release_dir.iterdir():
+            if path.suffix.lower() != ".mp4" or not path.is_file():
+                continue
+            if path.stem in bases:
+                found.append((0, path))
+                continue
+            for base in bases:
+                rest = path.stem.removeprefix(f"{base}.")
+                if rest != path.stem and _REVISION_RE.fullmatch(rest):
+                    found.append((int(rest), path))
+                    break
+        return sorted(found)
 
 
 @dataclass
@@ -100,9 +133,14 @@ class ScaffoldResult:
 
 
 def extract_version(stem: str) -> str | None:
-    """例: "曲名 v3.4" → "v3.4"。複数あれば最後のもの。"""
+    """例: "曲名 v3.4" → "v3.4"。vX.Y の形だけを読み、複数あれば最後のもの。"""
     matches = _VERSION_RE.findall(stem)
-    return f"v{matches[-1]}" if matches else None
+    return matches[-1].lower() if matches else None
+
+
+def next_revision(released: list[tuple[int, Path]]) -> int:
+    """次に公開する動画が何本目か。数ではなく最大値から決めるので、消しても番号がぶつからない。"""
+    return max((revision for revision, _ in released), default=-1) + 1
 
 
 def require_usable_slug(slug: str) -> None:

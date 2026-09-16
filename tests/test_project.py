@@ -8,6 +8,7 @@ from utavideo.project import (
     Project,
     extract_version,
     find_project_root,
+    next_revision,
     scaffold,
     to_windows_path,
 )
@@ -18,11 +19,15 @@ from utavideo.project import (
     [
         ("曲名 v3.4", "v3.4"),
         ("Song v2.10", "v2.10"),
-        ("曲名v3", "v3"),
-        ("mix v1 v2.1", "v2.1"),
+        ("曲名v0.1", "v0.1"),
+        ("mix v1.0 v2.1", "v2.1"),
         ("audio", None),
         ("dev2.0", None),
         ("v1.0a", None),
+        ("曲名 v3", None),  # vX.Y の2桁だけを読む
+        ("曲名 v1.2.3", None),
+        ("曲名 v1.02", None),  # 先頭に 0 が付くと v1.2 と別の音源として数えてしまう
+        ("曲名 v01.2", None),
     ],
 )
 def test_extract_version(stem: str, expected: str | None) -> None:
@@ -45,7 +50,7 @@ def test_project_without_slug_makes_one_from_the_title(tmp_path: Path) -> None:
     )
     project = Project.load(root)
     assert project.slug == "A-B-サンプル"
-    assert project.release_path("v1.0") == root / "release" / "A-B-サンプル-v1.0.mp4"
+    assert project.release_path("v1.0", 0) == root / "release" / "A-B-サンプル-v1.0.0.mp4"
 
 
 def test_to_windows_path() -> None:
@@ -113,8 +118,34 @@ def test_project_paths_and_release_name(tmp_path: Path) -> None:
     project = Project.load(find_project_root(root / "src" / "mix"))
     assert project.root == root
     assert project.version == "v3.4"
-    assert project.release_path("v3.4") == root / "release" / "sample-v3.4.mp4"
+    assert project.release_path("v3.4", 0) == root / "release" / "sample-v3.4.0.mp4"
     assert project.main_output == root / "build" / "main.mp4"
+
+
+def test_next_revision_counts_released_videos(tmp_path: Path) -> None:
+    root = tmp_path / "20260814 サンプル"
+    scaffold(root, "サンプル", "sample")
+    (root / "utavideo.toml").write_text(
+        '[song]\ntitle = "サンプル"\n[audio]\nfile = "src/mix/サンプル v3.4.wav"\n'
+        '[video]\nbackground = "src/bg/a.gif"\n',
+        encoding="utf-8",
+    )
+    project = Project.load(root)
+    assert next_revision(project.released("v3.4")) == 0
+
+    for name in [
+        "サンプル v3.4.mp4",  # 枝番を手で付けていた頃の1本目
+        "サンプル v3.4.2.mp4",  # song.slug より前の名前
+        "サンプル-v3.4.7.mp4",
+        "サンプル v3.4.10.txt",  # 動画ではない
+        "サンプル v3.4.01.mp4",  # utavideo が付けない形の番号
+        "サンプル v3.5.4.mp4",  # 別の音源
+        "ほかの曲 v3.4.5.mp4",
+    ]:
+        (root / "release" / name).write_bytes(b"")
+    assert [revision for revision, _ in project.released("v3.4")] == [0, 2, 7]
+    assert next_revision(project.released("v3.4")) == 8
+    assert next_revision(project.released("v3.5")) == 5
 
 
 def test_scaffold_copies_default_credits_and_hashtags(tmp_path: Path) -> None:

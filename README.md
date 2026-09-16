@@ -36,7 +36,7 @@ utavideo preview-bg   # 歌詞以外を合成したプレビュー動画 → bui
 utavideo check        # 設定・素材・歌詞・フォントを検査
 utavideo build        # 書き出し → build/main.mp4
 utavideo description  # タイトルと概要欄 → build/title.txt・build/description.txt
-utavideo release      # release/song-v1.0.mp4 にコピー
+utavideo release      # release/song-v1.0.0.mp4 にコピー
 ```
 
 | コマンド | 内容 |

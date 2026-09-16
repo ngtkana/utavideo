@@ -180,9 +180,9 @@ def test_description_command_and_release_use_user_defaults(
             m.setattr(target, _raise_oserror)
             failed = runner.invoke(app, ["release", "-C", str(root)])
         assert failed.exit_code == 1, target
-        assert not (root / "release/song-v1.0.mp4").exists(), target
-        assert not (root / "release/song-v1.0.txt").exists(), target
+        assert not (root / "release/song-v1.0.0.mp4").exists(), target
+        assert not (root / "release/song-v1.0.0.txt").exists(), target
 
     result = runner.invoke(app, ["release", "-C", str(root)])
     assert result.exit_code == 0, result.output
-    assert (root / "release/song-v1.0.txt").read_text(encoding="utf-8") == "曲\n\n" + body
+    assert (root / "release/song-v1.0.0.txt").read_text(encoding="utf-8") == "曲\n\n" + body

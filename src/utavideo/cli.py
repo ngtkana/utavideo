@@ -1,5 +1,6 @@
 """utavideo コマンド。"""
 
+import filecmp
 import functools
 import re
 import shutil
@@ -16,14 +17,16 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 from utavideo import description, fonts, graph, layout, subs
-from utavideo.config import cache_dir, load_user_config
+from utavideo.config import PROJECT_CONFIG_NAME, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
-from utavideo.names import slug_error, slug_from_dir_name
+from utavideo.names import has_date_prefix, slug_error, slug_from_dir_name
 from utavideo.project import (
+    VERSION_PATTERN,
     Project,
     ScaffoldResult,
     find_project_root,
+    next_revision,
     require_usable_slug,
     scaffold,
     to_windows_path,
@@ -237,8 +240,11 @@ def new(
     """新しい曲フォルダを雛形から作る。フォルダ名はこのパスのまま（日付などは自分で付ける）。"""
     if path.exists():
         _fail(f"既にあります: {path}（既存のフォルダに追加するなら utavideo init）")
+    # 作るのは utavideo なので、Windows で開けない名前のフォルダを作らない
+    if reason := slug_error(path.name):
+        _fail(f"フォルダ名に使えません（{reason}）: {path.name}")
     hint = None
-    if not re.match(r"\d{8}-", path.name):
+    if not has_date_prefix(path.name):
         hint = (
             f"ヒント: フォルダ名を {date.today():%Y%m%d}-{path.name} のようにすると、"
             "日付順に並び、slug からは日付が外れます"
@@ -257,7 +263,7 @@ def init(
     """既存の曲フォルダに utavideo のファイルを追加する（既存ファイルは移動も上書きもしない）。"""
     if not directory.is_dir():
         _fail(f"ディレクトリがありません: {directory}")
-    _scaffold(directory.absolute(), title, artist, slug, "初期化しました")
+    _scaffold(directory.resolve(), title, artist, slug, "初期化しました")
 
 
 def _scaffold(
@@ -265,9 +271,13 @@ def _scaffold(
 ) -> None:
     resolved_slug = slug if slug is not None else _slug_from_dir(root)
     require_usable_slug(resolved_slug)
-    resolved_title = title if title is not None else _ask("曲名", resolved_slug)
-    resolved_artist = artist if artist is not None else _ask("アーティスト名", "")
-    result = scaffold(root, resolved_title, resolved_slug, resolved_artist, load_user_config().defaults)
+    # utavideo.toml があるときは書き換えないので、聞いても捨てることになる
+    asks = not (root / PROJECT_CONFIG_NAME).is_file()
+    if title is None:
+        title = _ask("曲名", resolved_slug) if asks else resolved_slug
+    if artist is None:
+        artist = _ask("アーティスト名", "") if asks else ""
+    result = scaffold(root, title, resolved_slug, artist, load_user_config().defaults)
     console.print(f"{done}: {root}", markup=False)
     if hint is not None:
         console.print(f"[yellow]{hint}[/]", markup=True, highlight=False)
@@ -277,10 +287,12 @@ def _scaffold(
 
 def _slug_from_dir(root: Path) -> str:
     """フォルダ名から slug を決める。使えない名前なら、端末では聞き直す（端末でなければエラー）。"""
-    value = slug_from_dir_name(root.absolute().name)
+    value = slug_from_dir_name(root.resolve().name)
+    source = "フォルダ名"
     while (reason := slug_error(value)) is not None and _interactive():
-        err_console.print(f"フォルダ名は名前に使えません（{reason}）: {value}", markup=False)
+        err_console.print(f"{source}は名前に使えません（{reason}）: {value}", markup=False)
         value = typer.prompt("ファイル名に使う識別子（slug）")
+        source = "入力した名前"
     return value
 
 
@@ -312,7 +324,8 @@ def check(project_dir: ProjectOption = None) -> None:
         console.print(f"  フォント: {file}", markup=False)
     issues = list(analysis.issues)
     if version := project.version:
-        console.print(f"  release 先: {project.release_path(version)}", markup=False)
+        dest = project.release_path(version, next_revision(project.released(version)))
+        console.print(f"  release 先: {dest}", markup=False)
     else:
         message = "audio.file のファイル名に vX.Y が無いので、release では --version が必要です"
         issues.append(subs.Issue("warning", message))
@@ -374,28 +387,64 @@ def description_command(project_dir: ProjectOption = None) -> None:
         console.print(f"書き出しました: {path}", markup=False)
 
 
+def _description_text(project: Project) -> str | None:
+    """release に置く概要欄。[description] が無い曲では None。"""
+    if project.config.description is None:
+        return None
+    fmt = load_user_config().description
+    title = description.render_title(project.config, fmt)
+    return f"{title}\n\n{description.render_body(project.config, fmt)}"
+
+
+def _rewrite_description(project: Project, version: str) -> None:
+    """公開済みの概要欄を今の設定で書き直す。release/ のファイルを上書きする唯一の場所。"""
+    text = _description_text(project)
+    if text is None:
+        _fail("utavideo.toml に [description] がありません")
+    released = project.released(version)
+    if not released:
+        _fail(f"{version} で公開した動画が release/ にありません")
+    _, latest = max(released, key=lambda item: item[0])
+    dest = latest.with_suffix(".txt")
+    if dest.is_file() and dest.read_text(encoding="utf-8") == text:
+        console.print(f"変わっていません: {dest}", markup=False)
+        return
+    _write_text(dest, text)
+    console.print(f"書き直しました: {dest}", markup=False)
+
+
 @app.command()
 @_handle_errors
 def release(
     project_dir: ProjectOption = None,
     version: Annotated[
-        str | None, typer.Option("--version", help="例: v1.0。省略時は audio.file のファイル名から")
+        str | None,
+        typer.Option("--version", help="音源のバージョン。例: v1.0。省略時は audio.file のファイル名から"),
     ] = None,
     allow_stale: Annotated[
         bool, typer.Option(help="build/main.mp4 より新しい入力があってもコピーする")
     ] = False,
+    description_only: Annotated[
+        bool,
+        typer.Option("--description-only", help="動画はコピーせず、公開済みの概要欄を書き直す"),
+    ] = False,
 ) -> None:
-    """build/main.mp4 を release/<曲名> <バージョン>.mp4 にコピーする。"""
+    """build/main.mp4 を release/<slug>-<音源のバージョン>.<何本目か>.mp4 にコピーする。"""
     project = _load_project(project_dir)
     source = project.main_output
-    if not source.is_file():
+    if not source.is_file() and not description_only:
         _fail("build/main.mp4 がありません。先に utavideo build を実行してください")
 
     version = version or project.version
     if version is None:
         _fail("audio.file のファイル名に vX.Y が無いので --version で指定してください")
-    if not re.fullmatch(r"v\d+(\.\d+)*", version):
-        _fail(f"バージョンは v1.0 のような形式で指定してください: {version}")
+    if not re.fullmatch(VERSION_PATTERN, version, re.IGNORECASE):
+        _fail(f"音源のバージョンは v1.0 のような vX.Y の形で指定してください: {version}")
+    version = version.lower()
+
+    if description_only:
+        _rewrite_description(project, version)
+        return
 
     inputs = [project.config_path, project.audio_path, project.background_path, project.lyrics_path]
     built_at = source.stat().st_mtime
@@ -407,14 +456,17 @@ def release(
             "build し直すか --allow-stale を付けてください"
         )
 
-    dest = project.release_path(version)
+    # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
+    # （同じ入力からの build はバイト単位で一致する。docs/verification/20260916-release-revision.md）
+    released = project.released(version)
+    same = next((p for _, p in released if filecmp.cmp(source, p, shallow=False)), None)
+    if same is not None:
+        _fail(f"同じ内容が既にあります: {same}（コピーしません）")
+
+    dest = project.release_path(version, next_revision(released))
     # 書式を後で変えても公開したときの文章が残るよう、概要欄も一緒に置く
     text_dest = dest.with_suffix(".txt")
-    text = None
-    if project.config.description is not None:
-        fmt = load_user_config().description
-        title = description.render_title(project.config, fmt)
-        text = f"{title}\n\n{description.render_body(project.config, fmt)}"
+    text = _description_text(project)
     for path in [dest, *([text_dest] if text is not None else [])]:
         if path.exists():
             _fail(f"既にあります: {path}（上書きはしません）")

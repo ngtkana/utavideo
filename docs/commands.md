@@ -54,7 +54,7 @@ utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>] [--slug <�
 utavideo check [-C <曲フォルダ>]
 ```
 
-[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` の書き出し先を表示します。
+[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前を表示します。
 
 ## preview-bg / build / overlay
 
@@ -89,22 +89,26 @@ utavideo description [-C <曲フォルダ>]
 ## release
 
 ```sh
-utavideo release [-C <曲フォルダ>] [--version <バージョン>] [--allow-stale]
+utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [--allow-stale] [--description-only]
 ```
 
-`build/main.mp4` を `release/<slug>-<バージョン>.mp4` にコピーします。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を `release/<slug>-<バージョン>.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。動画のコピーに失敗したときは `.txt` も残さないので、原因を取り除けばそのまま実行し直せます。
+`build/main.mp4` を `release/<slug>-<音源のバージョン>.<何本目か>.mp4` にコピーします。何本目かは `release/` にある同じ音源の動画から決まります（規則は [project-layout.md](project-layout.md#名前の付け方)）。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を同じ名前の `.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。動画のコピーに失敗したときは `.txt` も残さないので、原因を取り除けばそのまま実行し直せます。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
-| `--version` | 音源のファイル名から（規則は [project-layout.md](project-layout.md#名前の付け方)） | `v1`・`v1.2.1` の形（小文字の `v`） |
+| `--version` | 音源のファイル名から（規則は [project-layout.md](project-layout.md#名前の付け方)） | 音源のバージョン。`v1.2` の形（小文字の `v`）。何本目かは指定できない |
 | `--allow-stale` | 無効 | 入力が `build/main.mp4` より新しくてもコピーする |
+| `--description-only` | 無効 | 動画はコピーせず、その音源で最後に公開した動画の `.txt` を今の設定で書き直す（`release/` を上書きする唯一の場合） |
 
 次のときは止まります。
 
 - `build/main.mp4` が無い
-- バージョンが決まらない、または形式が違う
+- 音源のバージョンが決まらない、または `vX.Y` の形でない
+- 同じ音源のバージョンで、`build/main.mp4` と中身が同じ動画を既に公開している
 - 同じ名前のファイル（`.mp4`、`[description]` がある曲では `.txt` も）が `release/` にある（上書きしない）
 - `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）
+
+`--description-only` のときは、`[description]` が無い曲と、その音源でまだ動画を公開していないときに止まります。文章が今の `.txt` と同じなら、何も書きません。
 
 ## 検査項目
 
