@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from utavideo import subs
 from utavideo.config import ConfigError, Credit, Defaults, load_project_config
 from utavideo.project import (
     SCAFFOLD_DIRS,
@@ -156,3 +157,46 @@ def test_scaffold_copies_default_credits_and_hashtags(tmp_path: Path) -> None:
     assert config.credits == defaults.credits
     assert config.description is not None
     assert config.description.hashtags == defaults.hashtags
+
+
+def test_scaffold_creates_thumbnail_with_escaped_title(tmp_path: Path) -> None:
+    root = tmp_path / "x"
+    result = scaffold(root, "{曲}", "x", artist="A\\N")
+    assert not result.kept_config
+    config = load_project_config(root / "utavideo.toml")
+    (thumbnail,) = config.thumbnails
+    assert (thumbnail.name, thumbnail.file) == ("main", Path("src/thumbnail.ass"))
+
+    ass = subs.load(root / "src/thumbnail.ass")
+    assert subs.play_res(ass) == config.video.size
+    assert ass.info["YCbCr Matrix"] == "None"
+    assert [e.text for e in subs.dialogues(ass)] == [r"\{曲\}", "A\\⁠N"]
+    assert subs.lint_still(ass, size=config.video.size) == []
+
+
+def test_init_with_existing_config_does_not_create_thumbnail(tmp_path: Path) -> None:
+    root = tmp_path / "x"
+    root.mkdir()
+    (root / "utavideo.toml").write_text("# 自分の設定\n", encoding="utf-8")
+    result = scaffold(root, "曲", "x")
+    assert result.kept_config
+    assert not (root / "src/thumbnail.ass").exists()
+    assert (root / "utavideo.toml").read_text(encoding="utf-8") == "# 自分の設定\n"
+
+
+def test_thumbnail_paths_and_inherited_values(tmp_path: Path) -> None:
+    root = tmp_path / "x"
+    scaffold(root, "曲", "x")
+    (root / "utavideo.toml").write_text(
+        '[song]\ntitle = "曲"\n[audio]\nfile = "a.wav"\n[video]\nbackground = "bg.png"\nfocus = [0, 1]\n'
+        '[[thumbnails]]\nname = "main"\nfile = "t.ass"\n'
+        '[[thumbnails]]\nname = "square"\nfile = "s.ass"\nsize = [1080, 1080]\nfocus = [1, 0]\n',
+        encoding="utf-8",
+    )
+    project = Project.load(root)
+    main, square = project.config.thumbnails
+    assert project.thumbnail_output(main) == root / "build/thumbnail/main.png"
+    assert project.thumbnail_bg_output(main) == root / "build/thumbnail/bg/main.png"
+    assert project.thumbnail_file(main) == root / "t.ass"
+    assert (project.thumbnail_size(main), project.thumbnail_focus(main)) == ((1920, 1080), (0.0, 1.0))
+    assert (project.thumbnail_size(square), project.thumbnail_focus(square)) == ((1080, 1080), (1.0, 0.0))

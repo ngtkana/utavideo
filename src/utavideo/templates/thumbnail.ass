@@ -1,0 +1,23 @@
+[Script Info]
+; サムネイル（utavideo thumbnail）。0 秒の状態を1枚の画像に描く。行は 0:00:00.00 から始める。
+; 下敷き: utavideo thumbnail --bg-only で build/thumbnail/bg/main.png を作り、ビデオ → ビデオを開く で開く。
+Title: utavideo thumbnail
+ScriptType: v4.00+
+WrapStyle: 0
+ScaledBorderAndShadow: yes
+YCbCr Matrix: None
+PlayResX: 1920
+PlayResY: 1080
+
+[Aegisub Project Garbage]
+Video File: ../build/thumbnail/bg/main.png
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: ThumbTitle,Zen Maru Gothic,160,&H00FFFFFF,&H000000FF,&H00403030,&H80000000,-1,0,0,0,100,100,4,0,1,8,0,2,80,80,540,1
+Style: ThumbArtist,Zen Maru Gothic,80,&H00FFFFFF,&H000000FF,&H00403030,&H80000000,-1,0,0,0,100,100,2,0,1,6,0,8,80,80,580,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,9:59:59.99,ThumbTitle,,0,0,0,,$title
+Dialogue: 0,0:00:00.00,9:59:59.99,ThumbArtist,,0,0,0,,$artist

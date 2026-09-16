@@ -4,12 +4,14 @@ import glob
 import os
 import sys
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
 from pydantic import (
     AfterValidator,
     BaseModel,
+    BeforeValidator,
     ConfigDict,
     Field,
     NonNegativeInt,
@@ -20,7 +22,8 @@ from pydantic import (
 
 from utavideo.errors import UtavideoError
 from utavideo.graph import Fit, Preset, ScaleFlags
-from utavideo.names import slug_error
+from utavideo.names import casefold_duplicates, slug_error
+from utavideo.timecode import parse_time
 
 PROJECT_CONFIG_NAME = "utavideo.toml"
 
@@ -41,6 +44,39 @@ def format_setting(template: str, setting: str, **values: str) -> str:
 
 class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
+
+
+# 背景を出力の枠に合わせるときの基準点。0〜1 の比率（CSS の object-position と同じ考え方）。
+# strict にして、TOML の true を 1 として読まないようにする
+Ratio = Annotated[float, Field(ge=0, le=1, strict=True)]
+type Focus = tuple[Ratio, Ratio]
+
+# "M:SS(.fff)" または秒の数。読むときに秒（float）にする
+Time = Annotated[float, BeforeValidator(parse_time)]
+
+
+def _check_output_name(name: str) -> str:
+    # 黙って直すと、指定した名前と違うファイルができるのでエラーにする
+    if reason := slug_error(name):
+        raise ValueError(reason)
+    # <name>.partial.png は、name から "partial" を除いた出力の書きかけと同じ名前になる
+    if name.casefold().endswith(".partial"):
+        raise ValueError("末尾の .partial は、書き出し途中のファイルの名前と重なります")
+    return name
+
+
+# 出力のファイル名になる名前（[[thumbnails]] の name など）
+OutputName = Annotated[str, AfterValidator(_check_output_name)]
+
+
+def check_unique_names[T](items: tuple[T, ...], name_of: Callable[[T], str]) -> tuple[T, ...]:
+    """名前の重複をエラーにする。
+
+    Windows のファイルシステムでは、大文字小文字が違うだけの名前は同じファイルになる。
+    """
+    if duplicates := casefold_duplicates(name_of(item) for item in items):
+        raise ValueError(f"name が重複しています（大文字小文字は区別しません）: {', '.join(duplicates)}")
+    return items
 
 
 class Song(_Model):
@@ -70,6 +106,7 @@ class Video(_Model):
     crf: int = Field(default=18, ge=0, le=51)
     preset: Preset = "slow"
     fit: Fit = "cover"
+    focus: Focus = (0.5, 0.5)
     scale_flags: ScaleFlags = "lanczos"
     pad_color: str = "black"
 
@@ -120,6 +157,16 @@ class Description(_Model):
     title: str | None = None
 
 
+class Thumbnail(_Model):
+    name: OutputName
+    file: Path
+    # 動画と違い yuv420p にしないので、奇数でもよい
+    size: tuple[PositiveInt, PositiveInt] | None = None  # None なら video.size
+    # 0 と区別するのは、画像の背景に書いたことをエラーにするため
+    at: Time | None = None
+    focus: Focus | None = None  # None なら video.focus
+
+
 class ProjectConfig(_Model):
     song: Song
     audio: Audio
@@ -129,6 +176,12 @@ class ProjectConfig(_Model):
     credits: tuple[Credit, ...] = ()
     materials: tuple[Material, ...] = ()
     description: Description | None = None
+    thumbnails: tuple[Thumbnail, ...] = ()
+
+    @field_validator("thumbnails")
+    @classmethod
+    def _unique_thumbnail_names(cls, thumbnails: tuple[Thumbnail, ...]) -> tuple[Thumbnail, ...]:
+        return check_unique_names(thumbnails, lambda t: t.name)
 
 
 def _xdg(var: str, fallback: str) -> Path:

@@ -10,6 +10,7 @@ utavideo の曲フォルダ。制作の流れ: https://github.com/ngtkana/utavid
 - [ ] `utavideo check`
 - [ ] `utavideo build` → `build/main.mp4` を確認
 - [ ] `utavideo release`
+- [ ] `utavideo thumbnail --bg-only` → Aegisub で `src/thumbnail.ass` を開いて文字を組む → `utavideo thumbnail`
 - [ ] `utavideo description` → `build/title.txt`・`build/description.txt` を投稿画面に貼る
 
 ## メモ

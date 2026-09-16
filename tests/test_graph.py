@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from utavideo.graph import RenderSpec, build_args, escape_filter_arg
+from utavideo.graph import RenderSpec, StillSpec, build_args, build_still_args, escape_filter_arg
 
 SPEC = RenderSpec(
     mode="final",
@@ -37,7 +37,8 @@ def test_final_args() -> None:
     assert _contains(args, ["-loop", "1", "-framerate", "30", "-i", "/a/bg.png"])
     assert _contains(args, ["-i", "/a/mix v1.0.wav"])
     assert _filter(args) == (
-        "[0:v]scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,crop=1920:1080,"
+        "[0:v]scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,"
+        "crop=1920:1080:(iw-ow)*0.5:(ih-oh)*0.5,"
         "setsar=1,fps=30,format=rgb24,subtitles=filename=/w/final.ass:fontsdir=/c/fonts,"
         "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[v]"
     )
@@ -73,3 +74,45 @@ def test_overlay_uses_transparent_canvas() -> None:
 def test_background_is_required_except_overlay() -> None:
     with pytest.raises(ValueError, match="background"):
         build_args(replace(SPEC, background=None))
+
+
+def test_focus_moves_crop_and_pad() -> None:
+    cover = _filter(build_args(replace(SPEC, focus=(1.0, 0.0))))
+    assert "crop=1920:1080:(iw-ow)*1:(ih-oh)*0," in cover
+    contain = _filter(build_args(replace(SPEC, fit="contain", focus=(0.25, 0.000001))))
+    assert "pad=1920:1080:(ow-iw)*0.25:(oh-ih)*0.000001:color=black" in contain
+
+
+STILL = StillSpec(
+    size=(1080, 1080),
+    background=Path("/a/bg.png"),
+    subtitles=Path("/s/thumbnail.ass"),
+    fontsdir=Path("/c/fonts"),
+)
+
+
+def test_still_draws_ass_on_one_frame() -> None:
+    args = build_still_args(STILL)
+    assert _contains(args, ["-i", "/a/bg.png"])
+    assert "-ss" not in args and "-loop" not in args
+    assert _filter(args) == (
+        "[0:v]scale=1080:1080:force_original_aspect_ratio=increase:flags=lanczos,"
+        "crop=1080:1080:(iw-ow)*0.5:(ih-oh)*0.5,setsar=1,format=rgb24,"
+        "subtitles=filename=/s/thumbnail.ass:fontsdir=/c/fonts[v]"
+    )
+    assert _contains(args, ["-frames:v", "1", "-update", "1", "-c:v", "png"])
+    assert _contains(args, ["-compression_level", "9"])
+
+
+def test_still_seeks_only_animated_backgrounds() -> None:
+    gif = build_still_args(replace(STILL, background=Path("/a/loop.gif"), at=83.5))
+    assert _contains(gif, ["-ss", "83.500", "-i", "/a/loop.gif"])
+    assert "-stream_loop" not in gif  # 長さを超える at はエラーにするので、繰り返さない
+    assert "-ss" not in build_still_args(replace(STILL, background=Path("/a/loop.gif"), at=0))
+    # 画像に -ss を付けると ffmpeg は何も書かない
+    assert "-ss" not in build_still_args(replace(STILL, at=1.0))
+
+
+def test_still_background_only() -> None:
+    args = build_still_args(replace(STILL, subtitles=None, fontsdir=None))
+    assert "subtitles" not in _filter(args)

@@ -4,6 +4,7 @@ import pytest
 
 from utavideo.names import (
     MAX_SLUG_BYTES,
+    casefold_duplicates,
     has_date_prefix,
     legacy_name_from_title,
     slug_error,
@@ -104,3 +105,8 @@ def test_usable_slugs(slug: str) -> None:
 )
 def test_unusable_slugs(slug: str) -> None:
     assert slug_error(slug) is not None
+
+
+def test_casefold_duplicates_reports_later_names() -> None:
+    assert casefold_duplicates(["main", "square", "Main", "SQUARE", "x"]) == ["Main", "SQUARE"]
+    assert casefold_duplicates(["a", "b"]) == []

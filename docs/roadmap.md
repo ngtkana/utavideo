@@ -4,9 +4,11 @@
 
 背景（画像・GIF・動画）＋ 歌詞 ＋ 曲名表示 ＋ 音声の動画を書き出す。
 
-- コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `description` / `release`
+- コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `thumbnail` / `description` / `release`
 - `check`: 設定・素材・スタイル・フォントの検査、行の重なり・`\pos`・はみ出しの警告
 - 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定、`release` で公開時の文章を残す）
+
+- サムネイル: 背景のフレーム（`at`）にサムネイル用の .ass を描いた PNG。サイズ違いは `[[thumbnails]]` を並べる。背景の残す位置（`focus`）は動画にも効く
 
 ## 予定
 
@@ -34,7 +36,7 @@
   - 同じ `lyrics.ass` から、PlayRes を書き換えた .ass を作る
   - `\pos` の座標は解像度の比で変換する
   - `build --variant vertical`、`preview-bg --variant vertical`
-- `[[shorts]]`：`name`・`start`・`end`・`variant`。`build --shorts` で `build/shorts-<name>.mp4` を書き出す
+- `[[shorts]]`：`name`・`start`・`end`・`variant`（時刻の書式は `[[thumbnails]]` の `at` と同じ）。`build --shorts` で `build/shorts-<name>.mp4` を書き出す
 - はみ出しの検査を派生版ごとに行う。`\pos` の行も、位置と配置から幅を概算して対象にする
 
 ### カラオケ用の音源動画
@@ -43,6 +45,10 @@
 - `utavideo inst --keys -1,-2,-3`：ffmpeg の `rubberband` でキーを変えた版を書き出す
 - 音量をそろえる（`loudnorm`）
 
-### その他
+### サムネイル（続き）
 
-- `utavideo still --at 1:23`：サムネイル用の静止画（歌詞・曲名表示の有無を選べる）
+- `[[layers]]` で、背景の上に画像を重ねる（ass の `[Graphics]` は libass が表示しないので、ffmpeg の `overlay` を使う）
+- 同じサイズで何枚か書き出して見比べる
+- サムネイルごとに別の背景を使う（例: 動画は小さい GIF、サムネイルは高解像度の静止画）
+- `release` へのコピー
+- 投稿先の容量の上限に収まらない例が出たら、JPEG での書き出しか容量の警告を足す

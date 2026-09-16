@@ -41,6 +41,19 @@ def probe_audio(path: Path) -> AudioInfo:
         raise FFmpegError(f"{path} の長さを取得できません") from e
 
 
+def probe_duration(path: Path) -> float | None:
+    """GIF・動画の長さ（秒）。長さの情報が無ければ None（画像など）。"""
+    cmd = ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(path)]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        duration = json.loads(out.stdout).get("format", {}).get("duration")
+        return float(duration) if duration not in (None, "N/A") else None
+    except subprocess.CalledProcessError as e:
+        raise FFmpegError(f"{path} を読めません: {e.stderr.strip()}") from e
+    except ValueError as e:
+        raise FFmpegError(f"{path} の長さを取得できません") from e
+
+
 def partial_path(output: Path) -> Path:
     return output.with_name(f"{output.stem}.partial{output.suffix}")
 
@@ -65,8 +78,12 @@ def run(
     *,
     total_s: float,
     on_progress: Callable[[float], None] | None = None,
+    no_output_hint: str = "",
 ) -> None:
-    """args の末尾に一時ファイル名を足して実行し、成功したときだけ output に置き換える。"""
+    """args の末尾に一時ファイル名を足して実行し、成功したときだけ output に置き換える。
+
+    no_output_hint は、ffmpeg が正常に終わっても何も書かなかったときのエラーに添える説明。
+    """
     output.parent.mkdir(parents=True, exist_ok=True)
     tmp = partial_path(output)
     tmp.unlink(missing_ok=True)
@@ -98,4 +115,10 @@ def run(
             detail = stderr.read().strip()[-2000:]
             raise FFmpegError(f"ffmpeg が失敗しました（終了コード {code}）:\n{detail}")
 
+    # 入力の長さを超える位置へシークすると、ffmpeg は何も書かずに終了コード 0 で終わる
+    # （docs/verification/20260917-thumbnail.md）。そのまま置き換えると分かりにくいエラーになる
+    if not tmp.is_file() or tmp.stat().st_size == 0:
+        tmp.unlink(missing_ok=True)
+        hint = f"。{no_output_hint}" if no_output_hint else ""
+        raise FFmpegError(f"ffmpeg は正常に終了しましたが、何も書き出しませんでした: {output}{hint}")
     replace_partial(tmp, output)

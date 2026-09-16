@@ -2,6 +2,7 @@
 
 import re
 import unicodedata
+from collections.abc import Iterable
 
 # Windows で使えない名前。拡張子を付けても使えないので、名前の先頭だけを見る
 # https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file
@@ -62,3 +63,15 @@ def has_date_prefix(name: str) -> bool:
 def legacy_name_from_title(title: str) -> str:
     """song.slug が無かった頃のファイル名。公開済みの動画を見分けるためだけに使う。"""
     return _LEGACY_INVALID_CHARS.sub("_", title).strip() or "untitled"
+
+
+def casefold_duplicates(names: Iterable[str]) -> list[str]:
+    """大文字小文字を区別せずに比べて、2回目以降に出てきた名前（出てきた順）。"""
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for name in names:
+        key = name.casefold()
+        if key in seen:
+            duplicates.append(name)
+        seen.add(key)
+    return duplicates

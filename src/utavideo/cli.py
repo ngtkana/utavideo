@@ -6,7 +6,7 @@ import re
 import shutil
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -17,11 +17,13 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 from utavideo import description, fonts, graph, layout, subs
-from utavideo.config import PROJECT_CONFIG_NAME, cache_dir, load_user_config
+from utavideo.config import PROJECT_CONFIG_NAME, Thumbnail, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
-from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
+from utavideo.ffmpeg import partial_path, probe_audio, probe_duration, replace_partial, require_tools, run
 from utavideo.names import has_date_prefix, slug_error, slug_from_dir_name
 from utavideo.project import (
+    THUMBNAIL_EXAMPLE,
+    THUMBNAIL_TEMPLATE_PATH,
     VERSION_PATTERN,
     Project,
     ScaffoldResult,
@@ -31,6 +33,7 @@ from utavideo.project import (
     scaffold,
     to_windows_path,
 )
+from utavideo.timecode import format_time
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -109,16 +112,11 @@ def analyze(project: Project, mode: graph.Mode) -> Analysis:
     config = project.config
     issues: list[subs.Issue] = []
 
-    for label, path in [
-        ("audio.file", project.audio_path),
-        ("lyrics.file", project.lyrics_path),
-        *([("video.background", project.background_path)] if mode != "overlay" else []),
-    ]:
+    for label, path in [("audio.file", project.audio_path), ("lyrics.file", project.lyrics_path)]:
         if not path.is_file():
             issues.append(subs.Issue("error", f"{label} のファイルがありません: {path}"))
-    background_ext = project.background_path.suffix.lower()
-    if mode != "overlay" and background_ext not in graph.IMAGE_EXTS | graph.ANIMATED_EXTS:
-        issues.append(subs.Issue("error", f"video.background の形式に対応していません: {background_ext}"))
+    if mode != "overlay":
+        issues += _background_issues(project)
 
     duration_s: float | None = None
     if project.audio_path.is_file():
@@ -135,17 +133,43 @@ def analyze(project: Project, mode: graph.Mode) -> Analysis:
     issues += subs.lint(target, size=config.video.size, duration_ms=duration_ms, overlay=config.overlay_text)
 
     script = _compose(project, lyrics, duration_ms, mode)
-    font_dirs = load_user_config().font_dirs
-    cache_file = cache_dir() / "fonts.json"
-    if not cache_file.exists():
-        console.print("フォント一覧を作成しています（初回のみ時間がかかります）…")
-    index = fonts.load_index(font_dirs, cache_file)
-    resolution = fonts.resolve(index, subs.used_fonts(script))
+    font_issues, font_files = _check_fonts(script, _FontSearch.load())
+    return Analysis(issues + font_issues, duration_s, lyrics, font_files)
+
+
+def _background_issues(project: Project) -> list[subs.Issue]:
+    path = project.background_path
+    if not path.is_file():
+        return [subs.Issue("error", f"video.background のファイルがありません: {path}")]
+    ext = path.suffix.lower()
+    if ext not in graph.IMAGE_EXTS | graph.ANIMATED_EXTS:
+        return [subs.Issue("error", f"video.background の形式に対応していません: {ext}")]
+    return []
+
+
+@dataclass(frozen=True)
+class _FontSearch:
+    dirs: list[Path]
+    index: fonts.FontIndex
+
+    @classmethod
+    def load(cls) -> "_FontSearch":
+        dirs = load_user_config().font_dirs
+        cache_file = cache_dir() / "fonts.json"
+        if not cache_file.exists():
+            console.print("フォント一覧を作成しています（初回のみ時間がかかります）…")
+        return cls(dirs, fonts.load_index(dirs, cache_file))
+
+
+def _check_fonts(script: pysubs2.SSAFile, search: _FontSearch) -> tuple[list[subs.Issue], tuple[Path, ...]]:
+    """使っているフォントを探し、見つからないフォントのエラーと、はみ出しそうな行の警告を返す。"""
+    resolution = fonts.resolve(search.index, subs.used_fonts(script))
+    issues: list[subs.Issue] = []
     for name in resolution.missing:
-        searched = ", ".join(map(str, font_dirs)) or "（なし）"
+        searched = ", ".join(map(str, search.dirs)) or "（なし）"
         issues.append(subs.Issue("error", f"フォント {name!r} が見つかりません（探した場所: {searched}）"))
-    issues += layout.overflows(script, index.lookup)
-    return Analysis(issues, duration_s, lyrics, resolution.files)
+    issues += layout.overflows(script, search.index.lookup)
+    return issues, resolution.files
 
 
 def _compose(project: Project, lyrics: pysubs2.SSAFile, duration_ms: int, mode: graph.Mode):
@@ -226,7 +250,8 @@ def _print_scaffold(result: ScaffoldResult, root: Path) -> None:
 _NEXT_STEPS = """次にやること（詳しくは docs/workflow.md）:
   1. utavideo.toml の audio.file / video.background を合わせ、song を確認する
   2. utavideo preview-bg → Aegisub で src/lyrics.ass と build/preview/bg.mp4 を開いて歌詞を入れる
-  3. utavideo check → utavideo build → utavideo release"""
+  3. utavideo check → utavideo build → utavideo release
+  4. utavideo thumbnail --bg-only → Aegisub で src/thumbnail.ass を開いて文字を組む → utavideo thumbnail"""
 
 
 @app.command()
@@ -282,7 +307,21 @@ def _scaffold(
     if hint is not None:
         console.print(f"[yellow]{hint}[/]", markup=True, highlight=False)
     _print_scaffold(result, root)
+    if result.kept_config and not _has_thumbnails(root):
+        console.print(
+            f"サムネイルを作るときは、utavideo.toml に次を書き足し、{THUMBNAIL_TEMPLATE_PATH} を用意します"
+            "（src/lyrics.ass をコピーして Dialogue の行を消すと、スタイルと PlayRes をそのまま使えます）:\n"
+            + THUMBNAIL_EXAMPLE,
+            markup=False,
+        )
     console.print(_NEXT_STEPS, markup=False)
+
+
+def _has_thumbnails(root: Path) -> bool:
+    try:
+        return bool(Project.load(root).config.thumbnails)
+    except UtavideoError:  # 読めない utavideo.toml でも、案内を出すだけなので止めない
+        return False
 
 
 def _slug_from_dir(root: Path) -> str:
@@ -336,6 +375,13 @@ def check(project_dir: ProjectOption = None) -> None:
         issues.append(subs.Issue("warning", message))
     if config.description is not None:
         issues += description.lint(project, load_user_config().description)
+    if config.thumbnails:
+        for thumb in config.thumbnails:
+            size = project.thumbnail_size(thumb)
+            console.print(f"  サムネイル: {thumb.name}（{size[0]}x{size[1]}、{thumb.file}）", markup=False)
+        thumbnails = analyze_thumbnails(project, config.thumbnails, bg_only=False)
+        # 背景のファイルが無いことなどは、動画の検査で既に出している
+        issues += [issue for issue in thumbnails.issues if issue not in issues]
 
     _print_issues(issues)
     if any(issue.level == "error" for issue in issues):
@@ -485,3 +531,126 @@ def release(
     console.print(f"コピーしました: {dest}", markup=False)
     if text is not None:
         console.print(f"書き出しました: {text_dest}", markup=False)
+
+
+@dataclass(frozen=True)
+class ThumbnailAnalysis:
+    issues: list[subs.Issue]
+    font_files: dict[str, tuple[Path, ...]]
+
+    @property
+    def ok(self) -> bool:
+        return all(issue.level != "error" for issue in self.issues)
+
+
+def analyze_thumbnails(
+    project: Project, thumbnails: tuple[Thumbnail, ...], *, bg_only: bool
+) -> ThumbnailAnalysis:
+    """サムネイルを書き出せるかを調べる。bg_only では背景と at だけを見る（.ass はまだ無くてよい）。"""
+    issues = _background_issues(project)
+    font_files: dict[str, tuple[Path, ...]] = {}
+    background = project.background_path
+    duration: list[float | None] = []  # GIF・動画の長さ。書いた at があるときだけ、1回だけ調べる
+    search: _FontSearch | None = None
+
+    for thumb in thumbnails:
+
+        def add(level: subs.IssueLevel, message: str, name: str = thumb.name) -> None:
+            issues.append(subs.Issue(level, f"サムネイル {name}: {message}"))
+
+        if thumb.at is not None and background.is_file():
+            if graph.is_image(background):
+                add("error", "at は背景が GIF・動画のときだけ書けます（video.background は画像）")
+            elif background.suffix.lower() in graph.ANIMATED_EXTS:
+                if not duration:
+                    duration.append(probe_duration(background))
+                if duration[0] is None:
+                    add("warning", "背景の長さを取得できないので、at が長さに収まるかを確かめられません")
+                elif thumb.at >= duration[0]:
+                    add(
+                        "error",
+                        f"at（{format_time(thumb.at)}）が背景の長さ（{format_time(duration[0])}）以上です",
+                    )
+        if bg_only:
+            continue
+
+        path = project.thumbnail_file(thumb)
+        if not path.is_file():
+            add("error", f"file のファイルがありません: {path}")
+            continue
+        try:
+            script = subs.load(path)
+        except subs.SubtitleError as e:
+            add("error", str(e))
+            continue
+        for issue in subs.lint_still(script, size=project.thumbnail_size(thumb)):
+            add(issue.level, issue.message)
+        if search is None:
+            search = _FontSearch.load()
+        font_issues, font_files[thumb.name] = _check_fonts(script, search)
+        for issue in font_issues:
+            add(issue.level, issue.message)
+    return ThumbnailAnalysis(issues, font_files)
+
+
+def _select_thumbnails(project: Project, name: str | None) -> tuple[Thumbnail, ...]:
+    thumbnails = project.config.thumbnails
+    if not thumbnails:
+        _fail(f"utavideo.toml に [[thumbnails]] がありません。次を書き足してください:\n{THUMBNAIL_EXAMPLE}")
+    if name is None:
+        return thumbnails
+    found = tuple(t for t in thumbnails if t.name == name)
+    if not found:
+        names = ", ".join(t.name for t in thumbnails)
+        _fail(f"[[thumbnails]] に name = {name!r} がありません（あるのは {names}）")
+    return found
+
+
+@app.command()
+@_handle_errors
+def thumbnail(
+    project_dir: ProjectOption = None,
+    name: Annotated[str | None, typer.Option("--name", help="[[thumbnails]] の name。省略時はすべて")] = None,
+    bg_only: Annotated[
+        bool,
+        typer.Option(
+            "--bg-only", help="背景だけを build/thumbnail/bg/<name>.png に書き出す（Aegisub の下敷き）"
+        ),
+    ] = False,
+) -> None:
+    """背景のフレームにサムネイル用の .ass を描いて、build/thumbnail/<name>.png に書き出す。"""
+    require_tools()
+    project = _load_project(project_dir)
+    thumbnails = _select_thumbnails(project, name)
+    analysis = analyze_thumbnails(project, thumbnails, bg_only=bg_only)
+    _print_issues(analysis.issues)
+    if not analysis.ok:
+        raise typer.Exit(1)
+
+    config = project.config
+    for thumb in thumbnails:
+        spec = graph.StillSpec(
+            size=project.thumbnail_size(thumb),
+            background=project.background_path.absolute(),
+            at=thumb.at,
+            fit=config.video.fit,
+            focus=project.thumbnail_focus(thumb),
+            scale_flags=config.video.scale_flags,
+            pad_color=config.video.pad_color,
+        )
+        if bg_only:
+            output = project.thumbnail_bg_output(thumb)
+        else:
+            # .ass は加工せずにそのまま描く（自動のフェードと曲名表示は入れない）
+            fontsdir = fonts.prepare_fontsdir(analysis.font_files[thumb.name], cache_dir() / "fontsets")
+            spec = replace(spec, subtitles=project.thumbnail_file(thumb).absolute(), fontsdir=fontsdir)
+            output = project.thumbnail_output(thumb)
+        run(
+            graph.build_still_args(spec),
+            output,
+            total_s=0,
+            no_output_hint="背景の終わり近くの at では、その時刻以降のフレームが無いことがあります",
+        )
+        console.print(f"書き出しました: {output}（{output.stat().st_size:,} バイト）", markup=False)
+        if windows_path := to_windows_path(output):
+            console.print(f"  Windows: {windows_path}", markup=False)

@@ -68,3 +68,22 @@ def test_new_says_nothing_extra_for_a_dated_folder(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "ヒント" not in result.output
+
+
+def test_init_in_a_configured_folder_explains_how_to_add_a_thumbnail(tmp_path: Path) -> None:
+    root = tmp_path / "20260916-song"
+    assert runner.invoke(app, ["new", str(root)]).exit_code == 0
+    config = (root / "utavideo.toml").read_text(encoding="utf-8")
+    (root / "src/thumbnail.ass").unlink()
+
+    # [[thumbnails]] がある曲では、案内しない
+    result = runner.invoke(app, ["init", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "[[thumbnails]]" not in result.output
+    assert not (root / "src/thumbnail.ass").exists()
+
+    (root / "utavideo.toml").write_text(config.split("[[thumbnails]]")[0], encoding="utf-8")
+    result = runner.invoke(app, ["init", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "[[thumbnails]]" in result.output
+    assert not (root / "src/thumbnail.ass").exists()
