@@ -28,15 +28,15 @@ uv tool install git+https://github.com/ngtkana/utavideo
 ## 使い方
 
 ```sh
-utavideo new "曲名" --artist "アーティスト" --root ~/videos   # 曲フォルダ（YYYYMMDD 曲名/）を作る
-cd ~/videos/20260915\ 曲名
+utavideo new ~/videos/20260915-song --title "曲名" --artist "アーティスト"  # 曲フォルダを作る
+cd ~/videos/20260915-song
 # 音源と背景を置き、utavideo.toml を編集する
 utavideo preview-bg   # 歌詞以外を合成したプレビュー動画 → build/preview/bg.mp4
 # Aegisub で src/lyrics.ass とプレビュー動画を開いて歌詞を入れる
 utavideo check        # 設定・素材・歌詞・フォントを検査
 utavideo build        # 書き出し → build/main.mp4
 utavideo description  # タイトルと概要欄 → build/title.txt・build/description.txt
-utavideo release      # release/曲名 v1.0.mp4 にコピー
+utavideo release      # release/song-v1.0.mp4 にコピー
 ```
 
 | コマンド | 内容 |

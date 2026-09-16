@@ -1,18 +1,14 @@
-from datetime import date
 from pathlib import Path
 
 import pytest
 
-from utavideo.config import Credit, Defaults, load_project_config
+from utavideo.config import ConfigError, Credit, Defaults, load_project_config
 from utavideo.project import (
     SCAFFOLD_DIRS,
     Project,
     extract_version,
     find_project_root,
-    project_dir_name,
-    safe_filename,
     scaffold,
-    title_from_dir_name,
     to_windows_path,
 )
 
@@ -33,26 +29,23 @@ def test_extract_version(stem: str, expected: str | None) -> None:
     assert extract_version(stem) == expected
 
 
-@pytest.mark.parametrize(
-    ("name", "expected"),
-    [
-        ("20260913 新しい曲", "新しい曲"),
-        ("20240114-曲名", "曲名"),
-        ("日付なし", "日付なし"),
-    ],
-)
-def test_title_from_dir_name(name: str, expected: str) -> None:
-    assert title_from_dir_name(name) == expected
+@pytest.mark.parametrize("slug", ["a/b", "Mr.", "CON", "con.mp4", "末尾の空白 ", "x" * 201, ""])
+def test_scaffold_rejects_slugs_that_are_bad_file_names(tmp_path: Path, slug: str) -> None:
+    with pytest.raises(ConfigError):
+        scaffold(tmp_path / "x", "曲", slug)
 
 
-def test_project_dir_name_replaces_invalid_chars() -> None:
-    assert project_dir_name('A/B:"C"', date(2026, 9, 15)) == "20260915 A_B__C_"
-    assert safe_filename("新しい曲") == "新しい曲"
-
-
-def test_blank_title_does_not_make_a_name_ending_in_space() -> None:
-    assert safe_filename("   ") == "untitled"
-    assert project_dir_name("   ", date(2026, 9, 15)) == "20260915 untitled"
+def test_project_without_slug_makes_one_from_the_title(tmp_path: Path) -> None:
+    root = tmp_path / "20260814 サンプル"
+    scaffold(root, "サンプル", "sample")
+    (root / "utavideo.toml").write_text(
+        '[song]\ntitle = "A/B サンプル"\n[audio]\nfile = "src/mix/a v1.0.wav"\n'
+        '[video]\nbackground = "src/bg/a.gif"\n',
+        encoding="utf-8",
+    )
+    project = Project.load(root)
+    assert project.slug == "A-B-サンプル"
+    assert project.release_path("v1.0") == root / "release" / "A-B-サンプル-v1.0.mp4"
 
 
 def test_to_windows_path() -> None:
@@ -63,7 +56,7 @@ def test_to_windows_path() -> None:
 
 def test_scaffold_creates_layout(tmp_path: Path) -> None:
     root = tmp_path / "20260915 新曲"
-    result = scaffold(root, "新曲")
+    result = scaffold(root, "新曲", "shin-kyoku")
 
     for rel in SCAFFOLD_DIRS:
         assert (root / rel).is_dir()
@@ -71,9 +64,12 @@ def test_scaffold_creates_layout(tmp_path: Path) -> None:
     config = load_project_config(root / "utavideo.toml")
     assert config.song.title == "新曲"
     assert config.song.artist == ""
-    assert config.audio.file == Path("src/mix/新曲 v1.0.wav")
+    assert config.song.slug == "shin-kyoku"
+    assert config.audio.file == Path("src/mix/shin-kyoku-v1.0.wav")
     assert config.video.background == Path("src/bg/background.png")
-    assert "Title: 新曲" in (root / "src/lyrics.ass").read_text(encoding="utf-8")
+    # 曲名は utavideo.toml にだけ書く（直すときに、どれが元なのかわからなくなるため）
+    assert "新曲" not in (root / "src/lyrics.ass").read_text(encoding="utf-8")
+    assert "新曲" not in (root / "README.md").read_text(encoding="utf-8")
 
 
 def test_scaffold_keeps_existing_files_and_detects_media(tmp_path: Path) -> None:
@@ -84,7 +80,7 @@ def test_scaffold_keeps_existing_files_and_detects_media(tmp_path: Path) -> None
     (root / "src/bg_loop.gif").write_bytes(b"gif")
     (root / "README.md").write_text("", encoding="utf-8")
 
-    result = scaffold(root, "制作中の曲")
+    result = scaffold(root, "制作中の曲", "wip")
 
     assert root / "README.md" in result.skipped
     assert (root / "README.md").read_text(encoding="utf-8") == ""
@@ -94,13 +90,13 @@ def test_scaffold_keeps_existing_files_and_detects_media(tmp_path: Path) -> None
     assert config.audio.file == Path("src/audio.wav")
     assert config.video.background == Path("src/bg_loop.gif")
 
-    again = scaffold(root, "制作中の曲")
+    again = scaffold(root, "制作中の曲", "wip")
     assert again.created == []
 
 
 def test_scaffold_escapes_title_and_artist_in_toml(tmp_path: Path) -> None:
     root = tmp_path / "x"
-    scaffold(root, 'say "hi" \\ ok', artist="A & 'B'")
+    scaffold(root, 'say "hi" \\ ok', "x", artist="A & 'B'")
     song = load_project_config(root / "utavideo.toml").song
     assert song.title == 'say "hi" \\ ok'
     assert song.artist == "A & 'B'"
@@ -108,23 +104,23 @@ def test_scaffold_escapes_title_and_artist_in_toml(tmp_path: Path) -> None:
 
 def test_project_paths_and_release_name(tmp_path: Path) -> None:
     root = tmp_path / "20260814 サンプル"
-    scaffold(root, "サンプル")
+    scaffold(root, "サンプル", "sample")
     (root / "utavideo.toml").write_text(
-        '[song]\ntitle = "サンプル"\n[audio]\nfile = "src/mix/サンプル v3.4.wav"\n'
+        '[song]\ntitle = "サンプル"\nslug = "sample"\n[audio]\nfile = "src/mix/サンプル v3.4.wav"\n'
         '[video]\nbackground = "src/bg/a.gif"\n',
         encoding="utf-8",
     )
     project = Project.load(find_project_root(root / "src" / "mix"))
     assert project.root == root
     assert project.version == "v3.4"
-    assert project.release_path("v3.4") == root / "release" / "サンプル v3.4.mp4"
+    assert project.release_path("v3.4") == root / "release" / "sample-v3.4.mp4"
     assert project.main_output == root / "build" / "main.mp4"
 
 
 def test_scaffold_copies_default_credits_and_hashtags(tmp_path: Path) -> None:
     credit = Credit(roles=("Vocal", "Mix"), name='歌う "人"', urls=("https://example.com/a",))
     defaults = Defaults(credits=(credit, credit), hashtags=("歌ってみた", "cover"))
-    scaffold(tmp_path / "x", "曲", defaults=defaults)
+    scaffold(tmp_path / "x", "曲", "song", defaults=defaults)
     config = load_project_config(tmp_path / "x" / "utavideo.toml")
     assert config.credits == defaults.credits
     assert config.description is not None

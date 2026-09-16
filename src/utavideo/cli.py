@@ -3,9 +3,10 @@
 import functools
 import re
 import shutil
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Annotated, NoReturn
 
@@ -18,13 +19,13 @@ from utavideo import description, fonts, graph, layout, subs
 from utavideo.config import cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
+from utavideo.names import slug_error, slug_from_dir_name
 from utavideo.project import (
     Project,
     ScaffoldResult,
     find_project_root,
-    project_dir_name,
+    require_usable_slug,
     scaffold,
-    title_from_dir_name,
     to_windows_path,
 )
 
@@ -40,7 +41,16 @@ ProjectOption = Annotated[
     Path | None,
     typer.Option("--project", "-C", help="曲フォルダ。省略時はカレントディレクトリから上へ探す。"),
 ]
-ArtistOption = Annotated[str, typer.Option(help="アーティスト名（utavideo.toml の song.artist）")]
+TitleOption = Annotated[
+    str | None, typer.Option(help="曲名（utavideo.toml の song.title）。省略時は端末なら聞く")
+]
+ArtistOption = Annotated[
+    str | None, typer.Option(help="アーティスト名（utavideo.toml の song.artist）。省略時は端末なら聞く")
+]
+SlugOption = Annotated[
+    str | None,
+    typer.Option(help="ファイル名に使う識別子（utavideo.toml の song.slug）。省略時はフォルダ名"),
+]
 
 
 def _handle_errors[**P, R](fn: Callable[P, R]) -> Callable[P, R]:
@@ -219,40 +229,68 @@ _NEXT_STEPS = """次にやること（詳しくは docs/workflow.md）:
 @app.command()
 @_handle_errors
 def new(
-    title: Annotated[str, typer.Argument(help="曲名")],
-    artist: ArtistOption = "",
-    root: Annotated[Path, typer.Option(help="曲フォルダを作る場所")] = Path("."),
-    day: Annotated[str | None, typer.Option("--date", help="YYYYMMDD。省略時は今日")] = None,
+    path: Annotated[Path, typer.Argument(help="作る曲フォルダのパス（例: work/20260916-song）")],
+    title: TitleOption = None,
+    artist: ArtistOption = None,
+    slug: SlugOption = None,
 ) -> None:
-    """新しい曲フォルダを雛形から作る。"""
-    try:
-        created_on = datetime.strptime(day, "%Y%m%d").date() if day else date.today()
-    except ValueError:
-        _fail(f"--date は YYYYMMDD で指定してください: {day}")
-    dest = root / project_dir_name(title, created_on)
-    if dest.exists():
-        _fail(f"既にあります: {dest}（既存のフォルダに追加するなら utavideo init）")
-    result = scaffold(dest, title, artist, load_user_config().defaults)
-    console.print(f"作成しました: {dest}", markup=False)
-    _print_scaffold(result, dest)
-    console.print(_NEXT_STEPS, markup=False)
+    """新しい曲フォルダを雛形から作る。フォルダ名はこのパスのまま（日付などは自分で付ける）。"""
+    if path.exists():
+        _fail(f"既にあります: {path}（既存のフォルダに追加するなら utavideo init）")
+    hint = None
+    if not re.match(r"\d{8}-", path.name):
+        hint = (
+            f"ヒント: フォルダ名を {date.today():%Y%m%d}-{path.name} のようにすると、"
+            "日付順に並び、slug からは日付が外れます"
+        )
+    _scaffold(path, title, artist, slug, "作成しました", hint)
 
 
 @app.command()
 @_handle_errors
 def init(
     directory: Annotated[Path, typer.Argument(help="既存の曲フォルダ")] = Path("."),
-    title: Annotated[str | None, typer.Option(help="曲名。省略時はフォルダ名から日付を除いたもの")] = None,
-    artist: ArtistOption = "",
+    title: TitleOption = None,
+    artist: ArtistOption = None,
+    slug: SlugOption = None,
 ) -> None:
     """既存の曲フォルダに utavideo のファイルを追加する（既存ファイルは移動も上書きもしない）。"""
     if not directory.is_dir():
         _fail(f"ディレクトリがありません: {directory}")
-    root = directory.absolute()
-    result = scaffold(root, title or title_from_dir_name(root.name), artist, load_user_config().defaults)
-    console.print(f"初期化しました: {root}", markup=False)
+    _scaffold(directory.absolute(), title, artist, slug, "初期化しました")
+
+
+def _scaffold(
+    root: Path, title: str | None, artist: str | None, slug: str | None, done: str, hint: str | None = None
+) -> None:
+    resolved_slug = slug if slug is not None else _slug_from_dir(root)
+    require_usable_slug(resolved_slug)
+    resolved_title = title if title is not None else _ask("曲名", resolved_slug)
+    resolved_artist = artist if artist is not None else _ask("アーティスト名", "")
+    result = scaffold(root, resolved_title, resolved_slug, resolved_artist, load_user_config().defaults)
+    console.print(f"{done}: {root}", markup=False)
+    if hint is not None:
+        console.print(f"[yellow]{hint}[/]", markup=True, highlight=False)
     _print_scaffold(result, root)
     console.print(_NEXT_STEPS, markup=False)
+
+
+def _slug_from_dir(root: Path) -> str:
+    """フォルダ名から slug を決める。使えない名前なら、端末では聞き直す（端末でなければエラー）。"""
+    value = slug_from_dir_name(root.absolute().name)
+    while (reason := slug_error(value)) is not None and _interactive():
+        err_console.print(f"フォルダ名は名前に使えません（{reason}）: {value}", markup=False)
+        value = typer.prompt("ファイル名に使う識別子（slug）")
+    return value
+
+
+def _ask(label: str, default: str) -> str:
+    """端末なら聞く。パイプや CI からは既定値をそのまま使う。"""
+    return typer.prompt(label, default=default) if _interactive() else default
+
+
+def _interactive() -> bool:
+    return sys.stdin.isatty() and sys.stdout.isatty()
 
 
 @app.command()
@@ -280,6 +318,9 @@ def check(project_dir: ProjectOption = None) -> None:
         issues.append(subs.Issue("warning", message))
     if not config.song.artist:
         issues.append(subs.Issue("warning", "song.artist が空です"))
+    if not project.slug.isascii():
+        message = f"song.slug に ASCII 以外の文字が入っています（{project.slug}）"
+        issues.append(subs.Issue("warning", message))
     if config.description is not None:
         issues += description.lint(project, load_user_config().description)
 

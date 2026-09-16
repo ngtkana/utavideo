@@ -162,8 +162,9 @@ def test_description_command_and_release_use_user_defaults(
         '[defaults]\nhashtags = ["歌ってみた"]\n[[defaults.credits]]\nroles = ["Vocal"]\nname = "歌う人"\n',
         encoding="utf-8",
     )
-    assert runner.invoke(app, ["new", "曲", "--root", str(tmp_path), "--date", "20260916"]).exit_code == 0
-    root = tmp_path / "20260916 曲"
+    created = runner.invoke(app, ["new", str(tmp_path / "20260916-song"), "--title", "曲"])
+    assert created.exit_code == 0, created.output
+    root = tmp_path / "20260916-song"
     assert load_project_config(root / "utavideo.toml").credits[0].name == "歌う人"
 
     result = runner.invoke(app, ["description", "-C", str(root)])
@@ -179,9 +180,9 @@ def test_description_command_and_release_use_user_defaults(
             m.setattr(target, _raise_oserror)
             failed = runner.invoke(app, ["release", "-C", str(root)])
         assert failed.exit_code == 1, target
-        assert not (root / "release/曲 v1.0.mp4").exists(), target
-        assert not (root / "release/曲 v1.0.txt").exists(), target
+        assert not (root / "release/song-v1.0.mp4").exists(), target
+        assert not (root / "release/song-v1.0.txt").exists(), target
 
     result = runner.invoke(app, ["release", "-C", str(root)])
     assert result.exit_code == 0, result.output
-    assert (root / "release/曲 v1.0.txt").read_text(encoding="utf-8") == "曲\n\n" + body
+    assert (root / "release/song-v1.0.txt").read_text(encoding="utf-8") == "曲\n\n" + body

@@ -1,6 +1,6 @@
 [Script Info]
 ; スタイルは Aegisub のスタイルマネージャで編集する。行ごとの装飾タグは原則使わない。
-Title: $title
+Title: utavideo
 ScriptType: v4.00+
 WrapStyle: 0
 ScaledBorderAndShadow: yes

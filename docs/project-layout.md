@@ -1,9 +1,9 @@
 # 曲フォルダの構成
 
-1曲につき1フォルダを作ります。`utavideo new` は次の構成で作成します。
+1曲につき1フォルダを作ります。`utavideo new <パス>` は、渡したパスに次の構成で作成します。
 
 ```
-YYYYMMDD 曲名/
+20260915-song/            # フォルダ名は自分で決める（この例は日付 ＋ slug）
 ├── utavideo.toml        # 曲の情報と画面の構成
 ├── README.md            # 作業のチェックリストとメモ
 ├── src/                 # 動画の材料（自分で用意するもの）
@@ -38,13 +38,20 @@ utavideo が読むのは `utavideo.toml` で指定したファイルだけなの
 
 ## 名前の付け方
 
+ファイル名には曲名ではなく、`utavideo.toml` の `song.slug`（曲名の短い形）を使います。曲名を後から直してもファイル名が変わらず、日本語を避けたいときも曲名はそのままにできます。
+
 | もの | 名前 | 例 |
 |---|---|---|
-| フォルダ | `YYYYMMDD 曲名`（`utavideo new` が付ける） | `20260915 曲名/` |
-| 音源 | `曲名 vX.Y.wav` | `src/mix/曲名 v1.2.wav` |
-| 公開する動画 | `曲名 vX.Y.mp4`（`utavideo release` が付ける） | `release/曲名 v1.2.mp4` |
-| 公開したときの概要欄 | `曲名 vX.Y.txt`（`[description]` がある曲で `utavideo release` が書く） | `release/曲名 v1.2.txt` |
+| フォルダ | 自由（`utavideo new` に渡したパスのまま） | `20260915-song/` |
+| 音源 | `<slug>-vX.Y.wav` | `src/mix/song-v1.2.wav` |
+| 公開する動画 | `<slug>-vX.Y.mp4`（`utavideo release` が付ける） | `release/song-v1.2.mp4` |
+| 公開したときの概要欄 | `<slug>-vX.Y.txt`（`[description]` がある曲で `utavideo release` が書く） | `release/song-v1.2.txt` |
 | やり取り | `share/YYYYMMDD-相手/` | `share/20260913-to-mixer/`、`share/20260920-from-illustrator/` |
+
+- slug は `new` / `init` が `utavideo.toml` に書きます。省略したときはフォルダ名（先頭に `YYYYMMDD` があれば除いたもの）です
+- 自分で指定した slug は書き換えません。ファイル名に使えない名前（`\ / : * ? " < > |`・制御文字・末尾の空白と点・`CON` などの Windows の予約語・200 文字超）はエラーです
+- ASCII 以外の文字を含む slug は `check` が警告します（使えないわけではありません）
+- `song.slug` が無い曲フォルダ（この項目より前に作ったもの）では、これまで通り曲名をファイル名に使います
 
 - バージョンは、音源のファイル名に含まれる `v` と数字（`v1`・`v1.2`・`V1.2.3`）です。複数あれば最後のものを使い、`v1.2a` のように英数字が続くものは対象外です。無いときは `utavideo release --version` で指定します
 - 公開する動画のバージョンは、音源のバージョンにそろえます。歌詞や見た目だけを直したときは `utavideo release --version v1.2.1` のように枝番を付けます

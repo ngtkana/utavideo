@@ -20,6 +20,7 @@ runner = CliRunner()
 TOML = """
 [song]
 title = "テスト"
+slug = "test"
 artist = "テスター"
 [audio]
 file = "src/mix/テスト v1.2.wav"
@@ -91,7 +92,7 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
 
     # filtergraph のエスケープを確かめるため、記号を含むフォルダ名にする
     root = tmp_path / "20260101 it's [テスト], 曲"
-    scaffold(root, "テスト")
+    scaffold(root, "テスト", "test")
     _ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=2", str(root / "src/mix/テスト v1.2.wav"))
     _ffmpeg("-f", "lavfi", "-i", "testsrc=size=640x360", "-frames:v", "1", str(root / "src/bg/bg.png"))
     _ffmpeg("-f", "lavfi", "-i", "testsrc=size=640x360:rate=4:duration=0.5", str(root / "src/bg/loop.gif"))
@@ -182,7 +183,7 @@ def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
 def test_release_copies_once_and_detects_stale_build(project: Path) -> None:
     _invoke("build", "-C", str(project))
     _invoke("release", "-C", str(project))
-    assert (project / "release/テスト v1.2.mp4").is_file()
+    assert (project / "release/test-v1.2.mp4").is_file()
 
     again = runner.invoke(app, ["release", "-C", str(project)])
     assert again.exit_code == 1
