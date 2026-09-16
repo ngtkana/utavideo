@@ -22,7 +22,8 @@ from utavideo.names import (
         ("...", "untitled"),
         ("   ", "untitled"),
         ("CON", "CON-1"),
-        ("nul.mp4", "nul.mp4-1"),
+        ("NUL.いい曲", "NUL-1.いい曲"),
+        ("nul.mp4", "nul-1.mp4"),
     ],
 )
 def test_slug_from_title(title: str, expected: str) -> None:
@@ -30,7 +31,18 @@ def test_slug_from_title(title: str, expected: str) -> None:
 
 
 def test_slug_from_title_is_always_usable() -> None:
-    for title in ("A/B: C", "Mr.", "...", "CON", "x" * 500, "あ" * 500, '"<>|', "-先頭"):
+    for title in (
+        "A/B: C",
+        "Mr.",
+        "...",
+        "CON",
+        "nul.mp4",
+        "com1." + "あ" * 500,
+        "x" * 500,
+        "あ" * 500,
+        '"<>|',
+        "-先頭",
+    ):
         assert slug_error(slug_from_title(title)) is None, title
 
 

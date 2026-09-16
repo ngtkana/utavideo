@@ -39,12 +39,14 @@ def slug_from_title(title: str) -> str:
     """曲名から slug を作る。使えない文字と空白は - にする。"""
     slug = _NOT_FOR_SLUG.sub("-", unicodedata.normalize("NFC", title))
     slug = re.sub("-{2,}", "-", slug).strip("-. ")
+    # 予約語のままだと Windows でフォルダを開けない。Windows は最初の . より前を見るので、
+    # 末尾ではなくそこに付ける（NUL.曲 → NUL-1.曲）
+    head, dot, rest = slug.partition(".")
+    if head.upper() in RESERVED_NAMES:
+        slug = f"{head}-1{dot}{rest}"
     # 上限はバイト数。切ったところで文字が壊れないよう、decode で落とす
     slug = slug.encode()[:MAX_SLUG_BYTES].decode(errors="ignore").strip("-. ")
-    if not slug:
-        return "untitled"
-    # 予約語のままだと Windows でフォルダを開けない
-    return f"{slug}-1" if slug.split(".")[0].upper() in RESERVED_NAMES else slug
+    return slug or "untitled"
 
 
 def slug_from_dir_name(name: str) -> str:
