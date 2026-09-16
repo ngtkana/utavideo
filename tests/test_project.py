@@ -146,7 +146,7 @@ def test_next_revision_counts_released_videos(tmp_path: Path) -> None:
         "ほかの曲 v3.4.5.mp4",
     ]:
         (root / "release" / name).write_bytes(b"")
-    assert sorted(project.released("v3.4")) == [0, 2]
+    assert [revision for revision, _ in project.released("v3.4")] == [0, 2]
     assert next_revision(project.released("v3.4")) == 3
     assert next_revision(project.released("v3.5")) == 5
 

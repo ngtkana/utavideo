@@ -25,7 +25,7 @@ SCAFFOLD_DIRS = ("src/mix", "src/bg", "src/avatar", "src/ref", "build", "release
 _INT = r"(?:0|[1-9][0-9]*)"
 VERSION_PATTERN = rf"v{_INT}\.{_INT}"
 _VERSION_RE = re.compile(rf"(?<![0-9A-Za-z]){VERSION_PATTERN}(?![0-9A-Za-z]|\.[0-9A-Za-z])", re.IGNORECASE)
-_REVISION_RE = re.compile(rf"^{_INT}$")
+_REVISION_RE = re.compile(_INT)
 _DATE_PREFIX_RE = re.compile(r"^\d{8}[\s_-]*")
 _INVALID_FILENAME_CHARS = re.compile(r'[\\/:*?"<>|\r\n]')
 
@@ -97,24 +97,25 @@ class Project:
     def release_path(self, version: str, revision: int) -> Path:
         return self.release_dir / f"{safe_filename(self.config.song.title)} {version}.{revision}.mp4"
 
-    def released(self, version: str) -> dict[int, Path]:
-        """同じ音源のバージョンで公開済みの動画を、何本目かごとに返す。
+    def released(self, version: str) -> list[tuple[int, Path]]:
+        """同じ音源のバージョンで公開済みの動画を、(何本目か, パス) の一覧で返す。
 
         枝番を手で付けていた頃の <曲名> vX.Y.mp4 は、1本目（0）とみなす。
+        番号が同じファイルが両方あることもあるので、番号ごとに1つに絞らない。
         """
-        name = safe_filename(self.config.song.title)
-        prefix = f"{name} {version}."
-        found: dict[int, Path] = {}
+        base = f"{safe_filename(self.config.song.title)} {version}"
+        found: list[tuple[int, Path]] = []
         if not self.release_dir.is_dir():
             return found
         for path in self.release_dir.iterdir():
-            if path.suffix != ".mp4" or not path.is_file():
+            if path.suffix.lower() != ".mp4" or not path.is_file():
                 continue
-            if path.name == f"{name} {version}.mp4":
-                found[0] = path
-            elif path.name.startswith(prefix) and _REVISION_RE.match(path.stem[len(prefix) :]):
-                found[int(path.stem[len(prefix) :])] = path
-        return found
+            rest = path.stem.removeprefix(f"{base}.")
+            if path.stem == base:
+                found.append((0, path))
+            elif rest != path.stem and _REVISION_RE.fullmatch(rest):
+                found.append((int(rest), path))
+        return sorted(found)
 
 
 @dataclass
@@ -126,12 +127,12 @@ class ScaffoldResult:
 def extract_version(stem: str) -> str | None:
     """例: "曲名 v3.4" → "v3.4"。vX.Y の形だけを読み、複数あれば最後のもの。"""
     matches = _VERSION_RE.findall(stem)
-    return "v" + matches[-1][1:] if matches else None
+    return matches[-1].lower() if matches else None
 
 
-def next_revision(released: dict[int, Path]) -> int:
+def next_revision(released: list[tuple[int, Path]]) -> int:
     """次に公開する動画が何本目か。数ではなく最大値から決めるので、消しても番号がぶつからない。"""
-    return max(released, default=-1) + 1
+    return max((revision for revision, _ in released), default=-1) + 1
 
 
 def safe_filename(name: str) -> str:

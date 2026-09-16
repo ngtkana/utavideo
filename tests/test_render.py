@@ -107,7 +107,9 @@ def _invoke(*args: str):
 
 
 def test_check_passes(project: Path) -> None:
-    assert "問題ありません" in _invoke("check", "-C", str(project)).output
+    output = _invoke("check", "-C", str(project)).output
+    assert "問題ありません" in output
+    assert "release 先" in output and "テスト v1.2.0.mp4" in output  # 次に付く名前
 
 
 def test_check_counts_warnings_instead_of_saying_ok(project: Path) -> None:
