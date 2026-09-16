@@ -433,32 +433,6 @@ def description_command(project_dir: ProjectOption = None) -> None:
         console.print(f"書き出しました: {path}", markup=False)
 
 
-def _description_text(project: Project) -> str | None:
-    """release に置く概要欄。[description] が無い曲では None。"""
-    if project.config.description is None:
-        return None
-    fmt = load_user_config().description
-    title = description.render_title(project.config, fmt)
-    return f"{title}\n\n{description.render_body(project.config, fmt)}"
-
-
-def _rewrite_description(project: Project, version: str) -> None:
-    """公開済みの概要欄を今の設定で書き直す。release/ のファイルを上書きする唯一の場所。"""
-    text = _description_text(project)
-    if text is None:
-        _fail("utavideo.toml に [description] がありません")
-    released = project.released(version)
-    if not released:
-        _fail(f"{version} で公開した動画が release/ にありません")
-    _, latest = max(released, key=lambda item: item[0])
-    dest = latest.with_suffix(".txt")
-    if dest.is_file() and dest.read_text(encoding="utf-8") == text:
-        console.print(f"変わっていません: {dest}", markup=False)
-        return
-    _write_text(dest, text)
-    console.print(f"書き直しました: {dest}", markup=False)
-
-
 @app.command()
 @_handle_errors
 def release(
@@ -470,15 +444,11 @@ def release(
     allow_stale: Annotated[
         bool, typer.Option(help="build/main.mp4 より新しい入力があってもコピーする")
     ] = False,
-    description_only: Annotated[
-        bool,
-        typer.Option("--description-only", help="動画はコピーせず、公開済みの概要欄を書き直す"),
-    ] = False,
 ) -> None:
     """build/main.mp4 を release/<slug>-<音源のバージョン>.<何本目か>.mp4 にコピーする。"""
     project = _load_project(project_dir)
     source = project.main_output
-    if not source.is_file() and not description_only:
+    if not source.is_file():
         _fail("build/main.mp4 がありません。先に utavideo build を実行してください")
 
     version = version or project.version
@@ -487,10 +457,6 @@ def release(
     if not re.fullmatch(VERSION_PATTERN, version, re.IGNORECASE):
         _fail(f"音源のバージョンは v1.0 のような vX.Y の形で指定してください: {version}")
     version = version.lower()
-
-    if description_only:
-        _rewrite_description(project, version)
-        return
 
     inputs = [project.config_path, project.audio_path, project.background_path, project.lyrics_path]
     built_at = source.stat().st_mtime
@@ -510,27 +476,13 @@ def release(
         _fail(f"同じ内容が既にあります: {same}（コピーしません）")
 
     dest = project.release_path(version, next_revision(released))
-    # 書式を後で変えても公開したときの文章が残るよう、概要欄も一緒に置く
-    text_dest = dest.with_suffix(".txt")
-    text = _description_text(project)
-    for path in [dest, *([text_dest] if text is not None else [])]:
-        if path.exists():
-            _fail(f"既にあります: {path}（上書きはしません）")
+    if dest.exists():
+        _fail(f"既にあります: {dest}（上書きはしません）")
     dest.parent.mkdir(parents=True, exist_ok=True)
-    # 片方だけ残ると再実行が「既にあります」で止まるので、.txt を先に書き、動画のコピーに失敗したら消す
-    if text is not None:
-        _write_text(text_dest, text)
-    try:
-        tmp = partial_path(dest)
-        shutil.copy2(source, tmp)
-        replace_partial(tmp, dest)
-    except BaseException:
-        if text is not None:
-            text_dest.unlink(missing_ok=True)
-        raise
+    tmp = partial_path(dest)
+    shutil.copy2(source, tmp)
+    replace_partial(tmp, dest)
     console.print(f"コピーしました: {dest}", markup=False)
-    if text is not None:
-        console.print(f"書き出しました: {text_dest}", markup=False)
 
 
 @dataclass(frozen=True)

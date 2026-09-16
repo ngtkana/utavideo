@@ -23,7 +23,7 @@
 │   │   ├── main.png     # [[thumbnails]] の name ごと
 │   │   └── bg/main.png  # --bg-only（Aegisub の下敷き）
 │   └── .work/           # 書き出しに使った中間ファイル
-├── release/             # 公開した動画と概要欄。消さない
+├── release/             # 公開した動画（概要欄を残すなら自分でコピー）。消さない
 └── share/               # 人とやり取りしたファイル
     └── YYYYMMDD-相手/
 ```
@@ -49,7 +49,6 @@ utavideo が読むのは `utavideo.toml` で指定したファイルだけなの
 | フォルダ | 自由（`utavideo new` に渡したパスのまま） | `20260915-song/` |
 | 音源 | `<slug>-vX.Y.wav` | `src/mix/song-v1.2.wav` |
 | 公開する動画 | `<slug>-vX.Y.N.mp4`（`utavideo release` が付ける） | `release/song-v1.2.0.mp4` |
-| 公開したときの概要欄 | `<slug>-vX.Y.N.txt`（`[description]` がある曲で `utavideo release` が書く） | `release/song-v1.2.0.txt` |
 | サムネイル | `build/thumbnail/<name>.png`（`name` は `[[thumbnails]]` に書く。使える文字は slug と同じ） | `build/thumbnail/square.png` |
 | やり取り | `share/YYYYMMDD-相手/` | `share/20260913-to-mixer/`、`share/20260920-from-illustrator/` |
 

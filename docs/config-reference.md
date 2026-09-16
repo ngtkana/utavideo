@@ -74,7 +74,7 @@
 
 ## [description]
 
-概要欄の中身です。この表があると、`check` が概要欄を検査し、`release` が概要欄も書き出します。
+概要欄の中身です。この表があると、`check` と `description` が概要欄を検査します。概要欄とタイトルの書き出し先は [commands.md](commands.md#description) にあります。
 
 | 項目 | 型 | 既定値 | 説明 |
 |---|---|---|---|
