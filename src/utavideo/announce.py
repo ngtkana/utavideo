@@ -3,11 +3,12 @@
 import json
 import re
 import unicodedata
-from collections.abc import Iterator
+from collections import Counter
 from dataclasses import dataclass
 from urllib.parse import parse_qs, urlsplit
 
 from utavideo.config import (
+    SITE_NAMES,
     Announce,
     AnnounceFormat,
     ConfigError,
@@ -16,10 +17,8 @@ from utavideo.config import (
     Site,
     format_setting,
 )
-from utavideo.description import singers
+from utavideo.description import no_singers_issue, song_fields
 from utavideo.subs import Issue
-
-SITE_NAMES: dict[Site, str] = {"youtube": "YouTube", "niconico": "ニコニコ動画"}
 
 # twitter-text の config/v3.json（docs/verification/20260917-announce.md）
 DEFAULT_WEIGHT = 2
@@ -71,18 +70,22 @@ def classify(url: str) -> Upload:
 
     youtube_forms = "https://www.youtube.com/watch?v=ID・https://youtu.be/ID"
     niconico_forms = "https://www.nicovideo.jp/watch/ID・https://nico.ms/ID"
+
+    def unsupported(forms: str) -> Upload:
+        return error(f"対応していない形です（受け付ける形: {forms}）")
+
     if on("youtube.com") or host == "youtu.be":
         if parts.path.startswith("/shorts/"):
             return error("ショート動画（/shorts/）の告知は、今は対象外です")
         if has_extra:
-            return error(f"対応していない形です（受け付ける形: {youtube_forms}）")
+            return unsupported(youtube_forms)
         query = parse_qs(parts.query)
         if host == "youtu.be":
             video_id = parts.path.removeprefix("/") if parts.path.count("/") == 1 else None
         elif parts.path == "/watch" and len(query.get("v", [])) == 1:
             video_id = query["v"][0]
         else:
-            return error(f"対応していない形です（受け付ける形: {youtube_forms}）")
+            return unsupported(youtube_forms)
         if video_id is None or not _YOUTUBE_ID.fullmatch(video_id):
             return error("YouTube の動画 ID が不正です（英数字・_・- の 11 文字）")
         issues: list[Issue] = []
@@ -92,12 +95,10 @@ def classify(url: str) -> Upload:
             issues.append(Issue("warning", message))
         return Upload(url, "youtube", tuple(issues))
     if on("nicovideo.jp") or host == "nico.ms":
-        if has_extra:
-            return error(f"対応していない形です（受け付ける形: {niconico_forms}）")
         prefix = "/" if host == "nico.ms" else "/watch/"
         video_id = parts.path.removeprefix(prefix)
-        if not parts.path.startswith(prefix) or "/" in video_id:
-            return error(f"対応していない形です（受け付ける形: {niconico_forms}）")
+        if has_extra or not parts.path.startswith(prefix) or "/" in video_id:
+            return unsupported(niconico_forms)
         if not _NICONICO_ID.fullmatch(video_id):
             return error("ニコニコ動画の動画 ID が不正です（sm・so・nm と数字）")
         return Upload(url, "niconico", ())
@@ -106,8 +107,17 @@ def classify(url: str) -> Upload:
 
 def render(config: ProjectConfig, fmt: AnnounceFormat, description_fmt: DescriptionFormat) -> str:
     """告知文。中身の無いブロックは出さず、空行は続けず、先頭と末尾にも置かない。"""
+    return _render(config, fmt, description_fmt, [classify(upload.url) for upload in config.uploads])
+
+
+def _link(fmt: AnnounceFormat, site: str, url: str) -> str:
+    return format_setting(fmt.link, "ユーザー設定の announce.link", site=site, url=url)
+
+
+def _render(
+    config: ProjectConfig, fmt: AnnounceFormat, description_fmt: DescriptionFormat, uploads: list[Upload]
+) -> str:
     announce = config.announce or Announce()
-    uploads = [classify(upload.url) for upload in config.uploads]
     lines: list[str] = []
     for block in fmt.order:
         match block:
@@ -120,25 +130,16 @@ def render(config: ProjectConfig, fmt: AnnounceFormat, description_fmt: Descript
                 if text := announce.text.strip():
                     lines.append(text)
             case "work":
-                song = config.song
-                work = format_setting(
-                    fmt.work,
-                    "ユーザー設定の announce.work",
-                    title=song.title,
-                    artist=song.artist,
-                    label=song.label,
-                    singers=description_fmt.singer_separator.join(singers(config, description_fmt)),
-                )
-                if work:
+                fields = song_fields(config, description_fmt)
+                if work := format_setting(fmt.work, "ユーザー設定の announce.work", **fields):
                     lines.append(work)
             case "links":
-                for site, name in fmt.sites.items():
-                    for upload in uploads:
-                        if upload.site == site:
-                            line = format_setting(
-                                fmt.link, "ユーザー設定の announce.link", site=name, url=upload.url
-                            )
-                            lines.append(line)
+                lines += [
+                    _link(fmt, name, upload.url)
+                    for site, name in fmt.sites.items()
+                    for upload in uploads
+                    if upload.site == site
+                ]
             case "hashtags":
                 if announce.hashtags:
                     lines.append(" ".join(f"#{tag}" for tag in announce.hashtags))
@@ -157,16 +158,10 @@ def weight(text: str) -> int:
     text = unicodedata.normalize("NFC", text).removesuffix("\n")
     total = 0
     position = 0
-    for start, end in _urls(text):
-        total += _chars_weight(text[position:start]) + URL_WEIGHT
-        position = end
-    return total + _chars_weight(text[position:])
-
-
-def _urls(text: str) -> Iterator[tuple[int, int]]:
     for match in _URL.finditer(text):
-        url = match.group().rstrip(_URL_TRAILING)
-        yield match.start(), match.start() + len(url)
+        total += _chars_weight(text[position : match.start()]) + URL_WEIGHT
+        position = match.start() + len(match.group().rstrip(_URL_TRAILING))
+    return total + _chars_weight(text[position:])
 
 
 def _chars_weight(text: str) -> int:
@@ -175,9 +170,7 @@ def _chars_weight(text: str) -> int:
 
 def hashtag_error(tag: str) -> str | None:
     """X でハッシュタグとしてそのまま使えない理由。使えるなら None。"""
-    bad = sorted({ch for ch in tag if not _hashtag_char(ch)}, key=tag.index)
-    if bad:
-        chars = "".join(bad)
+    if chars := "".join(dict.fromkeys(ch for ch in tag if not _hashtag_char(ch))):
         return f"X ではタグが途中で切れる文字 {chars!r} があります"
     if not any(unicodedata.category(ch)[0] in "LM" for ch in tag):
         return "数字や記号だけのタグは X ではタグになりません"
@@ -185,7 +178,8 @@ def hashtag_error(tag: str) -> str | None:
 
 
 def _hashtag_char(ch: str) -> bool:
-    return unicodedata.category(ch)[0] in "LM" or unicodedata.category(ch) == "Nd" or ch in _HASHTAG_SPECIAL
+    category = unicodedata.category(ch)
+    return category[0] in "LM" or category == "Nd" or ch in _HASHTAG_SPECIAL
 
 
 def lint(
@@ -200,12 +194,9 @@ def lint(
     issues: list[Issue] = []
 
     uploads = [classify(upload.url) for upload in config.uploads]
-    found: dict[Site, int] = {}
     for upload in uploads:
         issues += upload.issues
-        if upload.site is None:
-            continue
-        found[upload.site] = found.get(upload.site, 0) + 1
+    found: Counter[Site] = Counter(upload.site for upload in uploads if upload.site is not None)
     for site, count in found.items():
         if count > 1:
             issues.append(Issue("error", f"uploads に {SITE_NAMES[site]} の URL が {count} つあります"))
@@ -228,19 +219,13 @@ def lint(
         if reason := hashtag_error(tag):
             issues.append(Issue("error", f"announce.hashtags の {tag!r}: {reason}"))
 
-    if "work" in fmt.order and "{singers}" in fmt.work and not singers(config, description_fmt):
-        roles = ", ".join(description_fmt.singer_roles)
-        issues.append(
-            Issue(
-                "warning",
-                f"告知文の {{singers}} に入る人がいません（roles に {roles} を持つ credits が無い）",
-            )
-        )
+    if "work" in fmt.order and (issue := no_singers_issue(config, description_fmt, fmt.work, "告知文")):
+        issues.append(issue)
 
     try:
         # リンクが無いと render は link の書式を使わないので、投稿前にも書式の誤りに気づけるよう先に試す
-        format_setting(fmt.link, "ユーザー設定の announce.link", site="", url="")
-        text = render(config, fmt, description_fmt)
+        _link(fmt, "", "")
+        text = _render(config, fmt, description_fmt, uploads)
     except ConfigError as e:
         issues.append(Issue("error", str(e)))
         return issues

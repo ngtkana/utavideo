@@ -199,6 +199,7 @@ class DescriptionFormat(_Model):
 
 
 type Site = Literal["youtube", "niconico"]
+SITE_NAMES: dict[Site, str] = {"youtube": "YouTube", "niconico": "ニコニコ動画"}
 type AnnounceBlock = Literal["header", "text", "work", "links", "hashtags", ""]
 
 
@@ -207,7 +208,7 @@ class AnnounceFormat(_Model):
     work: str = "『{title} / {artist}』"
     link: str = "{site} » {url}"
     # 書いた順にリンクを並べる（tomllib も pydantic の dict も順番を保つ）
-    sites: dict[Site, str] = Field(default_factory=lambda: {"youtube": "YouTube", "niconico": "ニコニコ動画"})
+    sites: dict[Site, str] = Field(default_factory=lambda: dict(SITE_NAMES))
     order: tuple[AnnounceBlock, ...] = ("header", "text", "", "work", "", "links", "", "hashtags")
     max_weight: PositiveInt = 280
 
