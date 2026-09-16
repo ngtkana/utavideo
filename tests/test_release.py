@@ -1,4 +1,4 @@
-"""release の採番と、公開済みの概要欄の書き直し。動画の中身は問わないので ffmpeg は要らない。"""
+"""release の採番。動画の中身は問わないので ffmpeg は要らない。"""
 
 from pathlib import Path
 
@@ -97,32 +97,13 @@ def test_numbers_continue_from_videos_released_before_slug(project: Path) -> Non
     assert _released(project) == ["曲 v1.2.0.mp4", "曲-v1.2.1.mp4"]
 
 
-def test_description_only_rewrites_the_latest_text(project: Path) -> None:
+def test_writes_only_the_video_and_ignores_texts_in_release(project: Path) -> None:
+    # 概要欄は build/ にだけ置く。release/ に残った .txt は数えず、書き換えず、止まる理由にもしない
     _write_toml(project, TOML + DESCRIPTION)
-    assert _release(project).exit_code == 0
-    text = project / "release/曲-v1.2.0.txt"
-    assert "#歌ってみた" in text.read_text(encoding="utf-8")
+    (project / "release/曲-v1.2.0.txt").write_text("前の動画の概要欄", encoding="utf-8")
+    (project / "release/曲-v1.2.5.txt").write_text("消した動画の概要欄", encoding="utf-8")
 
-    _write_toml(project, TOML + '[description]\nhashtags = ["歌ってみた", "cover"]\n')
-    result = _release(project, "--description-only")
+    result = _release(project)
     assert result.exit_code == 0, result.output
-    assert "書き直しました" in result.output
-    assert "#cover" in text.read_text(encoding="utf-8")
-    assert _released(project) == ["曲-v1.2.0.mp4", "曲-v1.2.0.txt"]  # 動画は増えない
-
-    again = _release(project, "--description-only")
-    assert again.exit_code == 0
-    assert "変わっていません" in again.output
-
-
-def test_description_only_needs_a_released_video_and_a_description(project: Path) -> None:
-    _write_toml(project, TOML + DESCRIPTION)
-    missing = _release(project, "--description-only")
-    assert missing.exit_code == 1
-    assert "公開した動画が release/ にありません" in missing.output
-
-    assert _release(project).exit_code == 0
-    _write_toml(project, TOML)
-    no_description = _release(project, "--description-only")
-    assert no_description.exit_code == 1
-    assert "[description] がありません" in no_description.output
+    assert _released(project) == ["曲-v1.2.0.mp4", "曲-v1.2.0.txt", "曲-v1.2.5.txt"]
+    assert (project / "release/曲-v1.2.0.txt").read_text(encoding="utf-8") == "前の動画の概要欄"
