@@ -15,18 +15,33 @@ def singers(config: ProjectConfig, fmt: DescriptionFormat) -> list[str]:
     return [credit.name for credit in config.credits if set(credit.roles) & set(fmt.singer_roles)]
 
 
+def song_fields(config: ProjectConfig, fmt: DescriptionFormat) -> dict[str, str]:
+    """タイトルと告知文の書式で使える {title}・{artist}・{label}・{singers} の値。"""
+    song = config.song
+    return {
+        "title": song.title,
+        "artist": song.artist,
+        "label": song.label,
+        "singers": fmt.singer_separator.join(singers(config, fmt)),
+    }
+
+
+def no_singers_issue(
+    config: ProjectConfig, fmt: DescriptionFormat, template: str, where: str
+) -> Issue | None:
+    """書式が {singers} を使うのに、入る人がいないときの警告。"""
+    if "{singers}" not in template or singers(config, fmt):
+        return None
+    roles = ", ".join(fmt.singer_roles)
+    return Issue(
+        "warning", f"{where}の {{singers}} に入る人がいません（roles に {roles} を持つ credits が無い）"
+    )
+
+
 def render_title(config: ProjectConfig, fmt: DescriptionFormat) -> str:
     if config.description is not None and config.description.title is not None:
         return config.description.title
-    song = config.song
-    return format_setting(
-        fmt.title,
-        "ユーザー設定の description.title",
-        title=song.title,
-        artist=song.artist,
-        label=song.label,
-        singers=fmt.singer_separator.join(singers(config, fmt)),
-    )
+    return format_setting(fmt.title, "ユーザー設定の description.title", **song_fields(config, fmt))
 
 
 def render_body(config: ProjectConfig, fmt: DescriptionFormat) -> str:
@@ -106,14 +121,8 @@ def lint(project: Project, fmt: DescriptionFormat) -> list[Issue]:
         )
 
     uses_auto_title = config.description is None or config.description.title is None
-    if uses_auto_title and "{singers}" in fmt.title and not singers(config, fmt):
-        roles = ", ".join(fmt.singer_roles)
-        issues.append(
-            Issue(
-                "warning",
-                f"タイトルの {{singers}} に入る人がいません（roles に {roles} を持つ credits が無い）",
-            )
-        )
+    if uses_auto_title and (issue := no_singers_issue(config, fmt, fmt.title, "タイトル")):
+        issues.append(issue)
     if len(title) > TITLE_MAX_CHARS:
         issues.append(
             Issue(

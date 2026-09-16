@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from utavideo import description, fonts, graph, layout, subs
+from utavideo import announce, description, fonts, graph, layout, subs
 from utavideo.config import PROJECT_CONFIG_NAME, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
@@ -334,8 +334,15 @@ def check(project_dir: ProjectOption = None) -> None:
     if not project.slug.isascii():
         message = f"song.slug に ASCII 以外の文字が入っています（{project.slug}）"
         issues.append(subs.Issue("warning", message))
-    if config.description is not None:
-        issues += description.lint(project, load_user_config().description)
+    if config.description is not None or config.announce is not None:
+        user_config = load_user_config()
+        if config.description is not None:
+            issues += description.lint(project, user_config.description)
+        if config.announce is not None:
+            # 投稿するまでは毎回出てしまうので、uploads が無いことは announce でだけ警告する
+            issues += announce.lint(
+                config, user_config.announce, user_config.description, warn_no_uploads=False
+            )
 
     _print_issues(issues)
     if any(issue.level == "error" for issue in issues):
@@ -385,6 +392,25 @@ def description_command(project_dir: ProjectOption = None) -> None:
     console.print(body, markup=False, end="")
     for path in (project.title_output, project.description_output):
         console.print(f"書き出しました: {path}", markup=False)
+
+
+@app.command("announce")
+@_handle_errors
+def announce_command(project_dir: ProjectOption = None) -> None:
+    """投稿した動画の URL と曲の情報から、SNS の告知文を build/announce.txt に書き出す。"""
+    project = _load_project(project_dir)
+    user_config = load_user_config()
+    fmt = user_config.announce
+    issues = announce.lint(project.config, fmt, user_config.description, warn_no_uploads=True)
+    _print_issues(issues)
+    # 誤った URL の告知文を投稿しないよう、description と違ってエラーがあれば書き出さない
+    if any(issue.level == "error" for issue in issues):
+        _fail("告知文を書き出しませんでした")
+    text = announce.render(project.config, fmt, user_config.description)
+    _write_text(project.announce_output, text)
+    console.print(text, markup=False, end="")
+    console.print(f"長さ: {announce.weight(text)} / {fmt.max_weight}（X の数え方）", markup=False)
+    console.print(f"書き出しました: {project.announce_output}", markup=False)
 
 
 @app.command()

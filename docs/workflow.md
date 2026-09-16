@@ -101,6 +101,26 @@ utavideo release --version v1.0 # 音源のバージョンを指定する
 
 同じ内容の動画を既に公開しているときや、`build/main.mp4` より新しい入力があるとき（書き出し忘れ）は止まります（[commands.md](commands.md#release)）。
 
+## 9. 投稿して告知文を作る
+
+`release` した動画を投稿サイトに投稿（または公開を予約）してから、URL を `utavideo.toml` に書きます。
+
+```toml
+[[uploads]]
+url = "https://youtu.be/xxxxxxxxxxx"
+
+[[uploads]]
+url = "https://www.nicovideo.jp/watch/sm00000000"
+```
+
+```sh
+utavideo announce
+```
+
+`build/announce.txt` を SNS に貼ります。URL の形が誤っているときは書き出さずに止まり、X で「さらに表示」に折りたたまれる長さのときは警告します（[commands.md](commands.md#announce)）。書式は [customization.md](customization.md#sns-の告知文) を参照してください。
+
+`[[uploads]]` を書くと `utavideo.toml` が `build/main.mp4` より新しくなり、`release` が止まります。`release` を先に済ませてから URL を書いてください。
+
 ## 動画編集ソフトと組み合わせる
 
 utavideo で合成できない演出（アバターのクロマキー合成など）が必要な場合は、歌詞だけを透過動画にして動画編集ソフトで重ねます。
