@@ -85,20 +85,21 @@ utavideo description [-C <曲フォルダ>]
 ## release
 
 ```sh
-utavideo release [-C <曲フォルダ>] [--version <バージョン>] [--allow-stale]
+utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [--allow-stale]
 ```
 
-`build/main.mp4` を `release/<曲名> <バージョン>.mp4` にコピーします。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を `release/<曲名> <バージョン>.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。動画のコピーに失敗したときは `.txt` も残さないので、原因を取り除けばそのまま実行し直せます。
+`build/main.mp4` を `release/<曲名> <音源のバージョン>.<何本目か>.mp4` にコピーします。何本目かは `release/` にある同じ音源の動画から決まります（規則は [project-layout.md](project-layout.md#名前の付け方)）。`utavideo.toml` に `[description]` があれば、タイトル・空行・概要欄を `release/<曲名> <音源のバージョン>.<何本目か>.txt` にも書きます（書式を後で変えても、公開したときの文章が残ります）。動画のコピーに失敗したときは `.txt` も残さないので、原因を取り除けばそのまま実行し直せます。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
-| `--version` | 音源のファイル名から（規則は [project-layout.md](project-layout.md#名前の付け方)） | `v1`・`v1.2.1` の形（小文字の `v`） |
+| `--version` | 音源のファイル名から（規則は [project-layout.md](project-layout.md#名前の付け方)） | 音源のバージョン。`v1.2` の形（小文字の `v`）。何本目かは指定できない |
 | `--allow-stale` | 無効 | 入力が `build/main.mp4` より新しくてもコピーする |
 
 次のときは止まります。
 
 - `build/main.mp4` が無い
-- バージョンが決まらない、または形式が違う
+- 音源のバージョンが決まらない、または `vX.Y` の形でない
+- 同じ音源のバージョンで、`build/main.mp4` と中身が同じ動画を既に公開している
 - 同じ名前のファイル（`.mp4`、`[description]` がある曲では `.txt` も）が `release/` にある（上書きしない）
 - `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）
 

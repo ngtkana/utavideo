@@ -179,14 +179,22 @@ def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
     assert _max_alpha(output, 1.8) == 0
 
 
-def test_release_copies_once_and_detects_stale_build(project: Path) -> None:
+def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
     _invoke("build", "-C", str(project))
     _invoke("release", "-C", str(project))
-    assert (project / "release/テスト v1.2.mp4").is_file()
+    assert (project / "release/テスト v1.2.0.mp4").is_file()
 
     again = runner.invoke(app, ["release", "-C", str(project)])
     assert again.exit_code == 1
-    assert "既にあります" in again.output
+    assert "同じ内容が既にあります" in again.output
+
+    # 見た目を変えて書き出し直すと、同じ音源のまま次の番号が付く
+    # （テスト用のフォントは "A" しか持たないので、字を変えずに数を変える）
+    lyrics = project / "src/lyrics.ass"
+    lyrics.write_text(lyrics.read_text(encoding="utf-8").replace("AAAA", "A A"), encoding="utf-8")
+    _invoke("build", "-C", str(project))
+    _invoke("release", "-C", str(project))
+    assert (project / "release/テスト v1.2.1.mp4").is_file()
 
     built_at = (project / "build/main.mp4").stat().st_mtime
     os.utime(project / "src/lyrics.ass", (built_at + 10, built_at + 10))

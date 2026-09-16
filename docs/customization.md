@@ -62,8 +62,8 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | やりたいこと | 書き方 |
 |---|---|
 | 音源 | `audio.file`。ffmpeg が読める形式なら可（`init` の自動設定は wav / flac / mp3 / m4a / aac / ogg / opus） |
-| バージョン | 音源のファイル名の `v1.2` など（規則は [project-layout.md](project-layout.md#名前の付け方)） |
-| バージョンを指定して公開 | `release --version v1.2.1`（小文字の `v`） |
+| バージョン | 音源のファイル名の `v1.2` など。公開する動画には、その音源で何本目かも付く（規則は [project-layout.md](project-layout.md#名前の付け方)） |
+| 音源のバージョンを指定して公開 | `release --version v1.2`（小文字の `v`） |
 | 入力の方が新しくても公開 | `release --allow-stale` |
 | 公開ファイル名 | `song.title`（ファイル名に使えない文字は `_` になる） |
 
@@ -93,7 +93,7 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 | タイトルの形 | ユーザー設定の `description.title`（`{title}`・`{artist}`・`{label}`・`{singers}`）・`singer_roles`・`singer_separator` |
 | 毎回同じクレジット・ハッシュタグ | ユーザー設定の `[defaults]`（`new` / `init` が曲の toml にコピーする） |
 | 自作の素材を検査で扱う | `[[materials]]` に `urls` を書かず `files` だけ書く（概要欄には出ない） |
-| 公開したときの文章を残す | `[description]` があれば `release` が `release/<曲名> <バージョン>.txt` を書く |
+| 公開したときの文章を残す | `[description]` があれば `release` が動画と同じ名前の `.txt` を書く |
 
 ## 曲フォルダとコマンド
 
