@@ -6,7 +6,7 @@
 
 - コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `description` / `release` / `announce`
 - `check`: 設定・素材・スタイル・フォントの検査、行の重なり・`\pos`・はみ出しの警告
-- 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定、`release` で公開時の文章を残す）
+- 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定）
 - 告知文: 投稿した動画の URL（`[[uploads]]`）と曲の情報から SNS（X）の告知文を作り、URL の形・ハッシュタグ・X での長さを検査する
 
 ## 予定
