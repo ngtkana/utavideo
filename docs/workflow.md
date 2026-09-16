@@ -26,7 +26,7 @@ utavideo init ~/videos/制作中の曲 --artist "アーティスト"      # 既�
 - 背景（画像 / GIF / 動画）を `src/bg/` に置き、`video.background` を合わせる
 - `song.title`・`song.artist`・`song.label` を埋める
 
-音源を差し替えるときは、新しいバージョン名のファイル（`曲名 v1.1.wav`）を置いて `audio.file` を書き換えます。ファイル名の `vX.Y` が、`release` で付くバージョンになります（規則は [project-layout.md](project-layout.md#名前の付け方)）。
+音源を差し替えるときは、新しいバージョン名のファイル（`曲名 v1.1.wav`）を置いて `audio.file` を書き換えます。ファイル名の `vX.Y` が、`release` で付く名前に使われます（規則は [project-layout.md](project-layout.md#名前の付け方)）。
 
 ## 3. プレビュー動画を作る
 
@@ -95,11 +95,11 @@ utavideo description
 ## 8. 公開用にコピーする
 
 ```sh
-utavideo release                  # release/曲名 vX.Y.mp4（バージョンは音源のファイル名から）
-utavideo release --version v1.0.1 # バージョンを指定する
+utavideo release                # release/曲名 vX.Y.N.mp4（vX.Y は音源のファイル名から、N はその音源で何本目か）
+utavideo release --version v1.0 # 音源のバージョンを指定する
 ```
 
-同じ名前のファイルがあるときや、`build/main.mp4` より新しい入力があるとき（書き出し忘れ）は止まります（[commands.md](commands.md#release)）。
+同じ内容の動画を既に公開しているときや、`build/main.mp4` より新しい入力があるとき（書き出し忘れ）は止まります（[commands.md](commands.md#release)）。
 
 ## 動画編集ソフトと組み合わせる
 

@@ -1,5 +1,6 @@
 """utavideo コマンド。"""
 
+import filecmp
 import functools
 import re
 import shutil
@@ -19,9 +20,11 @@ from utavideo.config import cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
 from utavideo.project import (
+    VERSION_PATTERN,
     Project,
     ScaffoldResult,
     find_project_root,
+    next_revision,
     project_dir_name,
     scaffold,
     title_from_dir_name,
@@ -274,7 +277,8 @@ def check(project_dir: ProjectOption = None) -> None:
         console.print(f"  フォント: {file}", markup=False)
     issues = list(analysis.issues)
     if version := project.version:
-        console.print(f"  release 先: {project.release_path(version)}", markup=False)
+        dest = project.release_path(version, next_revision(project.released(version)))
+        console.print(f"  release 先: {dest}", markup=False)
     else:
         message = "audio.file のファイル名に vX.Y が無いので、release では --version が必要です"
         issues.append(subs.Issue("warning", message))
@@ -333,28 +337,64 @@ def description_command(project_dir: ProjectOption = None) -> None:
         console.print(f"書き出しました: {path}", markup=False)
 
 
+def _description_text(project: Project) -> str | None:
+    """release に置く概要欄。[description] が無い曲では None。"""
+    if project.config.description is None:
+        return None
+    fmt = load_user_config().description
+    title = description.render_title(project.config, fmt)
+    return f"{title}\n\n{description.render_body(project.config, fmt)}"
+
+
+def _rewrite_description(project: Project, version: str) -> None:
+    """公開済みの概要欄を今の設定で書き直す。release/ のファイルを上書きする唯一の場所。"""
+    text = _description_text(project)
+    if text is None:
+        _fail("utavideo.toml に [description] がありません")
+    released = project.released(version)
+    if not released:
+        _fail(f"{version} で公開した動画が release/ にありません")
+    _, latest = max(released, key=lambda item: item[0])
+    dest = latest.with_suffix(".txt")
+    if dest.is_file() and dest.read_text(encoding="utf-8") == text:
+        console.print(f"変わっていません: {dest}", markup=False)
+        return
+    _write_text(dest, text)
+    console.print(f"書き直しました: {dest}", markup=False)
+
+
 @app.command()
 @_handle_errors
 def release(
     project_dir: ProjectOption = None,
     version: Annotated[
-        str | None, typer.Option("--version", help="例: v1.0。省略時は audio.file のファイル名から")
+        str | None,
+        typer.Option("--version", help="音源のバージョン。例: v1.0。省略時は audio.file のファイル名から"),
     ] = None,
     allow_stale: Annotated[
         bool, typer.Option(help="build/main.mp4 より新しい入力があってもコピーする")
     ] = False,
+    description_only: Annotated[
+        bool,
+        typer.Option("--description-only", help="動画はコピーせず、公開済みの概要欄を書き直す"),
+    ] = False,
 ) -> None:
-    """build/main.mp4 を release/<曲名> <バージョン>.mp4 にコピーする。"""
+    """build/main.mp4 を release/<曲名> <音源のバージョン>.<何本目か>.mp4 にコピーする。"""
     project = _load_project(project_dir)
     source = project.main_output
-    if not source.is_file():
+    if not source.is_file() and not description_only:
         _fail("build/main.mp4 がありません。先に utavideo build を実行してください")
 
     version = version or project.version
     if version is None:
         _fail("audio.file のファイル名に vX.Y が無いので --version で指定してください")
-    if not re.fullmatch(r"v\d+(\.\d+)*", version):
-        _fail(f"バージョンは v1.0 のような形式で指定してください: {version}")
+    if not re.fullmatch(VERSION_PATTERN, version, re.IGNORECASE):
+        _fail(f"音源のバージョンは v1.0 のような vX.Y の形で指定してください: {version}")
+    version = version.lower()
+
+    if description_only:
+        _rewrite_description(project, version)
+        return
 
     inputs = [project.config_path, project.audio_path, project.background_path, project.lyrics_path]
     built_at = source.stat().st_mtime
@@ -366,14 +406,17 @@ def release(
             "build し直すか --allow-stale を付けてください"
         )
 
-    dest = project.release_path(version)
+    # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
+    # （同じ入力からの build はバイト単位で一致する。docs/verification/20260916-release-revision.md）
+    released = project.released(version)
+    same = next((p for _, p in released if filecmp.cmp(source, p, shallow=False)), None)
+    if same is not None:
+        _fail(f"同じ内容が既にあります: {same}（コピーしません）")
+
+    dest = project.release_path(version, next_revision(released))
     # 書式を後で変えても公開したときの文章が残るよう、概要欄も一緒に置く
     text_dest = dest.with_suffix(".txt")
-    text = None
-    if project.config.description is not None:
-        fmt = load_user_config().description
-        title = description.render_title(project.config, fmt)
-        text = f"{title}\n\n{description.render_body(project.config, fmt)}"
+    text = _description_text(project)
     for path in [dest, *([text_dest] if text is not None else [])]:
         if path.exists():
             _fail(f"既にあります: {path}（上書きはしません）")
