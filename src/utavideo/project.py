@@ -86,6 +86,14 @@ class Project:
         return self.build_dir / "preview" / "bg.mp4"
 
     @property
+    def vertical_preview_bg_output(self) -> Path:
+        return self.build_dir / "preview" / "vertical-bg.mp4"
+
+    @property
+    def vertical_lyrics_path(self) -> Path:
+        return self.resolve(self.config.vertical.lyrics)
+
+    @property
     def thumbnail_dir(self) -> Path:
         return self.build_dir / "thumbnail"
 

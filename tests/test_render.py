@@ -354,3 +354,35 @@ def test_check_warns_about_thumbnail_lines_not_drawn(project: Path) -> None:
     )
     output = _invoke("check", "-C", str(project)).output
     assert "サムネイル main: 0 秒に表示されない行" in output
+
+
+def test_check_inspects_the_vertical_ass_only_when_it_exists(project: Path) -> None:
+    assert "縦用 .ass" not in _invoke("check", "-C", str(project)).output
+
+    _invoke("vertical-ass", "-C", str(project))
+    output = _invoke("check", "-C", str(project)).output
+    assert "縦用 .ass: src/vertical.ass（1080x1920）" in output
+    assert "問題ありません" in output
+
+    vertical = project / "src/vertical.ass"
+    text = vertical.read_text(encoding="utf-8")
+    vertical.write_text(
+        text.replace("Test Sans", "Nope Sans").replace("PlayResY: 1920", "PlayResY: 1080"), encoding="utf-8"
+    )
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "縦用 .ass: PlayRes 1080x1080" in result.output
+    assert "縦用 .ass: フォント 'Nope Sans'" in result.output
+    # 縦用 .ass の誤りで、本編の書き出しは止めない
+    _invoke("build", "-C", str(project))
+
+
+def test_layout_res_that_squashes_the_lyrics_stops_the_build(project: Path) -> None:
+    lyrics = project / "src/lyrics.ass"
+    text = lyrics.read_text(encoding="utf-8").replace(
+        "PlayResY: 180", "PlayResY: 180\nLayoutResX: 180\nLayoutResY: 320"
+    )
+    lyrics.write_text(text, encoding="utf-8")
+    result = runner.invoke(app, ["build", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "LayoutResX / LayoutResY 180x320" in result.output

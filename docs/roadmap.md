@@ -9,6 +9,7 @@
 - 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定）
 
 - サムネイル: 背景のフレーム（`at`）にサムネイル用の .ass を描いた PNG。サイズ違いは `[[thumbnails]]` を並べる。背景の残す位置（`focus`）は動画にも効く
+- 縦型のショート（1段目）: `vertical-ass` で本編の .ass から縦用 .ass を作る（大きさ・座標の変換）。`check` で縦用 .ass を検査する。`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う .ass をエラーにする
 
 ## 予定
 
@@ -30,14 +31,16 @@
 - `[[layers]]`：背景の上に画像・GIF を複数重ねる（位置・大きさ・表示する区間）
 - 背景をゆっくり拡大・移動させる（Ken Burns 効果）
 
-### 縦型版・ショート動画
+### 縦型のショート（続き）
 
-- `[variants.<名前>]`：`size` とスタイルの上書き（例: `styles.Lyrics = { fontsize = 56, alignment = 5 }`）
-  - 同じ `lyrics.ass` から、PlayRes を書き換えた .ass を作る
-  - `\pos` の座標は解像度の比で変換する
-  - `build --variant vertical`、`preview-bg --variant vertical`
-- `[[shorts]]`：`name`・`start`・`end`・`variant`（時刻の書式は `[[thumbnails]]` の `at` と同じ）。`build --shorts` で `build/shorts-<name>.mp4` を書き出す
-- はみ出しの検査を派生版ごとに行う。`\pos` の行も、位置と配置から幅を概算して対象にする
+本編から区間を指定して、縦型の切り抜きショートを書き出す（issue #22）。
+
+- `preview-bg --vertical`：Aegisub で開く縦の下敷き（`build/preview/vertical-bg.mp4`）
+- 区間は縦用 .ass のコメント行（スタイル `Short`、本文がショートの名前）に置き、`[[shorts]]` の `name` とつなぐ。区間の検査
+- 縦用 .ass の歌詞と本編の歌詞の突き合わせ（本編を直して縦を直し忘れたら警告する）
+- `utavideo shorts`：`build/shorts/<name>.mp4`。同じ区間の 16:9 版（`build/shorts/wide/<name>.mp4`）、区間の端の音声のフェード
+- 画面の作り方 `layout = "blur"`：本編をぼかした背景の帯に置く
+- 後で: ショートのタイトル・概要欄、`release` でショートも残す、アバターを縦で別の位置に置く
 
 ### カラオケ用の音源動画
 

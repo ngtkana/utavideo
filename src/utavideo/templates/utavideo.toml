@@ -41,6 +41,11 @@ file = "src/thumbnail.ass"  # 文字を組む .ass（Aegisub で編集）
 # at = "1:23.5"            # 背景が GIF・動画のとき、使うフレームの時刻（省略時は 0）
 # focus = [0.5, 0.5]       # 省略時は video.focus
 
+# [vertical]
+# 縦型のショート（utavideo vertical-ass が本編の歌詞から縦用 .ass を作る）
+# size = [1080, 1920]
+# lyrics = "src/vertical.ass"
+
 [description]
 # 概要欄とタイトル（utavideo description）。見出しなどの書式はユーザー設定で変える
 text = """

@@ -96,9 +96,19 @@ class Audio(_Model):
     file: Path
 
 
+def _check_even_size(size: tuple[int, int]) -> tuple[int, int]:
+    if size[0] % 2 or size[1] % 2:
+        raise ValueError("幅と高さは偶数にしてください（yuv420p の制約）")
+    return size
+
+
+# 動画の解像度。yuv420p で書き出すので偶数
+VideoSize = Annotated[tuple[PositiveInt, PositiveInt], AfterValidator(_check_even_size)]
+
+
 class Video(_Model):
     background: Path
-    size: tuple[PositiveInt, PositiveInt] = (1920, 1080)
+    size: VideoSize = (1920, 1080)
     fps: PositiveInt = 30
     crf: int = Field(default=18, ge=0, le=51)
     preset: Preset = "slow"
@@ -106,13 +116,6 @@ class Video(_Model):
     focus: Focus = (0.5, 0.5)
     scale_flags: ScaleFlags = "lanczos"
     pad_color: str = "black"
-
-    @field_validator("size")
-    @classmethod
-    def _even_size(cls, size: tuple[int, int]) -> tuple[int, int]:
-        if size[0] % 2 or size[1] % 2:
-            raise ValueError("幅と高さは偶数にしてください（yuv420p の制約）")
-        return size
 
 
 class Lyrics(_Model):
@@ -164,6 +167,13 @@ class Thumbnail(_Model):
     focus: Focus | None = None  # None なら video.focus
 
 
+class Vertical(_Model):
+    """縦型のショートの共通設定。"""
+
+    size: VideoSize = (1080, 1920)
+    lyrics: Path = Path("src/vertical.ass")
+
+
 class ProjectConfig(_Model):
     song: Song
     audio: Audio
@@ -174,6 +184,7 @@ class ProjectConfig(_Model):
     materials: tuple[Material, ...] = ()
     description: Description | None = None
     thumbnails: tuple[Thumbnail, ...] = ()
+    vertical: Vertical = Field(default_factory=Vertical)
 
     @field_validator("thumbnails")
     @classmethod

@@ -2,6 +2,7 @@
 
 import filecmp
 import functools
+import os
 import re
 import shutil
 import sys
@@ -16,7 +17,7 @@ import typer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from utavideo import description, fonts, graph, layout, subs
+from utavideo import description, fonts, graph, layout, subs, vertical
 from utavideo.config import PROJECT_CONFIG_NAME, Thumbnail, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import (
@@ -170,14 +171,17 @@ class _FontSearch:
         return cls(dirs, fonts.load_index(dirs, cache_file))
 
 
-def _check_fonts(script: pysubs2.SSAFile, search: _FontSearch) -> tuple[list[subs.Issue], tuple[Path, ...]]:
+def _check_fonts(
+    script: pysubs2.SSAFile, search: _FontSearch, *, overflows: bool = True
+) -> tuple[list[subs.Issue], tuple[Path, ...]]:
     """使っているフォントを探し、見つからないフォントのエラーと、はみ出しそうな行の警告を返す。"""
     resolution = fonts.resolve(search.index, subs.used_fonts(script))
     issues: list[subs.Issue] = []
     for name in resolution.missing:
         searched = ", ".join(map(str, search.dirs)) or "（なし）"
         issues.append(subs.Issue("error", f"フォント {name!r} が見つかりません（探した場所: {searched}）"))
-    issues += layout.overflows(script, search.index.lookup)
+    if overflows:
+        issues += layout.overflows(script, search.index.lookup)
     return issues, resolution.files
 
 
@@ -393,6 +397,11 @@ def check(project_dir: ProjectOption = None) -> None:
         console.print(f"  サムネイル: {thumb.name}（{size[0]}x{size[1]}、{thumb.file}）", markup=False)
     # 背景のファイル自体の検査は analyze で済んでいる
     issues += analyze_thumbnails(project, config.thumbnails, bg_only=False, search=search).issues
+    # ショートを作らない曲では縦用 .ass は無いので、あるときだけ見る
+    if project.vertical_lyrics_path.is_file():
+        size = config.vertical.size
+        console.print(f"  縦用 .ass: {config.vertical.lyrics}（{size[0]}x{size[1]}）", markup=False)
+        issues += analyze_vertical(project, search)
 
     _print_issues(issues)
     if any(issue.level == "error" for issue in issues):
@@ -494,6 +503,63 @@ def release(
     shutil.copy2(source, tmp)
     replace_partial(tmp, dest)
     console.print(f"コピーしました: {dest}", markup=False)
+
+
+def analyze_vertical(project: Project, search: _FontSearch) -> list[subs.Issue]:
+    """縦用 .ass（あるときだけ呼ぶ）のファイル全体の検査（PlayRes・LayoutRes・スタイル・フォント）。
+
+    区間の外の行は書き出しに使わないので、行ごとの検査（はみ出しを含む）はここでは行わない。
+    """
+    try:
+        script = subs.load(project.vertical_lyrics_path)
+    except subs.SubtitleError as e:
+        return [subs.Issue("error", f"縦用 .ass: {e}")]
+    config = project.config
+    issues = subs.lint_vertical(script, size=config.vertical.size, overlay=config.overlay_text)
+    # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
+    font_issues, _ = _check_fonts(_compose(project, script, 0, "final"), search, overflows=False)
+    return [subs.Issue(i.level, f"縦用 .ass: {i.message}") for i in issues + font_issues]
+
+
+@app.command("vertical-ass")
+@_handle_errors
+def vertical_ass(project_dir: ProjectOption = None) -> None:
+    """本編の歌詞 .ass から、縦型のショート用の .ass（vertical.lyrics）を作る。既にあれば止まる。"""
+    project = _load_project(project_dir)
+    dest = project.vertical_lyrics_path
+    if dest.exists():
+        _fail(f"既にあります: {dest}（上書きしません。作り直すときは、消してから実行します）")
+    source = project.lyrics_path
+    if not source.is_file():
+        _fail(f"lyrics.file のファイルがありません: {source}")
+    size = project.config.vertical.size
+    conversion = vertical.convert(
+        subs.load(source),
+        size=size,
+        video_file=_path_from(dest.parent, project.vertical_preview_bg_output),
+        source_dir=_path_from(dest.parent, source.parent),
+    )
+    _write_text(dest, conversion.script.to_string("ass"))
+
+    console.print(f"作成しました: {dest}（{size[0]}x{size[1]}）", markup=False)
+    if conversion.unconverted:
+        lines = "\n".join(f"  {line}" for line in conversion.unconverted)
+        _print_issues(
+            [subs.Issue("warning", f"次の行の図形とベクターの \\clip は、座標を変換していません:\n{lines}")]
+        )
+    console.print(
+        "次にやること（詳しくは docs/workflow.md）: Aegisub で開き、スタイル Lyrics の大きさを上げてから、"
+        "長い行を \\N で改行する",
+        markup=False,
+    )
+
+
+def _path_from(start: Path, path: Path) -> str:
+    """start から見た path。Aegisub の Video File: に書くので / で区切る。"""
+    try:
+        return Path(os.path.relpath(path, start)).as_posix()
+    except ValueError:  # Windows でドライブが違うと相対パスにできない
+        return path.absolute().as_posix()
 
 
 @dataclass(frozen=True)
