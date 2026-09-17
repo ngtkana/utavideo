@@ -228,8 +228,12 @@ def test_line_split_into_two_lines_in_the_vertical_ass_is_not_warned() -> None:
 def test_lines_commented_out_in_the_vertical_ass_are_not_warned() -> None:
     vertical = _main_lines()
     vertical[1].type = "Comment"
-    vertical[1].text = "縦では出さない（本編と違う文字でもよい）"
+    vertical[1].text = "{\\pos(540,1200)}二行目の\\N歌詞"  # タグ・改行は変えてよい
     assert _match(_main_lines(), vertical) == []
+
+    # 文字の違うコメント行では、縦で消したとみなさない（本編の Dialogue 行と対にならないため）
+    vertical[1].text = "古い歌詞"
+    assert len(_match(_main_lines(), vertical)) == 1
 
     # コメント行は、Dialogue 行と一緒に割り当てられたら比べない
     main = [_event(1, 5, "前半と後半")]
@@ -273,14 +277,40 @@ def test_short_overlap_with_the_next_line_is_not_warned() -> None:
     assert _match(main, main) == []
 
 
-def test_two_main_lines_merged_into_one_vertical_line_are_warned() -> None:
+def test_two_main_lines_merged_into_one_vertical_line_are_not_warned() -> None:
     main = [_event(1, 3, "一行目"), _event(3, 5, "二行目")]
-    messages = _match(main, [_event(1, 5, "一行目二行目")])
-    # 重なりが同じなので先の行に割り当て、その行の文字と時刻、もう片方の行の対応の3つを警告する
+    # つないだ文字と時刻の範囲が合えば、改行を変えただけとみなす
+    assert _match(main, [_event(1, 5, "一行目二行目")]) == []
+    assert _match(main, [_event(1, 5, "一行目\\N二行目", "Lyrics2")]) == []
+    # 3行をまとめてもよい
+    three = [*main, _event(5, 7, "三行目")]
+    assert _match(three, [_event(1, 7, "一行目二行目三行目")]) == []
+    # 時刻の範囲が合わなければ、まとめずに1行ずつ比べる
+    assert len(_match(main, [_event(1, 4.5, "一行目二行目")])) == 3
+    # 文字が違えば、まとめずに1行ずつ比べる
+    messages = _match(main, [_event(1, 5, "一行目三行目")])
     assert len(messages) == 3
-    assert "本編「一行目」、縦用 .ass「一行目二行目」" in messages[0]
-    assert "縦用 .ass 0:00:01.000〜0:00:05.000" in messages[1]
+    assert "本編「一行目」、縦用 .ass「一行目三行目」" in messages[0]
     assert messages[2].startswith("本編の行に対応する縦用 .ass の行がありません: 0:00:03.000「二行目」")
+
+
+def test_merged_vertical_line_is_found_from_the_second_main_line() -> None:
+    # まとめた縦の行が、重なりの長い2行目に割り当てられても、つないで比べる
+    main = [_event(1, 3, "一行目"), _event(2.5, 5, "二行目")]
+    assert _match(main, [_event(1, 5, "一行目二行目")]) == []
+
+
+def test_split_line_is_not_taken_by_the_overlapping_next_main_line() -> None:
+    # 前の行を残したまま次の行を出す重ね方で、縦で1行目を2つに分ける
+    main = [_event(1, 5, "前半の歌詞後半の歌詞"), _event(3, 7, "次の行")]
+    vertical = [_event(1, 3, "前半の歌詞"), _event(3, 5, "後半の歌詞"), _event(3, 7, "次の行")]
+    assert _match(main, vertical) == []
+
+
+def test_empty_dialogue_lines_are_not_used_for_the_time_comparison() -> None:
+    main = [_event(1, 3, "歌詞")]
+    vertical = [_event(1, 3, "歌詞"), _event(0.5, 3, "{\\an8}")]
+    assert _match(main, vertical) == []
 
 
 def test_vertical_line_without_any_main_line_is_warned() -> None:
@@ -291,6 +321,16 @@ def test_vertical_line_without_any_main_line_is_warned() -> None:
 def test_drawing_lines_are_not_compared() -> None:
     main = [*_main_lines(), _event(0, 10, "{\\p1}m 0 0 l 100 0 100 100{\\p0}")]
     vertical = [*_main_lines(), _event(20, 30, "{\\p1}m 0 0 l 50 0 50 50")]
+    assert _match(main, vertical) == []
+
+
+def test_text_next_to_a_drawing_in_the_same_line_is_compared() -> None:
+    main = [_event(1, 3, "{\\p1}m 0 0 l 100 0 100 100{\\p0}新しい歌詞")]
+    vertical = [_event(1, 3, "{\\p1}m 0 0 l 50 0 50 50{\\p0}古い歌詞")]
+    assert _match(main, vertical) == [
+        "本編と文字が違います（0:00:01.000）: 本編「新しい歌詞」、縦用 .ass「古い歌詞」"
+    ]
+    vertical = [_event(1, 3, "{\\p4}m 0 0 l 50 0{\\p0}新しい{\\p1}m 0 0{\\p0}歌詞")]
     assert _match(main, vertical) == []
 
 

@@ -16,7 +16,7 @@ OVERLAY_LAYER = 100
 # POS_TAG と OVERRIDE_BLOCK は layout も使う（.ass のタグの書き方を2か所に持たない）
 POS_TAG = re.compile(r"\\(?:pos|move)\s*\(")
 OVERRIDE_BLOCK = re.compile(r"(\{[^}]*\})")  # 分割にも使うのでブロックを捕捉する
-DRAWING_TAG = re.compile(r"\\p\s*0*[1-9]")  # 上書きタグのブロックの中で探す
+DRAWING_TAG = re.compile(r"\\p\s*(\d+)")  # 上書きタグのブロックの中で探す
 
 _FADE_TAG = re.compile(r"\\fade?\s*\(")
 _FADE_ARGS = re.compile(r"\\fade?\s*\(([^)]*)\)")
@@ -243,6 +243,32 @@ def _overlaps(events: list[pysubs2.SSAEvent]) -> list[Issue]:
             if event.end > latest.end:
                 latest = event
     return issues
+
+
+def starts_drawing(block: str) -> bool | None:
+    """上書きタグのブロックの後が図形（\\p）か。\\p が無ければ None（それまでのまま）。"""
+    modes = DRAWING_TAG.findall(block)
+    return int(modes[-1]) != 0 if modes else None
+
+
+def text_without_drawings(text: str) -> str:
+    """上書きタグと、図形（\\p）の部分を除いた文字。
+
+    1つの行に図形と文字が混ざっていても（`{\\p1}m 0 0 l 1 1{\\p0}歌詞`）、文字だけを取り出す。
+    """
+    kept: list[str] = []
+    drawing = False
+    end = 0
+    for block in OVERRIDE_BLOCK.finditer(text):
+        if not drawing:
+            kept.append(text[end : block.start()])
+        mode = starts_drawing(block.group())
+        if mode is not None:
+            drawing = mode
+        end = block.end()
+    if not drawing:
+        kept.append(text[end:])
+    return "".join(kept)
 
 
 def describe(event: pysubs2.SSAEvent) -> str:
