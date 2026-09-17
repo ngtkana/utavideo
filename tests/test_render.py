@@ -10,6 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import MakeFont
+from utavideo import cli
 from utavideo.cli import app
 from utavideo.project import scaffold
 
@@ -182,7 +183,7 @@ def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
     assert _max_alpha(output, 1.8) == 0
 
 
-def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
+def test_release_numbers_videos(project: Path) -> None:
     _invoke("build", "-C", str(project))
     _invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.0.mp4").is_file()
@@ -199,11 +200,44 @@ def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
     _invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.1.mp4").is_file()
 
-    built_at = (project / "build/main.mp4").stat().st_mtime
-    os.utime(project / "src/lyrics.ass", (built_at + 10, built_at + 10))
-    stale = runner.invoke(app, ["release", "-C", str(project), "--version", "v1.3"])
-    assert stale.exit_code == 1
-    assert "lyrics.ass" in stale.output
+
+def test_release_compares_the_inputs_recorded_by_build(project: Path) -> None:
+    _invoke("build", "-C", str(project))
+    assert (project / "build/.work/main-inputs.json").is_file()
+    later = (project / "build/main.mp4").stat().st_mtime + 10
+
+    # 実際のフォントの記録を読み戻して比べられる（細かい場合分けは test_release.py）
+    config = project / "utavideo.toml"
+    config.write_text(config.read_text(encoding="utf-8") + '[description]\ntext = "概要"\n', encoding="utf-8")
+    for path in (config, project / "src/lyrics.ass"):
+        os.utime(path, (later, later))
+    _invoke("release", "-C", str(project))
+
+
+@pytest.mark.parametrize(
+    ("reader", "attr", "rel", "name"),
+    [
+        (cli.subs, "load", "src/lyrics.ass", "lyrics.file"),
+        (cli, "probe_audio", "src/mix/テスト v1.2.wav", "audio.file"),
+    ],
+)
+def test_release_stops_when_an_input_changes_after_build_read_it(
+    project: Path, monkeypatch: pytest.MonkeyPatch, reader: object, attr: str, rel: str, name: str
+) -> None:
+    # 読んだ後（フォント一覧の作成中など）に保存されると、動画は古い内容になる。記録も古い側でないと止まらない
+    original = getattr(reader, attr)
+
+    def read_then_save(path: Path):
+        result = original(path)
+        (project / rel).write_bytes((project / rel).read_bytes() + b"\n")
+        return result
+
+    monkeypatch.setattr(reader, attr, read_then_save)
+    _invoke("build", "-C", str(project))
+
+    result = runner.invoke(app, ["release", "-C", str(project)])
+    assert result.exit_code == 1
+    assert f"（{name}）" in result.output
 
 
 def test_locked_output_keeps_partial(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:

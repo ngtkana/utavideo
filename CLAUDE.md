@@ -9,12 +9,13 @@
 ## 構成
 
 - `src/utavideo/cli.py`：コマンド定義。`analyze()` で検査し、`_render()` で書き出す
-- `config.py`：toml を pydantic で検証する。未知の項目はエラー
+- `config.py`：toml を pydantic で検証する。未知の項目はエラー。動画の描画に効かない項目には `NOT_RENDERED` の印を付ける（付けないと、変えたときに `release` が止まる）
 - `project.py`：曲フォルダの規約（パス、バージョン名）、雛形の作成
 - `subs.py`：pysubs2 で .ass の検査・フェード挿入・曲名表示の追加
 - `description.py`：クレジット・素材から概要欄とタイトルを組み立てる
 - `fonts.py`：fontTools でフォント名→ファイルの対応表を作る。必要なファイルだけのリンク集を libass の fontsdir に渡す
 - `layout.py`：行の幅を概算して、はみ出しそうな行を警告する（libass は空白の無い日本語を自動改行しない）
+- `inputs.py`：`build` の入力（素材の中身・印の無い設定・フォントの stat）を記録し、`release` で比べる
 - `graph.py`：ffmpeg の引数を組み立てる純粋関数。`ffmpeg.py` が実行する
 - `templates/`：`new` / `init` が書き出す雛形
 
