@@ -10,6 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import MakeFont
+from utavideo import cli
 from utavideo.cli import app
 from utavideo.project import scaffold
 
@@ -211,6 +212,32 @@ def test_release_compares_the_inputs_recorded_by_build(project: Path) -> None:
     for path in (config, project / "src/lyrics.ass"):
         os.utime(path, (later, later))
     _invoke("release", "-C", str(project))
+
+
+@pytest.mark.parametrize(
+    ("reader", "attr", "rel", "name"),
+    [
+        (cli.subs, "load", "src/lyrics.ass", "lyrics.file"),
+        (cli, "probe_audio", "src/mix/テスト v1.2.wav", "audio.file"),
+    ],
+)
+def test_release_stops_when_an_input_changes_after_build_read_it(
+    project: Path, monkeypatch: pytest.MonkeyPatch, reader: object, attr: str, rel: str, name: str
+) -> None:
+    # 読んだ後（フォント一覧の作成中など）に保存されると、動画は古い内容になる。記録も古い側でないと止まらない
+    original = getattr(reader, attr)
+
+    def read_then_save(path: Path):
+        result = original(path)
+        (project / rel).write_bytes((project / rel).read_bytes() + b"\n")
+        return result
+
+    monkeypatch.setattr(reader, attr, read_then_save)
+    _invoke("build", "-C", str(project))
+
+    result = runner.invoke(app, ["release", "-C", str(project)])
+    assert result.exit_code == 1
+    assert f"（{name}）" in result.output
 
 
 def test_locked_output_keeps_partial(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:

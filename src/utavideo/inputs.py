@@ -26,16 +26,24 @@ def _files(project: Project) -> list[tuple[str, Path]]:
     ]
 
 
-def snapshot(project: Project, font_files: Iterable[Path]) -> dict[str, Any]:
-    """描画に効く入力の要約。値は JSON にできる形で、記録を読み戻したものとそのまま比べられる。"""
-    values: dict[str, Any] = {name: _file_digest(path) for name, path in _files(project)}
+def snapshot(project: Project) -> dict[str, Any]:
+    """描画に効く入力のうち、フォント以外の要約。値は JSON にできる形で、記録を読み戻したものと比べられる。
+
+    build では、utavideo や ffmpeg が素材を読むより前に呼ぶ。読むまでの間に変わっても、記録が古い側になって
+    release が止まる。
+    """
     # utavideo.toml は書き方ではなく、読み込んだ値のうち描画に効くもので比べる
     config = json.dumps(rendered_values(project.config), ensure_ascii=False, sort_keys=True)
-    values[PROJECT_CONFIG_NAME] = hashlib.sha256(config.encode()).hexdigest()
+    values: dict[str, Any] = {PROJECT_CONFIG_NAME: hashlib.sha256(config.encode()).hexdigest()}
+    values |= {name: _file_digest(path) for name, path in _files(project) if name != PROJECT_CONFIG_NAME}
+    return values
+
+
+def with_fonts(values: dict[str, Any], font_files: Iterable[Path]) -> dict[str, Any]:
+    """snapshot に、使うフォントの要約を足したもの。使うフォントは歌詞を読んだ後にしか分からない。"""
     # 中身を読むと重いので、パス・大きさ・更新時刻で代える（issue #26）
     unique = sorted({path.absolute() for path in font_files})
-    values[FONTS] = [[str(path), *_stamp(path)] for path in unique]
-    return values
+    return {**values, FONTS: [[str(path), *_stamp(path)] for path in unique]}
 
 
 def record_text(project: Project, inputs: dict[str, Any]) -> str:
@@ -55,7 +63,9 @@ def stale_inputs(project: Project) -> str | None:
         return f"build/main.mp4 より新しい入力があります（{', '.join(newer)}）" if newer else None
     fonts = [Path(entry[0]) for entry in recorded.get(FONTS, [])]
     # 記録に無い入力（形式を変えたときなど）も、変わったものとして扱う
-    changed = [name for name, value in snapshot(project, fonts).items() if recorded.get(name) != value]
+    changed = [
+        name for name, value in with_fonts(snapshot(project), fonts).items() if recorded.get(name) != value
+    ]
     return (
         f"build/main.mp4 を書き出した後に変わった入力があります（{', '.join(changed)}）" if changed else None
     )

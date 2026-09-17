@@ -163,6 +163,8 @@ def _compose(project: Project, lyrics: pysubs2.SSAFile, duration_ms: int, mode: 
 def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     require_tools()
     project = _load_project(project_dir)
+    # analyze が素材を読む前に取る（理由は inputs.snapshot）
+    built_inputs = inputs.snapshot(project) if mode == "final" else None
     analysis = analyze(project, mode)
     _print_issues(analysis.issues)
     if not analysis.ok:
@@ -195,9 +197,9 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
         "preview": project.preview_bg_output,
         "overlay": project.overlay_output,
     }[mode]
-    # 入力は書き出す前に読む。書き出している間に変わっても、記録は古い側になり release が止まる
-    built_inputs = inputs.snapshot(project, analysis.font_files) if mode == "final" else None
     if built_inputs is not None:
+        # フォントは ffmpeg が書き出し中に読むので、その前に stat を取る
+        built_inputs = inputs.with_fonts(built_inputs, analysis.font_files)
         # 書き出しが途中で終わったとき、前の記録が新しい動画のものに見えないように先に消す
         project.inputs_record.unlink(missing_ok=True)
 
