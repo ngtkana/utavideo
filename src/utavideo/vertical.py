@@ -16,7 +16,9 @@ import pysubs2
 from utavideo import subs
 
 SHORT_STYLE = "Short"
-BAND_STYLE = "VerticalBand"
+# このスタイル名で始まる行は、縦だけの文字（帯の曲名など）。歌詞として扱わない
+VERTICAL_STYLE_PREFIX = "Vertical"
+BAND_STYLE = f"{VERTICAL_STYLE_PREFIX}Band"
 BASE_STYLE = "Lyrics"
 
 # 本編の下敷きに合わせた Aegisub の表示の設定（縦横比の上書き・拡大率）を、縦の下敷きに持ち込まない

@@ -9,7 +9,8 @@
 - 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定）
 
 - サムネイル: 背景のフレーム（`at`）にサムネイル用の .ass を描いた PNG。サイズ違いは `[[thumbnails]]` を並べる。背景の残す位置（`focus`）は動画にも効く
-- 縦型のショート（1段目）: `vertical-ass` で本編の .ass から縦用 .ass を作る（大きさ・座標の変換）。`check` で縦用 .ass を検査する。`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う .ass をエラーにする
+- 縦型のショート（1段目）: `vertical-ass` で本編の .ass から縦用 .ass を作る（大きさ・座標の変換）。`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う .ass をエラーにする
+- 縦型のショート（2段目）: `preview-bg --vertical` で縦の下敷き（`vertical.focus`）。区間は縦用 .ass のコメント行（スタイル `Short`、本文がショートの名前）に置き、`[[shorts]]` の `name` とつなぐ。`check` で縦用 .ass と区間を検査する
 
 ## 予定
 
@@ -35,11 +36,9 @@
 
 本編から区間を指定して、縦型の切り抜きショートを書き出す（issue #22）。
 
-- `preview-bg --vertical`：Aegisub で開く縦の下敷き（`build/preview/vertical-bg.mp4`）
-- 区間は縦用 .ass のコメント行（スタイル `Short`、本文がショートの名前）に置き、`[[shorts]]` の `name` とつなぐ。区間の検査
 - 縦用 .ass の歌詞と本編の歌詞の突き合わせ（本編を直して縦を直し忘れたら警告する）
-- `utavideo shorts`：`build/shorts/<name>.mp4`。同じ区間の 16:9 版（`build/shorts/wide/<name>.mp4`）、区間の端の音声のフェード
-- 画面の作り方 `layout = "blur"`：本編をぼかした背景の帯に置く
+- `utavideo shorts`：`build/shorts/<name>.mp4`。同じ区間の 16:9 版（`build/shorts/wide/<name>.mp4`）、区間の端の音声のフェード、ショートごとの `focus`、区間の長さが投稿先の上限を超える警告
+- 画面の作り方 `layout = "blur"`：本編をぼかした背景の帯に置く（`preview-bg --vertical` の下敷きにも）
 - 後で: ショートのタイトル・概要欄、`release` でショートも残す、アバターを縦で別の位置に置く
 
 ### カラオケ用の音源動画

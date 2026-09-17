@@ -54,12 +54,12 @@ utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>] [--slug <�
 utavideo check [-C <曲フォルダ>]
 ```
 
-[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさ・縦用 .ass の場所と大きさを表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。`vertical.lyrics` のファイル（縦用 .ass）があれば、それも検査します。無ければ見ません。
+[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさ・縦用 .ass の場所と大きさ・ショートの名前を表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。`[[shorts]]` があれば、縦用 .ass とすべてのショートの区間も検査します（[ショートの検査](#ショートの検査)）。`[[shorts]]` が無ければ、縦用 .ass のファイルがあっても見ません。
 
 ## preview-bg / build / overlay
 
 ```sh
-utavideo preview-bg [-C <曲フォルダ>]
+utavideo preview-bg [-C <曲フォルダ>] [--vertical]
 utavideo build [-C <曲フォルダ>]
 utavideo overlay [-C <曲フォルダ>]
 ```
@@ -67,13 +67,21 @@ utavideo overlay [-C <曲フォルダ>]
 | コマンド | 出力 | 入るもの |
 |---|---|---|
 | `preview-bg` | `build/preview/bg.mp4` | 背景・曲名表示・音声（歌詞の行は入れない） |
+| `preview-bg --vertical` | `build/preview/vertical-bg.mp4` | 縦型のショートの下敷き。背景を `vertical.size` に合わせたもの・曲名表示・音声（縦用 .ass の行は入れない） |
 | `build` | `build/main.mp4` | 背景・歌詞・曲名表示・音声 |
 | `overlay` | `build/overlay.mov` | 歌詞・曲名表示（背景は透明）・音声。背景のファイルは不要 |
 
 - 書き出す前に[検査](#検査項目)し、エラーがあれば書き出しません。警告は表示して続けます
 - `preview-bg` は、歌詞の行についての検査を行いません
 - 動画の長さは音源の長さです
-- 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass` に書きます（自動のフェードと曲名表示が入ったもの）
+- 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass`・`vertical-preview.ass` に書きます（自動のフェードと曲名表示が入ったもの）
+
+`--vertical` は、Aegisub でショートの区間を置き、縦用 .ass を組むときに開く下敷きを、曲の頭から終わりまで書き出します。
+
+- 背景は `[video]` の `fit`・`scale_flags`・`pad_color` と `vertical.focus` で `vertical.size` に合わせます
+- 曲名表示は、縦用 .ass の `overlay_text.style` のスタイルとフォントで描きます。縦用 .ass が要るので、`vertical-ass` の後に実行します
+- `[[shorts]]` は無くてもかまいません（区間を置く前に使うため）。検査は[ショートの検査](#ショートの検査)の表の `preview-bg --vertical` の列のとおりです
+- 縦型のショートの画面の作り方のうち、背景を縦に切り取る形だけに対応しています（本編をぼかした帯に置く形は [roadmap.md](roadmap.md)）
 
 ## thumbnail
 
@@ -184,7 +192,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | フォント | 使っているフォントが見つからない |
 | サムネイル（`thumbnail`・`check`） | 背景が画像なのに `at` を書いた、`at` が背景の長さ以上（長さは ffprobe で取る） |
 | サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイルを使っている、フォントが見つからない |
-| 縦用 .ass（`check`。`vertical.lyrics` のファイルがあるときだけ。`build` などは止めない） | 読めない、`PlayResX`・`PlayResY` が無い、`vertical.size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイルを使っている、曲名表示を出すのに `overlay_text.style` のスタイルが無い、フォント（曲名表示を含む）が見つからない。行ごとの検査（重なり・はみ出しなど）はしない |
+| 縦用 .ass・ショートの区間 | [ショートの検査](#ショートの検査) |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
 | 実行環境 | ffmpeg・ffprobe が無い |
 
@@ -195,16 +203,38 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | 歌詞の行 | `\pos`・`\move` を使っている、表示時間が 0 以下、音声が終わった後に始まる、音声の終わりで途中で切られる、同じスタイル・同じレイヤーで重なる、画面からはみ出しそう |
 | サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | 0 秒に表示されない行（始まりが 0 秒より後、または終わりが 0 秒以前）、`\fad`・`\fade` のフェードインが 0 秒で終わっていない、画面からはみ出しそう（`\pos` の行は対象外なので、サムネイルではほとんど検査されない） |
 | サムネイル（`thumbnail`・`check`） | 背景の長さを取得できず、`at` を確かめられない |
-| `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空 |
+| 縦用 .ass・ショートの区間 | [ショートの検査](#ショートの検査) |
+| `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空、本編の .ass にスタイル `Short` の行がある（区間は縦用 .ass に書く） |
 | 概要欄（`[description]` がある曲の `check`） | `video.background` がどの `materials.files` にも無い、`materials.files` のファイルが無い、タイトルの `{singers}` に入る人がいない、タイトルが 100 文字・概要欄が 5000 バイトを超える、`<` か `>` を含む（YouTube の上限） |
 
 はみ出しの概算で反映するタグは [customization.md](customization.md#utavideo-が読むタグ) を参照してください。
+
+### ショートの検査
+
+縦用 .ass（`vertical.lyrics`）と、そこに置くショートの区間の検査です。縦用 .ass の誤りで本編の `build`・`preview-bg`・`overlay` は止めません。`check` は `[[shorts]]` があるときだけ行い、エラーがあれば終了コード 1 にします。
+
+| 条件 | 扱い | `check` | `preview-bg --vertical` |
+|---|---|---|---|
+| 本編の .ass（`lyrics.file`）の `LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う | エラー | ○（[歌詞](#エラー書き出さない)の検査） | ○（本編の .ass があるとき） |
+| 縦用 .ass が無い（`utavideo vertical-ass` で作れる、と表示）・読めない | エラー | ○ | ○ |
+| 縦用 .ass の `PlayResX`・`PlayResY` が無い・`vertical.size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイル、曲名表示を出すのに `overlay_text.style` のスタイルが無い、フォント（曲名表示を含む）が見つからない | エラー | ○ | ○ |
+| `[[shorts]]` の `name` に対応する区間の行が無い・2つ以上ある | エラー | ○ | － |
+| スタイル `Short` の行が、コメント行でなく Dialogue になっている（画面に出てしまう） | エラー | ○ | － |
+| 区間の終わりが始まり以前、区間の終わりが音源の長さを超える | エラー | ○ | － |
+| どの `[[shorts]]` の `name` にも合わない区間の行がある | 警告 | ○ | － |
+| 区間の頭か終わりが、歌詞の行の途中にかかる（行の時刻を表示） | 警告 | ○ | － |
+| 区間に入る行の、[歌詞の行](#警告)と同じ警告（`\pos`・`\move`、表示時間、音源の長さ、重なり、はみ出し） | 警告 | ○ | － |
+
+- 区間の行は、スタイル `Short` の行で、本文の前後の空白を除いたものを `name` と大文字小文字も含めて比べます
+- 歌詞の行は、Dialogue 行のうち、スタイルが `Short` でも `Vertical` で始まるもの（`VerticalBand` など、縦だけの文字）でもない行です
+- 区間に入る行は、区間と時刻が重なる Dialogue 行（`Short` を除く）です。区間の外の行（本編から写したまま使わない行）は、行ごとの検査をしません
+- 区間の長さ・音源の長さを確かめられない区間（区間の行の誤り、音源が無いとき）では、区間の端と区間に入る行の検査をしません
 
 ## 出力の形式（変更不可）
 
 | 出力 | 映像 | 音声 |
 |---|---|---|
 | `build/main.mp4` | H.264（`video.crf`・`video.preset`）、yuv420p、BT.709 | AAC 320kbps、48kHz |
-| `build/preview/bg.mp4` | H.264（ultrafast、CRF 28、15 フレームごとにキーフレーム） | AAC 160kbps、48kHz |
+| `build/preview/bg.mp4`・`build/preview/vertical-bg.mp4` | H.264（ultrafast、CRF 28、15 フレームごとにキーフレーム） | AAC 160kbps、48kHz |
 | `build/overlay.mov` | ProRes 4444（アルファ付き）、BT.709 | PCM 24bit、48kHz |
 | `build/thumbnail/<name>.png`・`build/thumbnail/bg/<name>.png` | PNG（RGB 8bit、圧縮レベル 9） | なし |

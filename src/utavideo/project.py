@@ -94,6 +94,10 @@ class Project:
         return self.resolve(self.config.vertical.lyrics)
 
     @property
+    def vertical_focus(self) -> tuple[float, float]:
+        return self.config.vertical.focus or self.config.video.focus
+
+    @property
     def thumbnail_dir(self) -> Path:
         return self.build_dir / "thumbnail"
 

@@ -36,6 +36,11 @@ class Issue:
     message: str
 
 
+def prefixed(issues: list[Issue], prefix: str) -> list[Issue]:
+    """どの .ass・どの出力についての問題かを、メッセージの頭に付ける。"""
+    return [Issue(i.level, prefix + i.message) for i in issues]
+
+
 def load(path: Path) -> pysubs2.SSAFile:
     try:
         # Aegisub は BOM 付きで保存することがある
@@ -140,19 +145,24 @@ def _play_res_issues(subs: pysubs2.SSAFile, size: tuple[int, int], label: str) -
     if res != size:
         message = f"PlayRes {res[0]}x{res[1]} が{label} {size[0]}x{size[1]} と一致しません"
         issues.append(Issue("error", message))
-    layout = layout_res(subs)
-    if layout is not None and layout[0] * res[1] != layout[1] * res[0]:
-        # libass は LayoutRes と PlayRes の縦横比の違いの分だけ、文字を横か縦に潰して描く。
-        # 縦横比が同じで大きさだけ違うときは文字の形・位置は変わらないので止めない
-        # （docs/verification/20260917-vertical-ass.md）
-        message = (
-            f"LayoutResX / LayoutResY {layout[0]}x{layout[1]} の縦横比が"
-            f" PlayRes {res[0]}x{res[1]} と違うので、"
-            "文字が潰れて描かれます"
-            "（テキストエディタで LayoutResX・LayoutResY の行を消すか、PlayRes と同じ値にする）"
-        )
-        issues.append(Issue("error", message))
-    return issues
+    return issues + layout_res_issues(subs)
+
+
+def layout_res_issues(subs: pysubs2.SSAFile) -> list[Issue]:
+    """LayoutResX / LayoutResY の縦横比が PlayRes と違うときのエラー。PlayRes が無ければ見ない。"""
+    res, layout = play_res(subs), layout_res(subs)
+    if res is None or layout is None or layout[0] * res[1] == layout[1] * res[0]:
+        return []
+    # libass は LayoutRes と PlayRes の縦横比の違いの分だけ、文字を横か縦に潰して描く。
+    # 縦横比が同じで大きさだけ違うときは文字の形・位置は変わらないので止めない
+    # （docs/verification/20260917-vertical-ass.md）
+    message = (
+        f"LayoutResX / LayoutResY {layout[0]}x{layout[1]} の縦横比が"
+        f" PlayRes {res[0]}x{res[1]} と違うので、"
+        "文字が潰れて描かれます"
+        "（テキストエディタで LayoutResX・LayoutResY の行を消すか、PlayRes と同じ値にする）"
+    )
+    return [Issue("error", message)]
 
 
 def _undefined_style_issues(subs: pysubs2.SSAFile) -> list[Issue]:
@@ -178,10 +188,13 @@ def lint(
 ) -> list[Issue]:
     issues = _play_res_issues(subs, size, "動画サイズ")
     issues += _overlay_style_issues(subs, overlay)
-
-    events = dialogues(subs)
     issues += _undefined_style_issues(subs)
+    return issues + lint_lines(dialogues(subs), duration_ms=duration_ms)
 
+
+def lint_lines(events: list[pysubs2.SSAEvent], *, duration_ms: int) -> list[Issue]:
+    """歌詞の行ごとの警告（\\pos・表示時間・音源の長さ・重なり）。events は Dialogue 行。"""
+    issues: list[Issue] = []
     positioned = [e for e in events if POS_TAG.search(e.text)]
     if positioned:
         where = ", ".join(describe(e) for e in positioned[:5])
