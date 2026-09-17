@@ -16,6 +16,7 @@ OVERLAY_LAYER = 100
 # POS_TAG と OVERRIDE_BLOCK は layout も使う（.ass のタグの書き方を2か所に持たない）
 POS_TAG = re.compile(r"\\(?:pos|move)\s*\(")
 OVERRIDE_BLOCK = re.compile(r"(\{[^}]*\})")  # 分割にも使うのでブロックを捕捉する
+DRAWING_TAG = re.compile(r"\\p\s*0*[1-9]")  # 上書きタグのブロックの中で探す
 
 _FADE_TAG = re.compile(r"\\fade?\s*\(")
 _FADE_ARGS = re.compile(r"\\fade?\s*\(([^)]*)\)")

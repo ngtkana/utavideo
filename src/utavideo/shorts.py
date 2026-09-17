@@ -4,8 +4,9 @@
 utavideo.toml の [[shorts]] と名前でつなぐ。区間の外の行は書き出しにも検査にも使わない。
 """
 
+import re
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pysubs2
 
@@ -104,14 +105,17 @@ def _edge_issues(lyric_lines: list[pysubs2.SSAEvent], section: Section) -> list[
     return issues
 
 
+def _in_sections(event: pysubs2.SSAEvent, sections: Sequence[Section]) -> bool:
+    return any(event.start < s.end_ms and event.end > s.start_ms for s in sections)
+
+
 def lines_in_sections(script: pysubs2.SSAFile, sections: Sequence[Section]) -> pysubs2.SSAFile:
     """区間と時刻が重なる、描く行（区間の行を除く Dialogue 行）だけを残した複製。"""
     selected = subs.without_events(script)
     selected.events = [
         event
         for event in subs.dialogues(script)
-        if event.style != SHORT_STYLE
-        and any(event.start < s.end_ms and event.end > s.start_ms for s in sections)
+        if event.style != SHORT_STYLE and _in_sections(event, sections)
     ]
     return selected
 
@@ -127,3 +131,96 @@ def main_lyrics_issues(lyrics: pysubs2.SSAFile) -> list[Issue]:
         f"ショートの区間は縦用 .ass（vertical.lyrics）に書きます: {where}"
     )
     return [Issue("warning", message)]
+
+
+# 本編と縦の時刻の差をここまで許す（Aegisub の時刻はセンチ秒なので、1つ分）
+MATCH_TOLERANCE_MS = 10
+# 比べるときに除くもの。改行・位置・大きさの変更では何も出さないため
+_NOT_TEXT = re.compile(r"\\[Nnh]|\s")
+
+
+def _plain_text(event: pysubs2.SSAEvent) -> str:
+    return _NOT_TEXT.sub("", subs.OVERRIDE_BLOCK.sub("", event.text))
+
+
+def _is_compared(event: pysubs2.SSAEvent) -> bool:
+    """突き合わせに使う歌詞の行か。図形（\\p）の行は文字が無いので比べない。"""
+    drawing = any(subs.DRAWING_TAG.search(block) for block in subs.OVERRIDE_BLOCK.findall(event.text))
+    return _is_lyric_line(event) and not drawing
+
+
+def _overlap_ms(a: pysubs2.SSAEvent, b: pysubs2.SSAEvent) -> int:
+    return max(0, min(a.end, b.end) - max(a.start, b.start))
+
+
+@dataclass
+class _MainLine:
+    event: pysubs2.SSAEvent
+    text: str
+    assigned: list[pysubs2.SSAEvent] = field(default_factory=list)
+
+
+def match_lyrics(main: pysubs2.SSAFile, script: pysubs2.SSAFile, sections: Sequence[Section]) -> list[Issue]:
+    """区間に入る縦の歌詞が、本編の歌詞と食い違っていないかの警告。
+
+    縦の歌詞の行（コメント行も含む）を、重なる時間がいちばん長い本編の Dialogue 行に割り当て、
+    本編の行ごとに、割り当てた行の文字と時刻を比べる。割り当ては区間の外の行も使う
+    （区間の端をまたぐ行を、区間の中の片側だけで比べないため）。
+    """
+    candidates = [_MainLine(e, _plain_text(e)) for e in subs.dialogues(main) if _is_compared(e)]
+    found: list[tuple[int, Issue]] = []
+    # 開始の順に割り当てるので、本編の行ごとの assigned も開始の順に並ぶ
+    for event in sorted((e for e in script.events if _is_compared(e)), key=lambda e: e.start):
+        text = _plain_text(event)
+        best = max(
+            (c for c in candidates if _overlap_ms(event, c.event) > 0),
+            # 重なりが同じなら、文字を含む行 → 文字が同じ行 → スタイルが同じ行 → レイヤーが同じ行 →
+            # まだ割り当てていない行（縁取り用に同じ行を重ねたとき、1つずつ組にする） → ファイルの先の行
+            key=lambda c: (
+                _overlap_ms(event, c.event),
+                bool(c.text),
+                c.text == text,
+                c.event.style == event.style,
+                c.event.layer == event.layer,
+                not c.assigned,
+            ),
+            default=None,
+        )
+        if best is not None:
+            best.assigned.append(event)
+        elif event.type == "Dialogue" and text and _in_sections(event, sections):
+            message = f"本編に時刻の重なる行がありません: {describe(event)}"
+            found.append((event.start, Issue("warning", message)))
+
+    for line in candidates:
+        if _in_sections(line.event, sections):
+            found += [(line.event.start, issue) for issue in _compare(line)]
+    return [issue for _, issue in sorted(found, key=lambda item: item[0])]
+
+
+def _compare(line: _MainLine) -> list[Issue]:
+    main = line.event
+    if not line.assigned:
+        if not line.text:  # 何も描かない行は、縦に無くてよい
+            return []
+        message = (
+            f"本編の行に対応する縦用 .ass の行がありません: {describe(main)}"
+            "（縦で出さないなら、縦用 .ass のこの時刻にコメント行を置く）"
+        )
+        return [Issue("warning", message)]
+    drawn = [e for e in line.assigned if e.type == "Dialogue"]
+    if not drawn:  # すべてコメント行なら、縦で意図的に消した行
+        return []
+    issues: list[Issue] = []
+    text = "".join(_plain_text(e) for e in drawn)
+    if text != line.text:
+        message = f"本編と文字が違います（{_time(main.start)}）: 本編「{line.text}」、縦用 .ass「{text}」"
+        issues.append(Issue("warning", message))
+    start, end = drawn[0].start, max(e.end for e in drawn)
+    if abs(start - main.start) > MATCH_TOLERANCE_MS or abs(end - main.end) > MATCH_TOLERANCE_MS:
+        message = (
+            f"本編と時刻が違います: 本編 {describe(main)}（{_time(main.end)} まで）、"
+            f"縦用 .ass {_time(start)}〜{_time(end)}"
+        )
+        issues.append(Issue("warning", message))
+    return issues
