@@ -123,21 +123,33 @@ utavideo thumbnail              # build/thumbnail/main.png
 - 正方形などのサイズ違いは、`[[thumbnails]]` を足します（[customization.md](customization.md#サムネイル)）
 - 投稿先には容量の上限があります。書き出したときに表示されるバイト数で確かめてください
 
-## 10. ショートの縦用 .ass を作る
+## 10. ショートの縦用 .ass を作り、区間を置く
 
-縦型のショート（YouTube Shorts など）に使う、縦に組み直した歌詞を用意します。本編の歌詞を入れ終えてから作ります。
+縦型のショート（YouTube Shorts など）に使う、縦に組み直した歌詞と、切り抜く区間を用意します。本編の歌詞を入れ終えてから作ります。
 
 ```sh
 utavideo vertical-ass           # src/vertical.ass（本編の src/lyrics.ass は変わらない）
+utavideo preview-bg --vertical  # build/preview/vertical-bg.mp4（縦の下敷き）
 ```
 
-1. Aegisub で `src/vertical.ass` を開く。縦の下敷きはまだ書き出せないので、ビデオ → ダミービデオを使う（Use Dummy Video）で、`vertical.size`（既定は 1080x1920）の映像を開く
-2. 文字は本編と同じ割合で小さくなっているので、まずスタイル `Lyrics` の大きさを上げる
-3. 画面からはみ出す行を `\N` で改行する。位置や大きさを直すのは、縦用 .ass だけです
-4. .ass 形式のまま保存し、`utavideo check` で検査する（[commands.md](commands.md#検査項目)）
+1. 背景の残す位置を縦で変えるときは、`utavideo.toml` の `vertical.focus` を書いてから `preview-bg --vertical` を実行する
+2. Aegisub で `src/vertical.ass` を開く。下敷きの `build/preview/vertical-bg.mp4` は、縦用 .ass に書いてあるので開くと読み込まれることがあります。読み込まれなければ、[4.](#4-aegisub-で歌詞を入れる) と同じ手順で動画と音声を開く
+3. 波形を見ながら、切り抜く区間に行を置き、スタイルを `Short`、本文をショートの名前（例: `chorus`）にして、コメント行にする。区間の頭は、歌い出しの少し前に置く
+4. `utavideo.toml` に、同じ名前の `[[shorts]]` を書く
+
+```toml
+[[shorts]]
+name = "chorus"
+```
+
+5. 文字は本編と同じ割合で小さくなっているので、まずスタイル `Lyrics` の大きさを上げる
+6. 区間に入る行のうち、画面からはみ出す行を `\N` で改行する。位置や大きさを直すのは、縦用 .ass だけです。区間の外の行は使わないので、直さなくてかまいません
+7. .ass 形式のまま保存し、`utavideo check` で検査する（[commands.md](commands.md#ショートの検査)）
 
 - `vertical-ass` は、縦用 .ass が既にあると止まります。直した縦用 .ass を上書きしないためです
 - 変換される大きさと座標、変換されない図形は [commands.md](commands.md#vertical-ass) を参照してください
+- 縦用 .ass の曲名表示のスタイル（`Title`）を変えたら、`preview-bg --vertical` を実行し直します
+- ショートの書き出しはまだできません（[roadmap.md](roadmap.md)）
 
 ## 動画編集ソフトと組み合わせる
 

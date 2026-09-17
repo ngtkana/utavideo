@@ -101,7 +101,22 @@
 | 項目 | 型 | 既定値 | 説明 |
 |---|---|---|---|
 | `size` | `[幅, 高さ]` | `[1080, 1920]` | 縦の解像度（偶数）。縦用 .ass の PlayRes と同じにする。`utavideo vertical-ass` はこの大きさに変換する |
-| `lyrics` | パス | `"src/vertical.ass"` | 縦用 .ass。`utavideo vertical-ass` がここに作り、`check` はこのファイルがあるときだけ検査する |
+| `lyrics` | パス | `"src/vertical.ass"` | 縦用 .ass。`utavideo vertical-ass` がここに作る。ショートの区間もここに書く（[`[[shorts]]`](#shorts)） |
+| `focus` | `[x, y]`（0〜1 の数） | `video.focus` | 背景を縦に合わせるとき、どこを基準にするか（意味は `[video]` の `focus` と同じ）。`preview-bg --vertical` に使う |
+
+## [[shorts]]
+
+縦型のショートです。1本につき1つ書きます。区間は縦用 .ass（`vertical.lyrics`）に、スタイル `Short` のコメント行で置きます。行の本文を `name` と同じにします（前後の空白は除いて、大文字小文字も含めて比べる）。
+
+```
+Comment: 0,0:01:05.20,0:01:45.65,Short,,0,0,0,,chorus
+```
+
+| 項目 | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `name` | 文字列 | 必須 | ショートの名前。区間の行の本文と同じにする。使える文字と重複の扱いは `[[thumbnails]]` の `name` と同じ |
+
+この表があると、`check` が縦用 .ass と区間を検査します（[commands.md](commands.md#ショートの検査)）。ショートの書き出しはまだできません（[roadmap.md](roadmap.md)）。
 
 ## ユーザー設定（~/.config/utavideo/config.toml）
 
