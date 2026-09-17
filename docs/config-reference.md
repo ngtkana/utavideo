@@ -102,7 +102,9 @@
 |---|---|---|---|
 | `size` | `[幅, 高さ]` | `[1080, 1920]` | 縦の解像度（偶数）。縦用 .ass の PlayRes と同じにする。`utavideo vertical-ass` はこの大きさに変換する |
 | `lyrics` | パス | `"src/vertical.ass"` | 縦用 .ass。`utavideo vertical-ass` がここに作る。ショートの区間もここに書く（[`[[shorts]]`](#shorts)） |
-| `focus` | `[x, y]`（0〜1 の数） | `video.focus` | 背景を縦に合わせるとき、どこを基準にするか（意味は `[video]` の `focus` と同じ）。`preview-bg --vertical` に使う |
+| `focus` | `[x, y]`（0〜1 の数） | `video.focus` | 背景を縦に合わせるとき、どこを基準にするか（意味は `[video]` の `focus` と同じ）。`preview-bg --vertical` と `shorts` に使う |
+| `overlay_text` | 真偽値 | `true` | 縦で曲名表示（`[overlay_text]`）を出すか。`false` にすると、本編では出したまま縦だけ消せる（`shorts`・`preview-bg --vertical`） |
+| `audio_fade_ms` | `[イン, アウト]`（0 以上の整数） | `[300, 1000]` | 区間の端の音声のフェード（ミリ秒）。16:9 版（`wide`）にも効く。イン ＋ アウトが区間の長さを超えるとエラー。映像はフェードしない（ショートは繰り返し再生されるので、暗転を挟まない） |
 
 ## [[shorts]]
 
@@ -114,9 +116,11 @@ Comment: 0,0:01:05.20,0:01:45.65,Short,,0,0,0,,chorus
 
 | 項目 | 型 | 既定値 | 説明 |
 |---|---|---|---|
-| `name` | 文字列 | 必須 | ショートの名前。区間の行の本文と同じにする。使える文字と重複の扱いは `[[thumbnails]]` の `name` と同じ |
+| `name` | 文字列 | 必須 | ショートの名前。区間の行の本文と同じにする。出力は `build/shorts/<name>.mp4`。使える文字と重複の扱いは `[[thumbnails]]` の `name` と同じ |
+| `focus` | `[x, y]`（0〜1 の数） | `vertical.focus` | このショートだけ、背景の残す位置を変える |
+| `wide` | 真偽値 | `false` | 同じ区間の 16:9 版（`build/shorts/wide/<name>.mp4`）も書き出す。本編と同じ画面で、SNS の告知に添える用 |
 
-この表があると、`check` が縦用 .ass と区間を検査します（[commands.md](commands.md#ショートの検査)）。ショートの書き出しはまだできません（[roadmap.md](roadmap.md)）。
+この表があると、`check` が縦用 .ass と区間を検査し（[commands.md](commands.md#ショートの検査)）、`utavideo shorts` で書き出せます（[commands.md](commands.md#shorts)）。
 
 ## ユーザー設定（~/.config/utavideo/config.toml）
 

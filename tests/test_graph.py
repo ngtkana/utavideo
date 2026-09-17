@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from utavideo.graph import RenderSpec, StillSpec, build_args, build_still_args, escape_filter_arg
+from utavideo.graph import Clip, RenderSpec, StillSpec, build_args, build_still_args, escape_filter_arg
 
 SPEC = RenderSpec(
     mode="final",
@@ -118,3 +118,35 @@ def test_still_seeks_only_animated_backgrounds() -> None:
 def test_still_background_only() -> None:
     args = build_still_args(replace(STILL, subtitles=None, fontsdir=None))
     assert "subtitles" not in _filter(args)
+
+
+# 区間は 345〜820 フレーム（30fps で 11.5〜27.333… 秒）
+CLIP_SPEC = replace(SPEC, fps=30, duration_s=475 / 30, clip=Clip(345, 820, (300, 1000)))
+
+
+def test_clip_cuts_after_decoding_and_puts_the_subtitles_back_to_zero() -> None:
+    video = _filter(build_args(CLIP_SPEC))
+    # 入力側の -ss は使わず、デコードの直後に本編と同じコマにしてから切る
+    assert "-ss" not in build_args(CLIP_SPEC)
+    assert video.startswith("[0:v]fps=30,trim=start_pts=345:end_pts=820,")
+    # 字幕は元の時刻のまま描いてから 0 秒に戻す
+    assert video.index("subtitles=") < video.index("setpts=PTS-STARTPTS")
+
+
+def test_clip_trims_and_fades_the_audio() -> None:
+    audio = _filter(build_args(CLIP_SPEC)).split(";")[1]
+    assert audio == (
+        "[1:a]atrim=start=11.500000:end=27.333333,asetpts=PTS-STARTPTS,"
+        "afade=t=in:st=0:d=0.300000,afade=t=out:st=14.833333:d=1.000000[a]"
+    )
+    assert _contains(build_args(CLIP_SPEC), ["-map", "[a]"])
+
+
+def test_clip_without_fades_has_no_afade() -> None:
+    audio = _filter(build_args(replace(CLIP_SPEC, clip=Clip(0, 300, (0, 0))))).split(";")[1]
+    assert "afade" not in audio
+
+
+def test_clip_is_rejected_in_overlay_mode() -> None:
+    with pytest.raises(ValueError, match="overlay"):
+        build_args(replace(CLIP_SPEC, mode="overlay"))

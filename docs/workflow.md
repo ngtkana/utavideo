@@ -145,12 +145,20 @@ name = "chorus"
 5. 文字は本編と同じ割合で小さくなっているので、まずスタイル `Lyrics` の大きさを上げる
 6. 区間に入る行のうち、画面からはみ出す行を `\N` で改行する。位置や大きさを直すのは、縦用 .ass だけです。区間の外の行は使わないので、直さなくてかまいません
 7. .ass 形式のまま保存し、`utavideo check` で検査する（[commands.md](commands.md#ショートの検査)）
+8. 書き出す
+
+```sh
+utavideo shorts                 # build/shorts/<name>.mp4（wide なら build/shorts/wide/<name>.mp4 も）
+utavideo shorts --name chorus   # 1本だけ書き出す
+```
 
 - `vertical-ass` は、縦用 .ass が既にあると止まります。直した縦用 .ass を上書きしないためです
 - 変換される大きさと座標、変換されない図形は [commands.md](commands.md#vertical-ass) を参照してください
 - 縦用 .ass の曲名表示のスタイル（`Title`）を変えたら、`preview-bg --vertical` を実行し直します
 - 後から本編の歌詞を直したら、縦用 .ass も同じように直します。直し忘れは `check` が警告します（[本編との突き合わせ](commands.md#本編との突き合わせ)）。本編の2行を縦で1行にまとめると、この警告が出ます
-- ショートの書き出しはまだできません（[roadmap.md](roadmap.md)）
+- 区間の端の音声はフェードします（長さは [`vertical.audio_fade_ms`](config-reference.md#vertical)）。フェードインの間は音が小さいので、区間の頭は歌い出しの少し前に置きます
+- 16:9 版（SNS の告知に添える用）が要るときは、`[[shorts]]` に `wide = true` を書きます
+- 区間の長さが投稿先の上限を超えると警告します（[ショートの検査](commands.md#ショートの検査)）
 
 ## 動画編集ソフトと組み合わせる
 

@@ -25,6 +25,9 @@
 │   ├── thumbnail/       # utavideo thumbnail
 │   │   ├── main.png     # [[thumbnails]] の name ごと
 │   │   └── bg/main.png  # --bg-only（Aegisub の下敷き）
+│   ├── shorts/          # utavideo shorts
+│   │   ├── chorus.mp4   # [[shorts]] の name ごと
+│   │   └── wide/chorus.mp4  # wide = true の 16:9 版
 │   └── .work/           # 書き出しに使った中間ファイル
 ├── release/             # 公開した動画（概要欄を残すなら自分でコピー）。消さない
 └── share/               # 人とやり取りしたファイル

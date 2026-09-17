@@ -302,3 +302,63 @@ def test_only_lines_in_sections_are_reported_but_lines_outside_are_used_for_matc
     assert _match(main, vertical, sections) == []
     vertical.append(_event(12, 13, "区間の外の縦だけの行"))
     assert _match(main, vertical, sections) == []
+
+
+def _render_issues(
+    start: float,
+    end: float,
+    *,
+    fps: int = 30,
+    duration_ms: int | None = 200_000,
+    audio_fade_ms: tuple[int, int] = (300, 1000),
+    wide: bool = False,
+) -> list[subs.Issue]:
+    section = Section("chorus", round(start * 1000), round(end * 1000))
+    return shorts.render_issues(
+        section, fps=fps, duration_ms=duration_ms, audio_fade_ms=audio_fade_ms, wide=wide
+    )
+
+
+def test_section_edges_are_rounded_to_frames() -> None:
+    # 1:05.21 は 30fps では 1956.3 フレーム目なので、1956 フレーム（1:05.200）に丸める
+    assert shorts.clip_frames(Section("chorus", 65_210, 105_650), 30) == (1956, 3170)
+    assert shorts.clip_frames(Section("chorus", 65_210, 105_650), 10) == (652, 1057)  # 1056.5 は後ろへ
+
+
+def test_section_shorter_than_a_frame_is_an_error() -> None:
+    assert _messages(_render_issues(10.0, 10.01), "error") == [
+        "区間がフレームに丸めると長さ 0 になります（30 fps で1フレームより短い）"
+    ]
+
+
+def test_rounding_past_the_audio_is_an_error() -> None:
+    # 区間の終わり 9.99 秒は音源（9.99 秒）に収まるが、フレームに丸めると 10.0 秒で超える
+    assert _messages(_render_issues(1.0, 9.99, duration_ms=9_990), "error") == [
+        "区間の終わりをフレームに丸めた 0:00:10.000 が、音源の長さ（0:00:09.990）を超えています"
+    ]
+    assert _render_issues(1.0, 9.99, duration_ms=None) == []
+
+
+def test_fades_longer_than_the_section_are_an_error() -> None:
+    assert _messages(_render_issues(1.0, 2.2), "error") == [
+        "音声のフェード（vertical.audio_fade_ms の 300 + 1000 ミリ秒）が、"
+        "区間の長さ（0:00:01.200）を超えています"
+    ]
+    assert _render_issues(1.0, 2.3) == []
+
+
+def test_sections_longer_than_the_upload_limits_are_warnings() -> None:
+    assert _render_issues(0, 180) == []
+    assert _messages(_render_issues(0, 180.1), "warning") == [
+        "区間の長さ（0:03:00.100）が、YouTube のショートの上限（180 秒）を超えています"
+    ]
+    # wide の版は X の通常のアカウントの上限でも見る
+    assert len(_messages(_render_issues(0, 150, wide=True), "warning")) == 1
+    assert len(_messages(_render_issues(0, 190, wide=True), "warning")) == 2
+
+
+def test_unused_sections_are_not_reported_when_the_name_is_selected() -> None:
+    script = _script(_short(1, 2, "chorus"), _short(3, 4, "intro"))
+    assert _messages(shorts.check_sections(script, ["chorus"], duration_ms=10_000).issues, "warning")
+    found = shorts.check_sections(script, ["chorus"], duration_ms=10_000, report_unused=False)
+    assert found.issues == []
