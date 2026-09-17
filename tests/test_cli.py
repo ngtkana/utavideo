@@ -145,3 +145,19 @@ def test_vertical_ass_needs_the_lyrics(tmp_path: Path) -> None:
     assert result.exit_code == 1
     assert "lyrics.file" in result.output
     assert not (root / "src/vertical.ass").exists()
+
+
+def test_vertical_ass_in_another_folder_rebases_the_aegisub_paths(tmp_path: Path) -> None:
+    root = tmp_path / "20260916-song"
+    assert runner.invoke(app, ["new", str(root)]).exit_code == 0
+    with (root / "utavideo.toml").open("a", encoding="utf-8") as toml:
+        toml.write('\n[vertical]\nlyrics = "src/shorts/vertical.ass"\n')
+    lyrics = root / "src/lyrics.ass"
+    text = lyrics.read_text(encoding="utf-8")
+    lyrics.write_text(text + "\n[Aegisub Project Garbage]\nAudio File: ../audio.wav\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["vertical-ass", "-C", str(root)])
+    assert result.exit_code == 0, result.output
+    project = subs.load(root / "src/shorts/vertical.ass").aegisub_project
+    assert project["Audio File"] == "../../audio.wav"
+    assert project["Video File"] == "../../build/preview/vertical-bg.mp4"

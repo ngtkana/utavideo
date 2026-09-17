@@ -141,11 +141,13 @@ def _play_res_issues(subs: pysubs2.SSAFile, size: tuple[int, int], label: str) -
         message = f"PlayRes {res[0]}x{res[1]} が{label} {size[0]}x{size[1]} と一致しません"
         issues.append(Issue("error", message))
     layout = layout_res(subs)
-    if layout is not None and layout != res:
-        # libass は LayoutRes と PlayRes の縦横比の違いの分だけ、文字を横か縦に潰して描く
+    if layout is not None and layout[0] * res[1] != layout[1] * res[0]:
+        # libass は LayoutRes と PlayRes の縦横比の違いの分だけ、文字を横か縦に潰して描く。
+        # 縦横比が同じで大きさだけ違うときは文字の形・位置は変わらないので止めない
         # （docs/verification/20260917-vertical-ass.md）
         message = (
-            f"LayoutResX / LayoutResY {layout[0]}x{layout[1]} が PlayRes {res[0]}x{res[1]} と違うので、"
+            f"LayoutResX / LayoutResY {layout[0]}x{layout[1]} の縦横比が"
+            f" PlayRes {res[0]}x{res[1]} と違うので、"
             "文字が潰れて描かれます"
             "（テキストエディタで LayoutResX・LayoutResY の行を消すか、PlayRes と同じ値にする）"
         )

@@ -534,7 +534,10 @@ def vertical_ass(project_dir: ProjectOption = None) -> None:
         _fail(f"lyrics.file のファイルがありません: {source}")
     size = project.config.vertical.size
     conversion = vertical.convert(
-        subs.load(source), size=size, video_file=_path_from(dest.parent, project.vertical_preview_bg_output)
+        subs.load(source),
+        size=size,
+        video_file=_path_from(dest.parent, project.vertical_preview_bg_output),
+        source_dir=_path_from(dest.parent, source.parent),
     )
     _write_text(dest, conversion.script.to_string("ass"))
 

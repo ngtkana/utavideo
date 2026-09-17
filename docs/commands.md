@@ -115,8 +115,8 @@ utavideo vertical-ass [-C <曲フォルダ>]
 作るもの:
 
 - 本編の .ass の行を、コメント行も含めてすべて写す
-- `[Script Info]` の `PlayResX`・`PlayResY` を `vertical.size` にする。`LayoutResX`・`LayoutResY` があれば同じ値に書き直す（無ければ足さない。理由は [検証記録](verification/20260917-vertical-ass.md)）
-- `[Aegisub Project Garbage]` の `Video File:` を、縦用 .ass から見た `build/preview/vertical-bg.mp4` の相対パスにする。`Audio File:` が本編の下敷きと同じなら、それも同じパスにする。`Video AR Mode`・`Video AR Value`・`Video Zoom Percent` は消す
+- `[Script Info]` の `PlayResX`・`PlayResY` を `vertical.size` にする。`LayoutResX`・`LayoutResY` が2つともあれば、それぞれ x・y の比を掛けた値に書き直す（本編で PlayRes と同じなら `vertical.size` になる。片方だけなら `vertical.size`、無ければ足さない。理由は [検証記録](verification/20260917-vertical-ass.md)）
+- `[Aegisub Project Garbage]` の `Video File:` を、縦用 .ass から見た `build/preview/vertical-bg.mp4` の相対パスにする。`Audio File:` が本編の下敷きと同じなら、それも同じパスにする。そうでない `Audio File:` と `Keyframes File:`・`Timecodes File:` の相対パスは、本編の .ass と縦用 .ass のフォルダが違っても開けるよう、縦用 .ass から見たパスに付け替える（絶対パスと、`?video` などのパスでない値はそのまま）。`Video AR Mode`・`Video AR Value`・`Video Zoom Percent` は消す
 - スタイル `Short`・`VerticalBand` を足す（既にあれば足さない）。どちらも変換後の `Lyrics` の写しで、`VerticalBand` は上中央揃え。`Lyrics` が無ければ最初のスタイルを写す
 
 大きさと座標の変換（x の比は `vertical.size` の幅 ÷ 本編の `PlayResX`、y の比は高さ ÷ `PlayResY`。「幅の比」は x の比）:
@@ -125,7 +125,8 @@ utavideo vertical-ass [-C <曲フォルダ>]
 |---|---|---|
 | 座標 | `\pos`・`\move`（5つ目・6つ目の時刻は変えない）・`\org`・矩形の `\clip`・`\iclip` | x・y をそれぞれの比で |
 | 大きさ（スタイル） | `Fontsize`・`MarginL`・`MarginR`・`MarginV`・`Outline`・`Shadow`・`Spacing` | 幅の比で |
-| 大きさ（行） | 行の `MarginL`・`MarginR`・`MarginV`、`\fs`・`\fsp`・`\bord`・`\xbord`・`\ybord`・`\shad`・`\xshad`・`\yshad` | 幅の比で |
+| 大きさ（行） | 行の `MarginL`・`MarginR`・`MarginV`、`\fs`・`\fsp`・`\bord`・`\xbord`・`\ybord`・`\shad`・`\xshad`・`\yshad`・`\blur` | 幅の比で |
+| ぼかしの回数 | `\be` | 幅の比の2乗を掛けて四捨五入する（ぼかしの幅が回数の平方根に比例するため）。1回以上なら1回以上に保つ |
 | 変えない | `\fs+N`・`\fs-N`（今の大きさからの相対指定）、`\fscx`・`\fscy` などの倍率、引数の数が合わないタグ | そのまま |
 | 変換しない | 図形（`\p1` など）の座標、ベクターの `\clip`・`\iclip` | そのまま。該当する行を警告で表示する |
 
@@ -178,12 +179,12 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 |---|---|
 | 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある（`[[thumbnails]]` の `name` の文字・重複、`focus` の範囲、`at` の書式を含む）。ユーザー設定も同じ |
 | 素材 | `audio.file`・`lyrics.file`・`video.background`（`overlay` では不要）のファイルが無い、背景の形式に対応していない、音源に音声が入っていない |
-| 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって PlayRes と違う（文字が潰れて描かれる）、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
+| 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって縦横比が PlayRes と違う（文字が潰れて描かれる。縦横比が同じで大きさだけ違うのは問題ない）、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
 | サムネイル（`thumbnail`・`check`） | 背景が画像なのに `at` を書いた、`at` が背景の長さ以上（長さは ffprobe で取る） |
-| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、`LayoutResX`・`LayoutResY` が PlayRes と違う、未定義のスタイルを使っている、フォントが見つからない |
-| 縦用 .ass（`check`。`vertical.lyrics` のファイルがあるときだけ。`build` などは止めない） | 読めない、`PlayResX`・`PlayResY` が無い、`vertical.size` と違う、`LayoutResX`・`LayoutResY` が PlayRes と違う、未定義のスタイルを使っている、曲名表示を出すのに `overlay_text.style` のスタイルが無い、フォント（曲名表示を含む）が見つからない。行ごとの検査（重なり・はみ出しなど）はしない |
+| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイルを使っている、フォントが見つからない |
+| 縦用 .ass（`check`。`vertical.lyrics` のファイルがあるときだけ。`build` などは止めない） | 読めない、`PlayResX`・`PlayResY` が無い、`vertical.size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイルを使っている、曲名表示を出すのに `overlay_text.style` のスタイルが無い、フォント（曲名表示を含む）が見つからない。行ごとの検査（重なり・はみ出しなど）はしない |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
 | 実行環境 | ffmpeg・ffprobe が無い |
 

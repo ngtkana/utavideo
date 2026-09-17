@@ -9,7 +9,7 @@
 - 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定）
 
 - サムネイル: 背景のフレーム（`at`）にサムネイル用の .ass を描いた PNG。サイズ違いは `[[thumbnails]]` を並べる。背景の残す位置（`focus`）は動画にも効く
-- 縦型のショート（1段目）: `vertical-ass` で本編の .ass から縦用 .ass を作る（大きさ・座標の変換）。`check` で縦用 .ass を検査する。`LayoutResX`・`LayoutResY` が PlayRes と違う .ass をエラーにする
+- 縦型のショート（1段目）: `vertical-ass` で本編の .ass から縦用 .ass を作る（大きさ・座標の変換）。`check` で縦用 .ass を検査する。`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う .ass をエラーにする
 
 ## 予定
 

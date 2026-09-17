@@ -214,12 +214,14 @@ def test_escape_text(text: str, expected: str) -> None:
     [
         ("", 0),
         ("LayoutResX: 1920\nLayoutResY: 1080\n", 0),
+        # 縦横比が同じなら文字は潰れない（4K の下敷きで Aegisub が書いたときなど）
+        ("LayoutResX: 3840\nLayoutResY: 2160\n", 0),
         # libass は片方だけの LayoutRes を使わない（docs/verification/20260917-vertical-ass.md）
         ("LayoutResX: 1080\n", 0),
         ("LayoutResX: 1080\nLayoutResY: 1920\n", 1),
     ],
 )
-def test_layout_res_that_differs_from_play_res_is_an_error(layout_res: str, errors: int) -> None:
+def test_layout_res_with_another_aspect_ratio_is_an_error(layout_res: str, errors: int) -> None:
     script = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
     for line in layout_res.splitlines():
         key, value = line.split(": ")

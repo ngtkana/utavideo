@@ -39,10 +39,9 @@ VIDEO = "../build/preview/vertical-bg.mp4"
 RX, RY = 1080 / 1920, 1920 / 1080
 
 
-def _convert(text: str = SOURCE) -> vertical.Conversion:
-    return vertical.convert(
-        pysubs2.SSAFile.from_string(text, format_="ass"), size=(1080, 1920), video_file=VIDEO
-    )
+def _convert(text: str = SOURCE, *, source_dir: str = ".") -> vertical.Conversion:
+    source = pysubs2.SSAFile.from_string(text, format_="ass")
+    return vertical.convert(source, size=(1080, 1920), video_file=VIDEO, source_dir=source_dir)
 
 
 def test_script_info_and_project_point_at_the_vertical_size_and_underlay() -> None:
@@ -58,9 +57,35 @@ def test_layout_res_is_not_added_when_the_source_has_none() -> None:
     assert "LayoutResX" not in _convert(source).script.info
 
 
+def test_layout_res_keeps_its_scale_against_play_res() -> None:
+    # 縦横比が同じで大きさの違う LayoutRes（4K の下敷き）は、\blur の効き方が変わらないよう同じ比で変える
+    source = SOURCE.replace("LayoutResX: 1920\nLayoutResY: 1080", "LayoutResX: 3840\nLayoutResY: 2160")
+    assert subs.layout_res(_convert(source).script) == (2160, 3840)
+
+
 def test_audio_file_other_than_the_underlay_is_kept() -> None:
     source = SOURCE.replace("Audio File: ../build/preview/bg.mp4", "Audio File: ../src/mix/song.wav")
     assert _convert(source).script.aegisub_project["Audio File"] == "../src/mix/song.wav"
+
+
+def test_project_paths_are_rebased_to_the_vertical_ass_folder() -> None:
+    source = SOURCE.replace(
+        "Audio File: ../build/preview/bg.mp4",
+        "Audio File: ../mix/song.wav\nKeyframes File: keys.txt\nTimecodes File: C:\\tc.txt",
+    )
+    script = _convert(source, source_dir="..").script
+    project = script.aegisub_project
+    assert (project["Audio File"], project["Keyframes File"]) == ("../../mix/song.wav", "../keys.txt")
+    assert project["Timecodes File"] == "C:\\tc.txt"  # 絶対パスはそのまま
+
+
+@pytest.mark.parametrize(
+    "audio", ["?video", "dummy-audio:silence?sr=44100&bd=16&ch=1&ln=396900", "/abs/a.wav"]
+)
+def test_project_values_that_are_not_relative_paths_are_kept(audio: str) -> None:
+    source = SOURCE.replace("Audio File: ../build/preview/bg.mp4", f"Audio File: {audio}")
+    script = _convert(source, source_dir="..").script
+    assert script.aegisub_project["Audio File"] == audio
 
 
 def test_styles_shrink_by_the_width_ratio() -> None:
@@ -107,6 +132,9 @@ def test_events_are_copied_with_margins_and_tags_converted() -> None:
             r"{\clip(0,0,540,960)\iclip(5.62,17.78,11.25,35.56)}あ",
         ),
         (r"{\fs80\fsp4\bord8\xbord4\yshad-2}あ", r"{\fs45\fsp2.25\bord4.5\xbord2.25\yshad-1.12}あ"),
+        (r"{\blur6\t(\blur2)}あ", r"{\blur3.38\t(\blur1.12)}あ"),
+        # \be は回数。幅の比の2乗倍にして四捨五入し、1回以上は1回以上に保つ
+        (r"{\be5}あ{\be10}い{\be1}う{\be2.5}え{\be0}お", r"{\be2}あ{\be3}い{\be1}う{\be1}え{\be0}お"),
         # 変えないもの: 倍率・相対指定・時刻・行の文字
         (
             r"{\fscx120\fscy80\fs+2\t(0,500,\fs40)}\pos(1,2)",
