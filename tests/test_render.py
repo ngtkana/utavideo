@@ -182,7 +182,7 @@ def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
     assert _max_alpha(output, 1.8) == 0
 
 
-def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
+def test_release_numbers_videos(project: Path) -> None:
     _invoke("build", "-C", str(project))
     _invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.0.mp4").is_file()
@@ -199,11 +199,18 @@ def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
     _invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.1.mp4").is_file()
 
-    built_at = (project / "build/main.mp4").stat().st_mtime
-    os.utime(project / "src/lyrics.ass", (built_at + 10, built_at + 10))
-    stale = runner.invoke(app, ["release", "-C", str(project), "--version", "v1.3"])
-    assert stale.exit_code == 1
-    assert "lyrics.ass" in stale.output
+
+def test_release_compares_the_inputs_recorded_by_build(project: Path) -> None:
+    _invoke("build", "-C", str(project))
+    assert (project / "build/.work/main-inputs.json").is_file()
+    later = (project / "build/main.mp4").stat().st_mtime + 10
+
+    # 実際のフォントの記録を読み戻して比べられる（細かい場合分けは test_release.py）
+    config = project / "utavideo.toml"
+    config.write_text(config.read_text(encoding="utf-8") + '[description]\ntext = "概要"\n', encoding="utf-8")
+    for path in (config, project / "src/lyrics.ass"):
+        os.utime(path, (later, later))
+    _invoke("release", "-C", str(project))
 
 
 def test_locked_output_keeps_partial(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:

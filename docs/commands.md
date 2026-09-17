@@ -74,6 +74,7 @@ utavideo overlay [-C <曲フォルダ>]
 - `preview-bg` は、歌詞の行についての検査を行いません
 - 動画の長さは音源の長さです
 - 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass` に書きます（自動のフェードと曲名表示が入ったもの）
+- `build` は、書き出しに成功した後、使った入力の記録を `build/.work/main-inputs.json` に書きます（[release](#release) が比べる）。書き出しを始める前に前の記録を消すので、途中で止まったときは記録が残りません
 
 ## description
 
@@ -97,7 +98,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | オプション | 既定値 | 内容 |
 |---|---|---|
 | `--version` | 音源のファイル名から（規則は [project-layout.md](project-layout.md#名前の付け方)） | 音源のバージョン。`v1.2` の形（小文字の `v`）。何本目かは指定できない |
-| `--allow-stale` | 無効 | 入力が `build/main.mp4` より新しくてもコピーする |
+| `--allow-stale` | 無効 | `build` の後に入力が変わっていてもコピーする |
 
 次のときは止まります。
 
@@ -105,7 +106,19 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 - 音源のバージョンが決まらない、または `vX.Y` の形でない
 - 同じ音源のバージョンで、`build/main.mp4` と中身が同じ動画を既に公開している
 - 同じ名前の `.mp4` が `release/` にある（上書きしない）
-- `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）
+- `build` の後に、描画に効く入力が変わった（`--allow-stale` で無視）。変わった入力の名前を表示します
+
+描画に効く入力は、`build` が記録したときと次のように比べます。
+
+| 入力 | 比べるもの |
+|---|---|
+| 音源・背景・歌詞（`audio.file`・`video.background`・`lyrics.file`） | ファイルの中身 |
+| `utavideo.toml` | 読み込んだ値から、描画に効かない項目（`song.slug`・`song.original_urls`・`[[credits]]`・`[[materials]]`・`[description]`）を除いたもの。コメント・並び順・書き方の違いは比べない。`song.title`・`song.artist`・`song.label` は曲名表示に使えるので比べる |
+| フォント | 使ったフォントファイルのパス・大きさ・更新時刻（中身は読まない） |
+
+- 保存し直しただけのときや、`build` の後に概要欄の項目だけを変えたときは止まりません
+- 記録が無いとき（記録を始める前の版の `build`）や、記録の後に `build/main.mp4` が差し替わっているときは、`utavideo.toml`・音源・背景・歌詞のどれかの更新時刻が `build/main.mp4` より新しいと止まります
+- フォントは、`build` で使ったファイルだけを見ます。同じ名前のフォントを別の場所に足して、使われるファイルが変わっても気付きません
 
 ## 検査項目
 

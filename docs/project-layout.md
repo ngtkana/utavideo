@@ -18,7 +18,7 @@
 │   ├── preview/bg.mp4
 │   ├── title.txt        # utavideo description
 │   ├── description.txt
-│   └── .work/           # 書き出しに使った中間ファイル
+│   └── .work/           # 書き出しに使った中間ファイルと、build の入力の記録（main-inputs.json）
 ├── release/             # 公開した動画（概要欄を残すなら自分でコピー）。消さない
 └── share/               # 人とやり取りしたファイル
     └── YYYYMMDD-相手/
