@@ -432,7 +432,7 @@ def check(project_dir: ProjectOption = None) -> None:
         size = config.vertical.size
         console.print(f"  縦用 .ass: {config.vertical.lyrics}（{size[0]}x{size[1]}）", markup=False)
         console.print(f"  ショート: {', '.join(s.name for s in config.shorts)}", markup=False)
-        issues += analyze_shorts(project, search, analysis.duration_s)
+        issues += analyze_shorts(project, search, analysis.duration_s, analysis.lyrics)
 
     _print_issues(issues)
     if any(issue.level == "error" for issue in issues):
@@ -604,10 +604,13 @@ def analyze_vertical(project: Project, search: _FontSearch) -> VerticalAnalysis:
     return VerticalAnalysis(subs.prefixed(issues + font_issues, "縦用 .ass: "), script, font_files)
 
 
-def analyze_shorts(project: Project, search: _FontSearch, duration_s: float | None) -> list[subs.Issue]:
+def analyze_shorts(
+    project: Project, search: _FontSearch, duration_s: float | None, lyrics: pysubs2.SSAFile | None
+) -> list[subs.Issue]:
     """すべてのショートの検査。縦用 .ass のファイル全体と、区間の行、区間に入る行。
 
     duration_s は音源の長さ（読めなければ None で、長さとの比較と行の検査をしない）。
+    lyrics は本編の .ass（読めなければ None で、本編との突き合わせをしない）。
     """
     checked = analyze_vertical(project, search)
     if checked.script is None:
@@ -617,6 +620,9 @@ def analyze_shorts(project: Project, search: _FontSearch, duration_s: float | No
     duration_ms = None if duration_s is None else round(duration_s * 1000)
     found = shorts.check_sections(script, names, duration_ms=duration_ms)
     issues = checked.issues + found.issues
+    if lyrics is not None:
+        matched = shorts.match_lyrics(lyrics, script, found.sections)
+        issues += subs.prefixed(matched, "本編との突き合わせ: ")
     if duration_ms is None or not found.sections:
         return issues
     # 区間の外の行（本編の写し）について、本編と同じ警告を二重に出さない

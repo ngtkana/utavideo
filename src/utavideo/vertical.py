@@ -37,7 +37,6 @@ _SIZE_TAG = re.compile(r"\\(fsp|fs(?![+-])|[xy]?bord|[xy]?shad|blur)\s*(-?(?:\d+
 _BE_TAG = re.compile(r"\\be\s*(-?(?:\d+\.?\d*|\.\d+))")
 # 座標として変換する引数の数（ほかの数は libass も読まないので、そのまま残す）
 _COORD_ARG_COUNTS = {"pos": (2,), "org": (2,), "move": (4, 6), "clip": (4,), "iclip": (4,)}
-_DRAWING_TAG = re.compile(r"\\p\s*0*[1-9]")
 _NUMBER = re.compile(r"\s*-?(?:\d+\.?\d*|\.\d+)\s*")
 
 
@@ -134,7 +133,7 @@ def convert_tags(text: str, rx: float, ry: float) -> tuple[str, list[str]]:
 
     def block(match: re.Match[str]) -> str:
         tags = match.group(0)
-        if _DRAWING_TAG.search(tags):
+        if subs.starts_drawing(tags):
             skipped["図形（\\p）"] = None
         tags = _COORD_TAG.sub(lambda m: _convert_coords(m, rx, ry, skipped), tags)
         tags = _SIZE_TAG.sub(lambda m: f"\\{m[1]}{_format(float(m[2]) * rx)}", tags)
