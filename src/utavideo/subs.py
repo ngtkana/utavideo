@@ -55,6 +55,14 @@ def play_res(subs: pysubs2.SSAFile) -> tuple[int, int] | None:
         return None
 
 
+def layout_res(subs: pysubs2.SSAFile) -> tuple[int, int] | None:
+    """LayoutResX / LayoutResY。libass は2つとも揃っているときだけ使うので、片方だけなら None。"""
+    try:
+        return int(subs.info["LayoutResX"]), int(subs.info["LayoutResY"])
+    except (KeyError, ValueError):
+        return None
+
+
 def without_events(subs: pysubs2.SSAFile) -> pysubs2.SSAFile:
     """スタイルと Script Info だけを残した複製。"""
     stripped = copy.deepcopy(subs)
@@ -128,10 +136,21 @@ def _play_res_issues(subs: pysubs2.SSAFile, size: tuple[int, int], label: str) -
     res = play_res(subs)
     if res is None:
         return [Issue("error", "PlayResX / PlayResY がありません（Aegisub の解像度設定を確認）")]
+    issues: list[Issue] = []
     if res != size:
         message = f"PlayRes {res[0]}x{res[1]} が{label} {size[0]}x{size[1]} と一致しません"
-        return [Issue("error", message)]
-    return []
+        issues.append(Issue("error", message))
+    layout = layout_res(subs)
+    if layout is not None and layout != res:
+        # libass は LayoutRes と PlayRes の縦横比の違いの分だけ、文字を横か縦に潰して描く
+        # （docs/verification/20260917-vertical-ass.md）
+        message = (
+            f"LayoutResX / LayoutResY {layout[0]}x{layout[1]} が PlayRes {res[0]}x{res[1]} と違うので、"
+            "文字が潰れて描かれます"
+            "（テキストエディタで LayoutResX・LayoutResY の行を消すか、PlayRes と同じ値にする）"
+        )
+        issues.append(Issue("error", message))
+    return issues
 
 
 def _undefined_style_issues(subs: pysubs2.SSAFile) -> list[Issue]:
@@ -142,6 +161,12 @@ def _undefined_style_issues(subs: pysubs2.SSAFile) -> list[Issue]:
     ]
 
 
+def _overlay_style_issues(subs: pysubs2.SSAFile, overlay: OverlayText) -> list[Issue]:
+    if overlay.enabled and overlay.style not in subs.styles:
+        return [Issue("error", f"overlay_text.style のスタイル {overlay.style!r} が .ass にありません")]
+    return []
+
+
 def lint(
     subs: pysubs2.SSAFile,
     *,
@@ -150,9 +175,7 @@ def lint(
     overlay: OverlayText,
 ) -> list[Issue]:
     issues = _play_res_issues(subs, size, "動画サイズ")
-
-    if overlay.enabled and overlay.style not in subs.styles:
-        issues.append(Issue("error", f"overlay_text.style のスタイル {overlay.style!r} が .ass にありません"))
+    issues += _overlay_style_issues(subs, overlay)
 
     events = dialogues(subs)
     issues += _undefined_style_issues(subs)
@@ -249,6 +272,18 @@ def lint_still(subs: pysubs2.SSAFile, *, size: tuple[int, int]) -> list[Issue]:
             message = f"\\fad・\\fade のフェードインが終わる前の状態で描かれます: {describe(event)}"
             issues.append(Issue("warning", message))
     return issues
+
+
+def lint_vertical(subs: pysubs2.SSAFile, *, size: tuple[int, int], overlay: OverlayText) -> list[Issue]:
+    """縦用 .ass のファイル全体についての検査。
+
+    縦用 .ass には区間の外の行（本編の写し）も残るので、行ごとの検査はここでは行わない。
+    """
+    return (
+        _play_res_issues(subs, size, "縦の解像度（vertical.size）")
+        + _overlay_style_issues(subs, overlay)
+        + _undefined_style_issues(subs)
+    )
 
 
 # 曲名などを .ass の行に埋めるとき、{ } はタグとして読まれる。libass は \{ \} を括弧そのものとして描く。

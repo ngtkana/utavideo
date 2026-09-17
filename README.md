@@ -47,6 +47,7 @@ utavideo release      # release/song-v1.0.0.mp4 にコピー
 | `check` | 設定・素材・歌詞・フォントを検査する |
 | `build` | 動画を書き出す（H.264 / AAC） |
 | `overlay` | 歌詞と曲名表示だけを透過 ProRes 4444 で書き出す |
+| `vertical-ass` | 本編の歌詞 .ass から、縦型のショート用の .ass を作る |
 | `description` | クレジット・素材から、タイトルと概要欄を書き出す |
 | `release` | 書き出した動画を、バージョン付きの名前で `release/` にコピーする |
 

@@ -4,7 +4,7 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`description`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`description`・`release`・`vertical-ass` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
 - `check`・`preview-bg`・`build`・`overlay`・`thumbnail` には ffmpeg と ffprobe が必要です
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
@@ -54,7 +54,7 @@ utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>] [--slug <�
 utavideo check [-C <曲フォルダ>]
 ```
 
-[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさを表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。
+[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさ・縦用 .ass の場所と大きさを表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。`vertical.lyrics` のファイル（縦用 .ass）があれば、それも検査します。無ければ見ません。
 
 ## preview-bg / build / overlay
 
@@ -104,6 +104,40 @@ utavideo thumbnail [-C <曲フォルダ>] [--name <name>] [--bg-only]
 - `--name` の名前が `[[thumbnails]]` に無い（ある名前を表示します）
 - ffmpeg が正常に終わっても何も書き出さなかった（背景の終わり近くの `at` で、それ以降のフレームが無いとき）
 
+## vertical-ass
+
+```sh
+utavideo vertical-ass [-C <曲フォルダ>]
+```
+
+縦型のショートに使う縦用 .ass を、本編の歌詞 .ass（`lyrics.file`）から作り、`vertical.lyrics`（既定は `src/vertical.ass`）に書きます（[config-reference.md](config-reference.md#vertical)）。作るのは最初の1回だけです。その後は Aegisub で直し、utavideo は書き換えません。本編の .ass も書き換えません。
+
+作るもの:
+
+- 本編の .ass の行を、コメント行も含めてすべて写す
+- `[Script Info]` の `PlayResX`・`PlayResY` を `vertical.size` にする。`LayoutResX`・`LayoutResY` があれば同じ値に書き直す（無ければ足さない。理由は [検証記録](verification/20260917-vertical-ass.md)）
+- `[Aegisub Project Garbage]` の `Video File:` を、縦用 .ass から見た `build/preview/vertical-bg.mp4` の相対パスにする。`Audio File:` が本編の下敷きと同じなら、それも同じパスにする。`Video AR Mode`・`Video AR Value`・`Video Zoom Percent` は消す
+- スタイル `Short`・`VerticalBand` を足す（既にあれば足さない）。どちらも変換後の `Lyrics` の写しで、`VerticalBand` は上中央揃え。`Lyrics` が無ければ最初のスタイルを写す
+
+大きさと座標の変換（x の比は `vertical.size` の幅 ÷ 本編の `PlayResX`、y の比は高さ ÷ `PlayResY`。「幅の比」は x の比）:
+
+| 種類 | 対象 | 変換 |
+|---|---|---|
+| 座標 | `\pos`・`\move`（5つ目・6つ目の時刻は変えない）・`\org`・矩形の `\clip`・`\iclip` | x・y をそれぞれの比で |
+| 大きさ（スタイル） | `Fontsize`・`MarginL`・`MarginR`・`MarginV`・`Outline`・`Shadow`・`Spacing` | 幅の比で |
+| 大きさ（行） | 行の `MarginL`・`MarginR`・`MarginV`、`\fs`・`\fsp`・`\bord`・`\xbord`・`\ybord`・`\shad`・`\xshad`・`\yshad` | 幅の比で |
+| 変えない | `\fs+N`・`\fs-N`（今の大きさからの相対指定）、`\fscx`・`\fscy` などの倍率、引数の数が合わないタグ | そのまま |
+| 変換しない | 図形（`\p1` など）の座標、ベクターの `\clip`・`\iclip` | そのまま。該当する行を警告で表示する |
+
+- 数は小数第2位で丸めます（余白は整数）
+- 文字も余白も幅の比で一様に縮むので、本編で画面に収まっていた行は縦でも収まり、文字は小さくなります
+- 縁取り・影は `ScaledBorderAndShadow` の値によらず、同じ比で縮めます
+
+次のときは止まります。
+
+- `vertical.lyrics` のファイルが既にある（上書きしない。作り直すときは消してから実行する）
+- `lyrics.file` のファイルが無い、読めない、`PlayResX`・`PlayResY` が無い
+
 ## description
 
 ```sh
@@ -144,11 +178,12 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 |---|---|
 | 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある（`[[thumbnails]]` の `name` の文字・重複、`focus` の範囲、`at` の書式を含む）。ユーザー設定も同じ |
 | 素材 | `audio.file`・`lyrics.file`・`video.background`（`overlay` では不要）のファイルが無い、背景の形式に対応していない、音源に音声が入っていない |
-| 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
+| 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって PlayRes と違う（文字が潰れて描かれる）、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
 | サムネイル（`thumbnail`・`check`） | 背景が画像なのに `at` を書いた、`at` が背景の長さ以上（長さは ffprobe で取る） |
-| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、未定義のスタイルを使っている、フォントが見つからない |
+| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、`LayoutResX`・`LayoutResY` が PlayRes と違う、未定義のスタイルを使っている、フォントが見つからない |
+| 縦用 .ass（`check`。`vertical.lyrics` のファイルがあるときだけ。`build` などは止めない） | 読めない、`PlayResX`・`PlayResY` が無い、`vertical.size` と違う、`LayoutResX`・`LayoutResY` が PlayRes と違う、未定義のスタイルを使っている、曲名表示を出すのに `overlay_text.style` のスタイルが無い、フォント（曲名表示を含む）が見つからない。行ごとの検査（重なり・はみ出しなど）はしない |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
 | 実行環境 | ffmpeg・ffprobe が無い |
 
