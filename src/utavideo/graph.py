@@ -13,6 +13,8 @@ PREVIEW_GOP = 15
 
 type Mode = Literal["final", "preview", "overlay"]
 type Fit = Literal["cover", "contain"]
+# 縦の画面の作り方。reframe は背景を縦に切り取り、blur は本編を上下のぼかした帯に置く
+type Layout = Literal["reframe", "blur"]
 type ScaleFlags = Literal["lanczos", "bicubic", "bilinear", "area", "neighbor"]
 type Preset = Literal[
     "ultrafast",
@@ -50,6 +52,20 @@ class Clip:
 
 
 @dataclass(frozen=True)
+class Frame:
+    """blur の画面で、ぼかした帯の上に置く本編の映像。
+
+    本編を size に作ってから幅いっぱいに縮め、上端を (H - h) * frame_y に置く。
+    """
+
+    size: tuple[int, int]  # 本編の解像度（[video].size）
+    focus: tuple[float, float]  # 本編の focus（[video].focus）
+    subtitles: Path  # 本編の合成した .ass（歌詞・曲名表示入り）
+    frame_y: float
+    fit: Fit = "cover"
+
+
+@dataclass(frozen=True)
 class RenderSpec:
     mode: Mode
     size: tuple[int, int]
@@ -67,6 +83,8 @@ class RenderSpec:
     crf: int = 18
     preset: Preset = "slow"
     clip: Clip | None = None  # None なら曲全体
+    # None なら背景を size に合わせる画面（reframe）。あれば blur の画面で、size は縦の解像度
+    frame: Frame | None = None
 
 
 def escape_filter_arg(value: str) -> str:
@@ -154,11 +172,12 @@ def build_args(spec: RenderSpec) -> list[str]:
         # 字幕は元の時刻のまま描いてから、setpts で 0 秒に戻す。.ass の時刻をずらすと、区間の頭を
         # またぐ行の \move・\fad がずれる（docs/verification/20260918-shorts.md）
         cut, back_to_zero = (_clip_video(clip, spec.fps), "setpts=PTS-STARTPTS,") if clip else ("", "")
-        video = (
-            f"[0:v]{cut}{fit_filter(spec.size, spec.fit, spec.scale_flags, spec.pad_color, spec.focus)},"
-            f"setsar=1,fps={spec.fps},format=rgb24,{subtitles_filter(spec.subtitles, spec.fontsdir)},"
-            f"{back_to_zero}{_TO_BT709},format=yuv420p[v]"
-        )
+        tail = f"{back_to_zero}{_TO_BT709},format=yuv420p[v]"
+        if spec.frame is not None:
+            video = _blur_video(spec, spec.frame, cut, tail)
+        else:
+            fit = _fit_to_rgb(spec, spec.size, spec.fit, spec.focus)
+            video = f"[0:v]{cut}{fit},{subtitles_filter(spec.subtitles, spec.fontsdir)},{tail}"
         if spec.mode == "final":
             codec = ["-c:v", "libx264", "-preset", spec.preset, "-crf", str(spec.crf)]
             codec += ["-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart"]
@@ -180,6 +199,53 @@ def build_args(spec: RenderSpec) -> list[str]:
         "-r", str(spec.fps),
         "-t", f"{spec.duration_s:.3f}",
     ]  # fmt: skip
+
+
+# 帯のぼかし。幅に比例させて、解像度が変わっても同じ見た目にする（1080 幅で sigma = 40）
+BLUR_SIGMA_RATIO = 40 / 1080
+# ぼかす前に縮める倍率。細かい模様を落としてから掛けるので、同じ見た目でも速い
+# （docs/verification/20260918-shorts.md）
+BLUR_DOWNSCALE = 4
+
+
+def blur_filter(size: tuple[int, int]) -> str:
+    """帯にする映像をぼかすフィルタ。1/4 に縮めて gblur を掛け、元の大きさに戻す。
+
+    縮めるときは area（画素の平均）で細かい模様を落とし、戻すときは bilinear で滑らかにする
+    （lanczos は輪郭を立てるので、ぼかした絵には使わない）。
+    """
+    w, h = size
+    small = (max(1, w // BLUR_DOWNSCALE), max(1, h // BLUR_DOWNSCALE))
+    sigma = w * BLUR_SIGMA_RATIO / BLUR_DOWNSCALE
+    return f"scale={small[0]}:{small[1]}:flags=area,gblur=sigma={_ratio(sigma)},scale={w}:{h}:flags=bilinear"
+
+
+def _fit_to_rgb(spec: RenderSpec, size: tuple[int, int], fit: Fit, focus: tuple[float, float]) -> str:
+    """背景を size に合わせて、.ass を描ける RGB のフレームにするところまで。
+
+    .ass は RGB で描く（YUV 上で合成すると色が変換行列の違いでずれる）。
+    """
+    fitted = fit_filter(size, fit, spec.scale_flags, spec.pad_color, focus)
+    return f"{fitted},setsar=1,fps={spec.fps},format=rgb24"
+
+
+def _blur_video(spec: RenderSpec, frame: Frame, cut: str, tail: str) -> str:
+    """blur の画面の filtergraph。背景を帯と本編に分け、重ねてから縦の .ass を描く。
+
+    帯は背景だけをぼかすので、本編の歌詞・曲名表示は上下に写り込まない。
+    本編の映像は幅いっぱいに縮める（高さが奇数にならないよう -2 で合わせる）。
+    """
+    width = spec.size[0]
+    band = _fit_to_rgb(spec, spec.size, "cover", spec.focus)
+    main = _fit_to_rgb(spec, frame.size, frame.fit, frame.focus)
+    return (
+        f"[0:v]{cut}split[band][frame];"
+        f"[band]{band},{blur_filter(spec.size)}[bg];"
+        f"[frame]{main},{subtitles_filter(frame.subtitles, spec.fontsdir)},"
+        f"scale={width}:-2:flags={spec.scale_flags}[fg];"
+        f"[bg][fg]overlay=y=(H-h)*{_ratio(frame.frame_y)}:format=rgb,"
+        f"{subtitles_filter(spec.subtitles, spec.fontsdir)},{tail}"
+    )
 
 
 def _seconds(value: float) -> str:

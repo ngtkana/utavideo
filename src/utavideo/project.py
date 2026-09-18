@@ -3,7 +3,7 @@
 import json
 import re
 import string
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
@@ -19,7 +19,7 @@ from utavideo.config import (
     Thumbnail,
     load_project_config,
 )
-from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
+from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS, Layout
 from utavideo.names import legacy_name_from_title, slug_error, slug_from_title
 from utavideo.subs import escape_text
 
@@ -110,8 +110,21 @@ class Project:
         overlay = self.config.overlay_text
         return overlay.model_copy(update={"enabled": overlay.enabled and self.config.vertical.overlay_text})
 
+    def vertical_script_overlay_text(self, layouts: Collection[Layout]) -> OverlayText:
+        """縦用 .ass に描く曲名表示。blur では本編の映像に入るので、縦用 .ass には入れない。
+
+        layouts は、その縦用 .ass から描く画面の作り方。reframe が1つでもあれば描く。
+        """
+        overlay = self.vertical_overlay_text
+        if "reframe" in layouts:
+            return overlay
+        return overlay.model_copy(update={"enabled": False})
+
     def short_focus(self, short: Short) -> tuple[float, float]:
         return short.focus or self.vertical_focus
+
+    def short_layout(self, short: Short) -> Layout:
+        return short.layout or self.config.vertical.layout
 
     @property
     def shorts_dir(self) -> Path:
@@ -121,9 +134,9 @@ class Project:
         # 16:9 版は別のフォルダに置く。<name>-wide.mp4 だと、name = "chorus-wide" のショートとぶつかる
         return (self.shorts_dir / "wide" if wide else self.shorts_dir) / f"{short.name}.mp4"
 
-    def short_work_ass(self, short: Short, *, wide: bool = False) -> Path:
-        folder = self.work_dir / "shorts"
-        return (folder / "wide" if wide else folder) / f"{short.name}.ass"
+    def short_work_ass(self, short: Short, folder: str = "") -> Path:
+        """描画に使った .ass。folder は 16:9 版が "wide"、blur の真ん中に置く本編が "frame"。"""
+        return self.work_dir.joinpath("shorts", folder, f"{short.name}.ass")
 
     @property
     def thumbnail_dir(self) -> Path:

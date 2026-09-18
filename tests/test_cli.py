@@ -136,6 +136,21 @@ def test_vertical_ass_creates_the_file_once_and_keeps_the_source(tmp_path: Path)
     assert (root / "src/vertical.ass").read_text(encoding="utf-8") == "編集済み"
 
 
+def test_vertical_ass_for_blur_copies_the_styles_without_the_lyrics(tmp_path: Path) -> None:
+    root = tmp_path / "20260916-song"
+    assert runner.invoke(app, ["new", str(root)]).exit_code == 0
+    with (root / "utavideo.toml").open("a", encoding="utf-8") as toml:
+        toml.write('\n[vertical]\nlayout = "blur"\n')
+
+    result = runner.invoke(app, ["vertical-ass", "-C", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "帯に出す文字" in result.output
+    script = subs.load(root / "src/vertical.ass")
+    # 歌詞は本編の映像に入るので写さない。スタイルは Aegisub で選べるように写す
+    assert script.events == []
+    assert {"Lyrics", "Short", "VerticalBand"} <= set(script.styles)
+
+
 def test_vertical_ass_needs_the_lyrics(tmp_path: Path) -> None:
     root = tmp_path / "20260916-song"
     assert runner.invoke(app, ["new", str(root)]).exit_code == 0

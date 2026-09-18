@@ -48,18 +48,25 @@ class Conversion:
 
 
 def convert(
-    source: pysubs2.SSAFile, *, size: tuple[int, int], video_file: str, source_dir: str = "."
+    source: pysubs2.SSAFile,
+    *,
+    size: tuple[int, int],
+    video_file: str,
+    source_dir: str = ".",
+    include_lyrics: bool = True,
 ) -> Conversion:
     """本編の .ass を縦の解像度 size に変換した複製を作る。source は変更しない。
 
     video_file は、Aegisub で開く縦の下敷きの、縦用 .ass から見たパス。
     source_dir は、本編の .ass のフォルダの、縦用 .ass のフォルダから見たパス（/ 区切り）。
+    include_lyrics が False なら、スタイルだけを写して行は写さない
+    （blur では歌詞が本編の映像に入るので、縦用 .ass に写すと二重になる）。
     """
     res = subs.play_res(source)
     if res is None:
         raise subs.SubtitleError("本編の .ass に PlayResX / PlayResY が無いので、座標の比を決められません")
     rx, ry = size[0] / res[0], size[1] / res[1]
-    script = copy.deepcopy(source)
+    script = copy.deepcopy(source) if include_lyrics else subs.without_events(source)
 
     script.info["PlayResX"] = str(size[0])
     script.info["PlayResY"] = str(size[1])
