@@ -133,7 +133,7 @@ def convert_tags(text: str, rx: float, ry: float) -> tuple[str, list[str]]:
 
     def block(match: re.Match[str]) -> str:
         tags = match.group(0)
-        if subs.DRAWING_TAG.search(tags):
+        if subs.starts_drawing(tags):
             skipped["図形（\\p）"] = None
         tags = _COORD_TAG.sub(lambda m: _convert_coords(m, rx, ry, skipped), tags)
         tags = _SIZE_TAG.sub(lambda m: f"\\{m[1]}{_format(float(m[2]) * rx)}", tags)
