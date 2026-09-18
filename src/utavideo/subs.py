@@ -76,13 +76,20 @@ def without_events(subs: pysubs2.SSAFile) -> pysubs2.SSAFile:
     return stripped
 
 
-def add_fades(subs: pysubs2.SSAFile, fade_ms: tuple[int, int]) -> None:
-    """\\fad / \\fade の無い行の先頭に \\fad を入れる。"""
+def add_fades(
+    subs: pysubs2.SSAFile, fade_ms: tuple[int, int], *, no_fade_style_prefix: str | None = None
+) -> None:
+    """\\fad / \\fade の無い行の先頭に \\fad を入れる。
+
+    スタイル名が no_fade_style_prefix で始まる行には入れない。
+    """
     if fade_ms == (0, 0):
         return
     tag = rf"\fad({fade_ms[0]},{fade_ms[1]})"
     for event in dialogues(subs):
         if _FADE_TAG.search(event.text):
+            continue
+        if no_fade_style_prefix is not None and event.style.startswith(no_fade_style_prefix):
             continue
         if event.text.startswith("{"):
             event.text = "{" + tag + event.text[1:]
@@ -104,10 +111,14 @@ def compose(
     fade_ms: tuple[int, int],
     duration_ms: int,
     include_lyrics: bool,
+    no_fade_style_prefix: str | None = None,
 ) -> pysubs2.SSAFile:
-    """書き出しに使うスクリプトを作る。元の lyrics は変更しない。"""
+    """書き出しに使うスクリプトを作る。元の lyrics は変更しない。
+
+    スタイル名が no_fade_style_prefix で始まる行には、自動のフェードを入れない。
+    """
     script = copy.deepcopy(lyrics) if include_lyrics else without_events(lyrics)
-    add_fades(script, fade_ms)
+    add_fades(script, fade_ms, no_fade_style_prefix=no_fade_style_prefix)
     if overlay.enabled:
         script.events.append(
             pysubs2.SSAEvent(
