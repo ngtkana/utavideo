@@ -157,12 +157,14 @@ def render_issues(
             f"音源の長さ（{_time(duration_ms)}）を超えています"
         )
         issues.append(Issue("error", message))
-    length_ms = end_ms - pysubs2.time.frames_to_ms(start_frame, fps)
+    # 丸めを1回にして、実際に書き出す長さ（graph.Clip.duration_s）と揃える
+    length_ms = pysubs2.time.frames_to_ms(end_frame - start_frame, fps)
     fade_in, fade_out = audio_fade_ms
     if fade_in + fade_out > length_ms:
         message = (
             f"音声のフェード（vertical.audio_fade_ms の {fade_in} + {fade_out} ミリ秒）が、"
             f"区間の長さ（{_time(length_ms)}）を超えています"
+            "（区間を長くするか、vertical.audio_fade_ms を短くする）"
         )
         issues.append(Issue("error", message))
     if length_ms > SHORT_LIMIT_S * 1000:

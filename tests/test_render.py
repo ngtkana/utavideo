@@ -365,8 +365,13 @@ audio_fade_ms = [100, 200]  # 音源が 2 秒なので、既定値（300, 1000�
 """
 
 
-def _with_shorts(project: Path, shorts: str = '[[shorts]]\nname = "chorus"\n', extra: str = "") -> None:
-    config = TOML.format(background="bg.png") + VERTICAL.format(extra=extra) + shorts
+def _with_shorts(
+    project: Path,
+    shorts: str = '[[shorts]]\nname = "chorus"\n',
+    extra: str = "",
+    background: str = "bg.png",
+) -> None:
+    config = TOML.format(background=background) + VERTICAL.format(extra=extra) + shorts
     (project / "utavideo.toml").write_text(config, encoding="utf-8")
 
 
@@ -503,15 +508,21 @@ def _mean_volume(path: Path, start: float, end: float) -> float:
 
 
 def _with_section(
-    project: Path, *, shorts: str, line: str = "Comment: 0,0:00:00.53,0:00:01.77,Short,,0,0,0,,chorus"
+    project: Path,
+    *,
+    shorts: str,
+    line: str = "Comment: 0,0:00:00.53,0:00:01.77,Short,,0,0,0,,chorus",
+    background: str = "bg.png",
 ) -> None:
-    _with_shorts(project, shorts=shorts)
+    _with_shorts(project, shorts=shorts, background=background)
     _invoke("vertical-ass", "-C", str(project))
     _add_vertical_lines(project, line)
 
 
 def test_shorts_writes_the_section_and_the_wide_version_matches_main(project: Path) -> None:
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n')
+    # 背景は 0.5 秒で一周する loop.gif。入力側で -ss せずに切ることを確かめるため、
+    # 区間（0.53〜1.77 秒）が背景の2周目・3周目・4周目にまたがるようにする
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n', background="loop.gif")
     # 可逆で書き出して、本編と同じコマかをフレームの md5 で比べる
     config = project / "utavideo.toml"
     config.write_text(config.read_text(encoding="utf-8").replace("fps = 10", "fps = 10\ncrf = 0"), "utf-8")

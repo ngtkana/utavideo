@@ -343,8 +343,15 @@ def test_fades_longer_than_the_section_are_an_error() -> None:
     assert _messages(_render_issues(1.0, 2.2), "error") == [
         "音声のフェード（vertical.audio_fade_ms の 300 + 1000 ミリ秒）が、"
         "区間の長さ（0:00:01.200）を超えています"
+        "（区間を長くするか、vertical.audio_fade_ms を短くする）"
     ]
     assert _render_issues(1.0, 2.3) == []
+
+
+def test_section_length_is_rounded_once() -> None:
+    # 30fps の 1 フレームは 33.33 ミリ秒。両端を別々に丸めて引くと 34 ミリ秒になってしまう
+    length = "区間の長さ（0:00:00.033）"
+    assert length in _messages(_render_issues(1 / 30, 2 / 30, audio_fade_ms=(0, 34)), "error")[0]
 
 
 def test_sections_longer_than_the_upload_limits_are_warnings() -> None:
