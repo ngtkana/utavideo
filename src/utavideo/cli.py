@@ -844,6 +844,8 @@ def shorts_command(
             wide_script = _compose(project, lyrics, duration_ms, "final")
         if any_blur:
             frame_script = _frame_script(project, lyrics, duration_ms)
+    # blur では本編の .ass も描くので、そのフォントも渡す（どのショートでも同じ）
+    blur_font_files = analysis.font_files + inputs.font_files
     for short, layout_ in zip(selected, layouts, strict=True):
         section = analysis.sections[short.name]
         blur = layout_ == "blur"
@@ -857,7 +859,7 @@ def shorts_command(
         if blur:
             assert frame_script is not None
             frame = _Frame(frame_script, project.short_work_ass(short, "frame"))
-            font_files += inputs.font_files
+            font_files = blur_font_files
         target = _VideoTarget(
             "final",
             config.vertical.size,
