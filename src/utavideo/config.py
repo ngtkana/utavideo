@@ -27,6 +27,9 @@ from utavideo.timecode import parse_time
 
 PROJECT_CONFIG_NAME = "utavideo.toml"
 
+# 縦の画面の作り方。reframe は背景を縦に切り取り、blur は本編を上下のぼかした帯に置く
+type Layout = Literal["reframe", "blur"]
+
 
 class ConfigError(UtavideoError):
     """設定ファイルが読めない、または内容が不正。"""
@@ -174,8 +177,10 @@ class Vertical(_Model):
     """縦型のショートの共通設定。"""
 
     size: VideoSize = (1080, 1920)
+    layout: Layout = "reframe"  # 画面の作り方（vertical-ass が歌詞を写すかもこれで決まる）
     lyrics: Path = Path("src/vertical.ass")
     focus: Focus | None = None  # None なら video.focus
+    frame_y: Ratio = 0.5  # blur で本編の上端を (H - h) * frame_y に置く
     overlay_text: bool = True  # false なら、縦だけ曲名表示（[overlay_text]）を出さない
     audio_fade_ms: FadeMs = (300, 1000)  # 区間の端の音声のフェード。wide の版にも効く
 
@@ -184,6 +189,7 @@ class Short(_Model):
     """縦型のショート1本。区間は縦用 .ass の、本文が name のコメント行（スタイル Short）に置く。"""
 
     name: OutputName
+    layout: Layout | None = None  # None なら vertical.layout
     focus: Focus | None = None  # None なら vertical.focus
     wide: bool = False  # 同じ区間の 16:9 版（build/shorts/wide/<name>.mp4）も書き出す
 

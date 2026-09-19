@@ -221,6 +221,28 @@ def test_negative_audio_fade_is_rejected(tmp_path: Path) -> None:
         load_project_config(_write(tmp_path, MINIMAL + "[vertical]\naudio_fade_ms = [-1, 0]\n"))
 
 
+def test_layout_and_frame_y(tmp_path: Path) -> None:
+    config = load_project_config(_write(tmp_path, MINIMAL))
+    assert (config.vertical.layout, config.vertical.frame_y) == ("reframe", 0.5)
+    text = MINIMAL + '[vertical]\nlayout = "blur"\nframe_y = 0\n[[shorts]]\nname = "chorus"\n'
+    text += '[[shorts]]\nname = "intro"\nlayout = "reframe"\n'
+    project = Project(tmp_path, load_project_config(_write(tmp_path, text)))
+    assert project.config.vertical.frame_y == 0.0
+    chorus, intro = project.config.shorts
+    # shorts[].layout は vertical.layout を上書きする
+    assert (project.short_layout(chorus), project.short_layout(intro)) == ("blur", "reframe")
+    assert project.short_work_ass(chorus, "frame").parent.name == "frame"
+
+
+@pytest.mark.parametrize(
+    ("setting", "message"),
+    [('layout = "cover"', r"vertical\.layout"), ("frame_y = 1.5", r"vertical\.frame_y")],
+)
+def test_layout_and_frame_y_are_validated(tmp_path: Path, setting: str, message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        load_project_config(_write(tmp_path, MINIMAL + f"[vertical]\n{setting}\n"))
+
+
 def test_shorts_focus_and_wide(tmp_path: Path) -> None:
     text = MINIMAL + '[[shorts]]\nname = "chorus"\n[[shorts]]\nname = "intro"\nfocus = [0, 1]\nwide = true\n'
     project = Project(tmp_path, load_project_config(_write(tmp_path, text)))
