@@ -11,6 +11,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import MakeFont
+from utavideo import graph
 from utavideo.cli import app
 from utavideo.project import scaffold
 
@@ -613,8 +614,8 @@ GREEN_SCREEN = (
     "Dialogue: 1,0:00:00.00,0:00:02.00,Lyrics,,0,0,0,,"
     r"{\an7\pos(0,0)\c&H00FF00&\bord0\shad0\p1}m 0 0 l 320 0 320 180 0 180{\p0}"
 )
-# 本編（320x180）を縦の幅（180）に縮めた高さ。奇数にならないよう scale=180:-2 で 102 になる
-FRAME_HEIGHT = 102
+# 本編（320x180）を縦の幅（180）に縮めた高さ（偶数に丸めて 102）。実際の画素と突き合わせる
+FRAME_HEIGHT = graph.frame_height((320, 180), 180)
 
 
 def _greens_per_row(path: Path, size: tuple[int, int]) -> list[int]:
@@ -714,9 +715,43 @@ def test_check_for_a_blur_section_uses_the_main_lyrics(project: Path) -> None:
     output = _invoke("check", "-C", str(project)).output
     # 縦用 .ass に歌詞が無くても、区間の端は本編の .ass（0.20〜1.50 秒の行）で見る
     assert "区間の頭（0:00:00.530）が歌詞の行の途中にかかっています" in output
-    # 歌詞は本編の画面で見るので、突き合わせとはみ出しの検査はしない
+    # 歌詞は本編の画面で見るので、突き合わせはしない
     assert "本編との突き合わせ" not in output
-    assert "はみ出しそう" not in output
+    # 帯に描く文字は、縦の画面に収まるか見る（blur で唯一、縦用 .ass から描く行のため）
+    assert "「" + "A" * 20 + "」 が画面からはみ出しそうです" in output
+
+
+def test_check_does_not_repeat_a_warning_for_mixed_layouts(project: Path) -> None:
+    """blur と reframe の両方の区間に入る行の警告は、1回だけ出す。"""
+    _with_section(
+        project,
+        shorts='[[shorts]]\nname = "chorus"\n\n[[shorts]]\nname = "intro"\nlayout = "reframe"\n',
+        extra='layout = "blur"',
+    )
+    _add_vertical_lines(
+        project,
+        "Comment: 0,0:00:00.53,0:00:01.77,Short,,0,0,0,,intro",
+        "Style: VerticalBand,Test Sans,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
+        "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1",
+        "Dialogue: 0,0:00:00.60,0:00:01.00,VerticalBand,,0,0,0,,{\\pos(90,40)}BAND",
+    )
+    output = _invoke("check", "-C", str(project)).output
+    assert output.count("\\pos / \\move を使っています") == 1
+
+
+def test_check_rejects_a_video_size_taller_than_the_vertical_size(project: Path) -> None:
+    """blur では、縦の幅に縮めた本編が縦の画面に収まらない設定を止める（黙って切らない）。"""
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    config = project / "utavideo.toml"
+    # video.size = [320, 180] を [180, 640] にすると、縦（180x320）より縦長になる
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("size = [320, 180]", "size = [180, 640]"),
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "blur の画面を作れません" in result.output
+    assert "180x640" in result.output and "180x320" in result.output
 
 
 def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> None:
@@ -732,3 +767,12 @@ def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> Non
     assert "AAAA" in frame
     # 縦用 .ass の行は下敷きに焼き込まない（Aegisub で組むのはこちら）
     assert "AAAA" not in (project / "build/.work/vertical-preview.ass").read_text(encoding="utf-8")
+
+
+def test_preview_bg_vertical_follows_the_layouts_the_shorts_use(project: Path) -> None:
+    """vertical.layout = "reframe" でも、blur のショートがあれば下敷きを blur の画面にする。"""
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nlayout = "blur"\n')
+    _invoke("preview-bg", "--vertical", "-C", str(project))
+    # 完成図と同じく、真ん中に本編の映像（歌詞入り）を置く
+    frame = (project / "build/.work/vertical-preview-frame.ass").read_text(encoding="utf-8")
+    assert "AAAA" in frame

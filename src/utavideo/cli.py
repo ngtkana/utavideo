@@ -20,6 +20,7 @@ from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, T
 from utavideo import description, fonts, graph, layout, shorts, subs, vertical
 from utavideo.config import (
     PROJECT_CONFIG_NAME,
+    Layout,
     OverlayText,
     Short,
     Thumbnail,
@@ -202,28 +203,33 @@ def _compose(
     duration_ms: int,
     mode: graph.Mode,
     *,
-    for_vertical: bool = False,
+    no_vertical_fade: bool = False,
     overlay: OverlayText | None = None,
 ) -> pysubs2.SSAFile:
     """書き出しに使うスクリプトを作る。
 
-    for_vertical は縦の書き出しに使うとき。曲名表示は vertical.overlay_text で決まり、
-    Vertical で始まるスタイルの行には自動のフェードを入れない
-    （区間いっぱいに置く帯の文字が、繰り返し再生のつなぎ目で点滅しないようにする）。
-    overlay を渡すと、曲名表示の設定をそれで上書きする（blur の縦用 .ass など）。
+    no_vertical_fade は縦用 .ass を描くとき。Vertical で始まるスタイルの行に自動のフェードを
+    入れない（区間いっぱいに置く帯の文字が、繰り返し再生のつなぎ目で点滅しないようにする）。
+    overlay を渡すと、曲名表示の設定をそれで上書きする（縦の書き出しは必ず渡す）。
     """
     config = project.config
-    if overlay is None:
-        overlay = project.vertical_overlay_text if for_vertical else config.overlay_text
     return subs.compose(
         lyrics,
         song=config.song,
-        overlay=overlay,
+        overlay=overlay if overlay is not None else config.overlay_text,
         fade_ms=config.lyrics.fade_ms,
         duration_ms=duration_ms,
         include_lyrics=mode != "preview",
-        no_fade_style_prefix=vertical.VERTICAL_STYLE_PREFIX if for_vertical else None,
+        no_fade_style_prefix=vertical.VERTICAL_STYLE_PREFIX if no_vertical_fade else None,
     )
+
+
+def _frame_script(project: Project, lyrics: pysubs2.SSAFile, duration_ms: int) -> pysubs2.SSAFile:
+    """blur の真ん中に置く本編の映像に描く .ass。
+
+    build/main.mp4 と同じ画面にする。曲名表示だけ vertical.overlay_text で決まる。
+    """
+    return _compose(project, lyrics, duration_ms, "final", overlay=project.vertical_overlay_text)
 
 
 def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
@@ -330,8 +336,8 @@ def _write_video(
 
 
 def _save_script(script: pysubs2.SSAFile, path: Path) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    script.save(str(path), encoding="utf-8", format_="ass")
+    """描画に使う .ass を書く。ほかの出力と同じく .partial に書いてから名前を変える。"""
+    _write_text(path, script.to_string("ass"))
 
 
 def _print_scaffold(result: ScaffoldResult, root: Path) -> None:
@@ -541,11 +547,14 @@ def _vertical_inputs(project: Project, search: _FontSearch, *, draws_main: bool)
 def _render_vertical_preview(project_dir: Path | None) -> None:
     require_tools()
     project = _load_project(project_dir)
-    layout_ = project.config.vertical.layout
+    layouts = project.vertical_layouts
+    # 下敷きは、実際に使う画面に合わせる。blur が1本でもあれば、真ん中に本編の映像を置く
+    layout_: Layout = "blur" if "blur" in layouts else "reframe"
     search = _FontSearch.load()
     inputs = _vertical_inputs(project, search, draws_main=layout_ == "blur")
     issues, duration_s = inputs.issues, inputs.duration_s
-    checked = analyze_vertical(project, search, layouts=[layout_])
+    # 縦用 .ass のファイル全体の検査は、check・shorts と同じ layouts で行う（食い違わせない）
+    checked = analyze_vertical(project, search, layouts=layouts)
     issues += checked.issues
     _print_issues(issues)
     if any(issue.level == "error" for issue in issues):
@@ -554,12 +563,12 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
 
     duration_ms = round(duration_s * 1000)
     overlay = project.vertical_script_overlay_text([layout_])
-    script = _compose(project, checked.script, duration_ms, "preview", for_vertical=True, overlay=overlay)
+    script = _compose(project, checked.script, duration_ms, "preview", no_vertical_fade=True, overlay=overlay)
     frame, font_files = None, checked.font_files
     if layout_ == "blur":
         # 下敷きも完成図と同じ画面にする。本編の歌詞は真ん中の映像に入れ、縦用 .ass の行は入れない
         assert inputs.lyrics is not None
-        frame_script = _compose(project, inputs.lyrics, duration_ms, "final", for_vertical=True)
+        frame_script = _frame_script(project, inputs.lyrics, duration_ms)
         frame = _Frame(frame_script, project.work_dir / "vertical-preview-frame.ass")
         font_files += inputs.font_files
     target = _VideoTarget(
@@ -667,30 +676,51 @@ class VerticalAnalysis:
 
 
 def analyze_vertical(
-    project: Project, search: _FontSearch, *, layouts: Collection[graph.Layout]
+    project: Project, search: _FontSearch, *, layouts: Collection[Layout]
 ) -> VerticalAnalysis:
-    """縦用 .ass のファイル全体の検査（PlayRes・LayoutRes・スタイル・フォント）。
+    """縦用 .ass のファイル全体の検査（PlayRes・LayoutRes・スタイル・フォント）と、blur の大きさ。
 
     layouts は、この縦用 .ass から描く画面の作り方（曲名表示のスタイルが要るかが変わる）。
     区間の外の行は書き出しに使わないので、行ごとの検査（はみ出しを含む）はここでは行わない。
     """
+    sizing = _blur_frame_issues(project) if "blur" in layouts else []
     path = project.vertical_lyrics_path
     if not path.is_file():
         message = (
             f"縦用 .ass（vertical.lyrics）のファイルがありません: {path}（utavideo vertical-ass で作れます）"
         )
-        return VerticalAnalysis([subs.Issue("error", message)], None, ())
+        return VerticalAnalysis([*sizing, subs.Issue("error", message)], None, ())
     try:
         script = subs.load(path)
     except subs.SubtitleError as e:
-        return VerticalAnalysis([subs.Issue("error", f"縦用 .ass: {e}")], None, ())
+        return VerticalAnalysis([*sizing, subs.Issue("error", f"縦用 .ass: {e}")], None, ())
     config = project.config
     overlay = project.vertical_script_overlay_text(layouts)
     issues = subs.lint_vertical(script, size=config.vertical.size, overlay=overlay)
     # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
-    composed = _compose(project, script, 0, "final", for_vertical=True, overlay=overlay)
+    composed = _compose(project, script, 0, "final", no_vertical_fade=True, overlay=overlay)
     font_issues, font_files = _check_fonts(composed, search, overflows=False)
-    return VerticalAnalysis(subs.prefixed(issues + font_issues, "縦用 .ass: "), script, font_files)
+    return VerticalAnalysis(sizing + subs.prefixed(issues + font_issues, "縦用 .ass: "), script, font_files)
+
+
+def _blur_frame_issues(project: Project) -> list[subs.Issue]:
+    """blur の真ん中に置く本編の映像が、縦の画面に収まるか。
+
+    video.size が vertical.size より縦長だと、幅いっぱいに縮めた本編が縦からはみ出し、
+    黙って上下を切られる（frame_y の 0〜1 が「上端から下端まで」を指さなくなる）。
+    """
+    video = project.config.video
+    width, height = project.config.vertical.size
+    frame = graph.frame_height(video.size, width)
+    if frame <= height:
+        return []
+    message = (
+        f"blur の画面を作れません: video.size（{video.size[0]}x{video.size[1]}）が "
+        f"vertical.size（{width}x{height}）より縦長なので、縦の幅に縮めた本編の映像"
+        f"（{width}x{frame}）が縦の画面に収まりません"
+        '（vertical.size を高くするか、vertical.layout = "reframe" にします）'
+    )
+    return [subs.Issue("error", message)]
 
 
 @dataclass(frozen=True)
@@ -728,16 +758,17 @@ def analyze_shorts(
     issues = checked.issues + found.issues
     sections = {section.name: section for section in found.sections}
     # blur の区間では、縦用 .ass に歌詞を置かない。歌詞についての検査は本編の .ass で行う
-    by_layout: dict[graph.Layout, list[shorts.Section]] = {}
+    edge_lines: dict[Layout, list[pysubs2.SSAEvent]] = {
+        "reframe": shorts.lyric_lines(script),
+        "blur": [] if lyrics is None else shorts.lyric_lines(lyrics),
+    }
+    by_layout: dict[Layout, list[shorts.Section]] = {}
     for short in targets:
         if (section := sections.get(short.name)) is None:
             continue
         layout_ = project.short_layout(short)
         by_layout.setdefault(layout_, []).append(section)
-        edge_lines = lyrics if layout_ == "blur" else script
-        found_issues = (
-            [] if edge_lines is None else shorts.edge_issues(shorts.lyric_lines(edge_lines), section)
-        )
+        found_issues = shorts.edge_issues(edge_lines[layout_], section)
         # 書き出しの前に必ず通す検査。区間が音源より後ろだと、ffmpeg は音声の無い動画を書いてしまう
         found_issues += shorts.render_issues(
             section,
@@ -757,21 +788,25 @@ def analyze_shorts(
 
 def _vertical_line_issues(
     script: pysubs2.SSAFile,
-    by_layout: dict[graph.Layout, list[shorts.Section]],
+    by_layout: dict[Layout, list[shorts.Section]],
     search: _FontSearch,
     duration_ms: int,
 ) -> list[subs.Issue]:
     """区間に入る、描く行の警告。区間の外の行（本編の写し）は、本編と同じ警告を二重に出さない。
 
-    blur の区間で描くのは縦だけの文字なので、はみ出しは見ない（歌詞は本編の画面で見る）。
+    描く行は画面の作り方で変わる（blur では帯の文字だけ）ので、まとめてから1回だけ検査する。
+    そうしないと、reframe と blur の両方の区間に入る行の警告が2回出る。
+    はみ出しは blur でも見る。帯の文字こそ vertical.size の幅に収まるか確かめたい行のため。
     """
-    issues: list[subs.Issue] = []
-    for name, group in by_layout.items():
-        in_sections = shorts.lines_in_sections(script, group, vertical_only=name == "blur")
-        issues += subs.lint_lines(in_sections.events, duration_ms=duration_ms)
-        if name == "reframe":
-            issues += layout.overflows(in_sections, search.index.lookup)
-    return issues
+    drawn = subs.without_events(script)
+    drawn.events = [
+        event
+        for event in subs.dialogues(script)
+        if any(shorts.draws(event, group, vertical_only=name == "blur") for name, group in by_layout.items())
+    ]
+    return subs.lint_lines(drawn.events, duration_ms=duration_ms) + layout.overflows(
+        drawn, search.index.lookup
+    )
 
 
 @app.command("shorts")
@@ -785,9 +820,10 @@ def shorts_command(
     project = _load_project(project_dir)
     selected = _select_named(project.config.shorts, name, table="[[shorts]]", example=SHORTS_EXAMPLE)
     search = _FontSearch.load()
-    blurred = [short for short in selected if project.short_layout(short) == "blur"]
+    layouts: list[Layout] = [project.short_layout(short) for short in selected]
+    any_blur, any_wide = "blur" in layouts, any(s.wide for s in selected)
     # wide は本編と同じ画面、blur は真ん中に本編の映像を置くので、どちらも本編の .ass を描く
-    draws_main = bool(blurred) or any(s.wide for s in selected)
+    draws_main = any_blur or any_wide
     inputs = _vertical_inputs(project, search, draws_main=draws_main)
     issues, duration_s, lyrics = inputs.issues, inputs.duration_s, inputs.lyrics
     analysis = analyze_shorts(project, search, duration_s, lyrics, selected, report_unused=name is None)
@@ -804,19 +840,19 @@ def shorts_command(
     wide_script = frame_script = None
     if draws_main:
         assert lyrics is not None
-        if any(s.wide for s in selected):
+        if any_wide:
             wide_script = _compose(project, lyrics, duration_ms, "final")
-        if blurred:
-            frame_script = _compose(project, lyrics, duration_ms, "final", for_vertical=True)
-    for short in selected:
+        if any_blur:
+            frame_script = _frame_script(project, lyrics, duration_ms)
+    for short, layout_ in zip(selected, layouts, strict=True):
         section = analysis.sections[short.name]
-        blur = short in blurred
+        blur = layout_ == "blur"
         clip = graph.Clip(*shorts.clip_frames(section, fps), config.vertical.audio_fade_ms)
         length_s = clip.duration_s(fps)
         # .ass の時刻はずらさない。区間の頭をまたぐ行の \\move・\\fad を本編と同じ状態で描くため
         in_section = shorts.lines_in_sections(analysis.script, [section], vertical_only=blur)
-        overlay = project.vertical_script_overlay_text([project.short_layout(short)])
-        script = _compose(project, in_section, duration_ms, "final", for_vertical=True, overlay=overlay)
+        overlay = project.vertical_script_overlay_text([layout_])
+        script = _compose(project, in_section, duration_ms, "final", no_vertical_fade=True, overlay=overlay)
         frame, font_files = None, analysis.font_files
         if blur:
             assert frame_script is not None
@@ -862,8 +898,9 @@ def vertical_ass(project_dir: ProjectOption = None) -> None:
         _fail(f"lyrics.file のファイルがありません: {source}")
     config = project.config
     size = config.vertical.size
-    # blur では歌詞が本編の映像に入るので、縦用 .ass には写さない（Aegisub で二重に見えないように）
-    include_lyrics = config.vertical.layout != "blur"
+    # blur では歌詞が本編の映像に入るので、縦用 .ass には写さない（Aegisub で二重に見えないように）。
+    # reframe のショートが1本でもあれば、その区間では縦用 .ass の歌詞を描くので写す
+    include_lyrics = Project.draws_vertical_lyrics(project.vertical_layouts)
     conversion = vertical.convert(
         subs.load(source),
         size=size,

@@ -195,19 +195,21 @@ def _in_sections(event: pysubs2.SSAEvent, sections: Sequence[Section]) -> bool:
     return any(event.start < s.end_ms and event.end > s.start_ms for s in sections)
 
 
-def lines_in_sections(
-    script: pysubs2.SSAFile, sections: Sequence[Section], *, vertical_only: bool = False
-) -> pysubs2.SSAFile:
-    """区間と時刻が重なる、描く行（区間の行を除く Dialogue 行）だけを残した複製。
+def draws(event: pysubs2.SSAEvent, sections: Sequence[Section], *, vertical_only: bool = False) -> bool:
+    """その区間で画面に描く行か（区間と時刻が重なり、区間の行ではない）。
 
     vertical_only は blur のとき。歌詞は本編の映像に入っているので、縦だけの文字だけを描く。
     """
+    drawn = _is_vertical_only(event) if vertical_only else event.style != SHORT_STYLE
+    return drawn and _in_sections(event, sections)
 
-    def drawn(event: pysubs2.SSAEvent) -> bool:
-        return _is_vertical_only(event) if vertical_only else event.style != SHORT_STYLE
 
+def lines_in_sections(
+    script: pysubs2.SSAFile, sections: Sequence[Section], *, vertical_only: bool = False
+) -> pysubs2.SSAFile:
+    """区間で描く行（Dialogue 行）だけを残した複製。"""
     selected = subs.without_events(script)
-    selected.events = [e for e in subs.dialogues(script) if drawn(e) and _in_sections(e, sections)]
+    selected.events = [e for e in subs.dialogues(script) if draws(e, sections, vertical_only=vertical_only)]
     return selected
 
 

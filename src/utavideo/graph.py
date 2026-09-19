@@ -13,8 +13,6 @@ PREVIEW_GOP = 15
 
 type Mode = Literal["final", "preview", "overlay"]
 type Fit = Literal["cover", "contain"]
-# 縦の画面の作り方。reframe は背景を縦に切り取り、blur は本編を上下のぼかした帯に置く
-type Layout = Literal["reframe", "blur"]
 type ScaleFlags = Literal["lanczos", "bicubic", "bilinear", "area", "neighbor"]
 type Preset = Literal[
     "ultrafast",
@@ -176,8 +174,10 @@ def build_args(spec: RenderSpec) -> list[str]:
         if spec.frame is not None:
             video = _blur_video(spec, spec.frame, cut, tail)
         else:
-            fit = _fit_to_rgb(spec, spec.size, spec.fit, spec.focus)
-            video = f"[0:v]{cut}{fit},{subtitles_filter(spec.subtitles, spec.fontsdir)},{tail}"
+            fit = _fit_to_rgb(
+                spec.size, spec.fit, spec.focus, flags=spec.scale_flags, pad_color=spec.pad_color
+            )
+            video = f"[0:v]{cut}fps={spec.fps},{fit},{subtitles_filter(spec.subtitles, spec.fontsdir)},{tail}"
         if spec.mode == "final":
             codec = ["-c:v", "libx264", "-preset", spec.preset, "-crf", str(spec.crf)]
             codec += ["-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart"]
@@ -203,46 +203,66 @@ def build_args(spec: RenderSpec) -> list[str]:
 
 # 帯のぼかし。幅に比例させて、解像度が変わっても同じ見た目にする（1080 幅で sigma = 40）
 BLUR_SIGMA_RATIO = 40 / 1080
-# ぼかす前に縮める倍率。細かい模様を落としてから掛けるので、同じ見た目でも速い
-# （docs/verification/20260918-shorts.md）
+# 帯にする前に縮める倍率。細かい模様を落としてから掛けるので、同じ見た目でも速い
+# （docs/verification/20260918-shorts.md・20260919-blur-band.md）
 BLUR_DOWNSCALE = 4
 
 
-def blur_filter(size: tuple[int, int]) -> str:
-    """帯にする映像をぼかすフィルタ。1/4 に縮めて gblur を掛け、元の大きさに戻す。
+def frame_height(size: tuple[int, int], width: int) -> int:
+    """blur の真ん中に置く本編の映像の高さ。幅に合わせて縮め、偶数に丸める（yuv420p のため）。"""
+    w, h = size
+    return max(2, round(width * h / w / 2) * 2)
 
+
+def _blur_band(size: tuple[int, int], focus: tuple[float, float], pad_color: str) -> str:
+    """上下の帯にする映像。はじめから 1/4 の大きさに合わせ、ぼかしてから size に戻す。
+
+    帯は最後にぼかすので、size いっぱいに合わせてから縮めるより速い
+    （docs/verification/20260919-blur-band.md）。
     縮めるときは area（画素の平均）で細かい模様を落とし、戻すときは bilinear で滑らかにする
     （lanczos は輪郭を立てるので、ぼかした絵には使わない）。
     """
     w, h = size
     small = (max(1, w // BLUR_DOWNSCALE), max(1, h // BLUR_DOWNSCALE))
     sigma = w * BLUR_SIGMA_RATIO / BLUR_DOWNSCALE
-    return f"scale={small[0]}:{small[1]}:flags=area,gblur=sigma={_ratio(sigma)},scale={w}:{h}:flags=bilinear"
+    fitted = _fit_to_rgb(small, "cover", focus, flags="area", pad_color=pad_color)
+    return f"{fitted},gblur=sigma={_ratio(sigma)},scale={w}:{h}:flags=bilinear"
 
 
-def _fit_to_rgb(spec: RenderSpec, size: tuple[int, int], fit: Fit, focus: tuple[float, float]) -> str:
+def _fit_to_rgb(
+    size: tuple[int, int],
+    fit: Fit,
+    focus: tuple[float, float],
+    *,
+    flags: ScaleFlags,
+    pad_color: str,
+) -> str:
     """背景を size に合わせて、.ass を描ける RGB のフレームにするところまで。
 
     .ass は RGB で描く（YUV 上で合成すると色が変換行列の違いでずれる）。
+    setsar=1 は scale の後に置く。scale は表示の縦横比を保つために sar を書き換えるので、
+    先に置いても 1 には揃わない（docs/verification/20260919-blur-band.md）。
     """
-    fitted = fit_filter(size, fit, spec.scale_flags, spec.pad_color, focus)
-    return f"{fitted},setsar=1,fps={spec.fps},format=rgb24"
+    fitted = fit_filter(size, fit, flags, pad_color, focus)
+    return f"{fitted},setsar=1,format=rgb24"
 
 
 def _blur_video(spec: RenderSpec, frame: Frame, cut: str, tail: str) -> str:
     """blur の画面の filtergraph。背景を帯と本編に分け、重ねてから縦の .ass を描く。
 
     帯は背景だけをぼかすので、本編の歌詞・曲名表示は上下に写り込まない。
-    本編の映像は幅いっぱいに縮める（高さが奇数にならないよう -2 で合わせる）。
+    本編の映像は幅いっぱいに縮める（高さは frame_height で偶数にする）。
+    fps は split の前に置く（帯と本編で二重にコマを合わせない）。
     """
     width = spec.size[0]
-    band = _fit_to_rgb(spec, spec.size, "cover", spec.focus)
-    main = _fit_to_rgb(spec, frame.size, frame.fit, frame.focus)
+    main = _fit_to_rgb(frame.size, frame.fit, frame.focus, flags=spec.scale_flags, pad_color=spec.pad_color)
+    # 高さは frame_height で決める（検査（cli）と描画で同じ値にする）
+    height = frame_height(frame.size, width)
     return (
-        f"[0:v]{cut}split[band][frame];"
-        f"[band]{band},{blur_filter(spec.size)}[bg];"
+        f"[0:v]{cut}fps={spec.fps},split[band][frame];"
+        f"[band]{_blur_band(spec.size, spec.focus, spec.pad_color)}[bg];"
         f"[frame]{main},{subtitles_filter(frame.subtitles, spec.fontsdir)},"
-        f"scale={width}:-2:flags={spec.scale_flags}[fg];"
+        f"scale={width}:{height}:flags={spec.scale_flags}[fg];"
         f"[bg][fg]overlay=y=(H-h)*{_ratio(frame.frame_y)}:format=rgb,"
         f"{subtitles_filter(spec.subtitles, spec.fontsdir)},{tail}"
     )
@@ -294,8 +314,8 @@ class StillSpec:
 def build_still_args(spec: StillSpec) -> list[str]:
     """出力ファイル名（.png）を除いた ffmpeg の引数。"""
     # 動画と同じく RGB で合成する。PNG なので YUV には戻さない
-    fit = fit_filter(spec.size, spec.fit, spec.scale_flags, spec.pad_color, spec.focus)
-    video = f"[0:v]{fit},setsar=1,format=rgb24"
+    fit = _fit_to_rgb(spec.size, spec.fit, spec.focus, flags=spec.scale_flags, pad_color=spec.pad_color)
+    video = f"[0:v]{fit}"
     if spec.subtitles is not None:
         if spec.fontsdir is None:
             raise ValueError("subtitles には fontsdir が必要です")

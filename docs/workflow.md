@@ -152,7 +152,7 @@ utavideo shorts                 # build/shorts/<name>.mp4（wide なら build/sh
 utavideo shorts --name chorus   # 1本だけ書き出す
 ```
 
-- `vertical-ass` は、縦用 .ass が既にあると止まります。直した縦用 .ass を上書きしないためです。`layout` は `vertical-ass` を実行する前に決めてください（`blur` では歌詞の行を写しません）
+- `vertical-ass` は、縦用 .ass が既にあると止まります。直した縦用 .ass を上書きしないためです。`layout` は `vertical-ass` を実行する前に決めてください（使う `layout` が `blur` だけなら歌詞の行を写しません）
 - 変換される大きさと座標、変換されない図形は [commands.md](commands.md#vertical-ass) を参照してください
 - 縦用 .ass の曲名表示のスタイル（`Title`）を変えたら、`preview-bg --vertical` を実行し直します
 - 後から本編の歌詞を直したら、縦用 .ass も同じように直します。直し忘れは `check` が警告します（[本編との突き合わせ](commands.md#本編との突き合わせ)）。縦での改行の変え方（1行を2行に分ける、2行を1行にまとめる）では警告しません。`blur` では縦に歌詞を置かないので、この警告は出ません

@@ -7,19 +7,21 @@ from collections.abc import Collection, Iterable
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
+from typing import Literal
 
 from utavideo.config import (
     PROJECT_CONFIG_NAME,
     ConfigError,
     Credit,
     Defaults,
+    Layout,
     OverlayText,
     ProjectConfig,
     Short,
     Thumbnail,
     load_project_config,
 )
-from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS, Layout
+from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
 from utavideo.names import legacy_name_from_title, slug_error, slug_from_title
 from utavideo.subs import escape_text
 
@@ -110,15 +112,30 @@ class Project:
         overlay = self.config.overlay_text
         return overlay.model_copy(update={"enabled": overlay.enabled and self.config.vertical.overlay_text})
 
-    def vertical_script_overlay_text(self, layouts: Collection[Layout]) -> OverlayText:
-        """縦用 .ass に描く曲名表示。blur では本編の映像に入るので、縦用 .ass には入れない。
+    @staticmethod
+    def draws_vertical_lyrics(layouts: Collection[Layout]) -> bool:
+        """縦用 .ass に歌詞と曲名表示を持たせるか。
 
-        layouts は、その縦用 .ass から描く画面の作り方。reframe が1つでもあれば描く。
+        blur ではどちらも本編の映像に入るので持たせない。reframe が1つでもあれば持たせる。
         """
+        return "reframe" in layouts
+
+    def vertical_script_overlay_text(self, layouts: Collection[Layout]) -> OverlayText:
+        """縦用 .ass に描く曲名表示。blur では本編の映像に入るので、縦用 .ass には入れない。"""
         overlay = self.vertical_overlay_text
-        if "reframe" in layouts:
+        if self.draws_vertical_lyrics(layouts):
             return overlay
         return overlay.model_copy(update={"enabled": False})
+
+    @property
+    def vertical_layouts(self) -> tuple[Layout, ...]:
+        """縦用 .ass から実際に描く画面の作り方（[[shorts]] で使うもの）。
+
+        [[shorts]] を書く前（vertical-ass・preview-bg --vertical）は vertical.layout だけになる。
+        """
+        if not self.config.shorts:
+            return (self.config.vertical.layout,)
+        return tuple(dict.fromkeys(self.short_layout(s) for s in self.config.shorts))
 
     def short_focus(self, short: Short) -> tuple[float, float]:
         return short.focus or self.vertical_focus
@@ -134,7 +151,7 @@ class Project:
         # 16:9 版は別のフォルダに置く。<name>-wide.mp4 だと、name = "chorus-wide" のショートとぶつかる
         return (self.shorts_dir / "wide" if wide else self.shorts_dir) / f"{short.name}.mp4"
 
-    def short_work_ass(self, short: Short, folder: str = "") -> Path:
+    def short_work_ass(self, short: Short, folder: Literal["", "wide", "frame"] = "") -> Path:
         """描画に使った .ass。folder は 16:9 版が "wide"、blur の真ん中に置く本編が "frame"。"""
         return self.work_dir.joinpath("shorts", folder, f"{short.name}.ass")
 

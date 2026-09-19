@@ -21,11 +21,14 @@ from pydantic import (
 )
 
 from utavideo.errors import UtavideoError
-from utavideo.graph import Fit, Layout, Preset, ScaleFlags
+from utavideo.graph import Fit, Preset, ScaleFlags
 from utavideo.names import casefold_duplicates, output_name_error, slug_error
 from utavideo.timecode import parse_time
 
 PROJECT_CONFIG_NAME = "utavideo.toml"
+
+# 縦の画面の作り方。reframe は背景を縦に切り取り、blur は本編を上下のぼかした帯に置く
+type Layout = Literal["reframe", "blur"]
 
 
 class ConfigError(UtavideoError):

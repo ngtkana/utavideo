@@ -85,8 +85,8 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 |---|---|
 | 画面の作り方を選ぶ | `vertical.layout`。`"reframe"`（既定）は背景を縦に切り取って縦用 .ass の歌詞を重ね、`"blur"` は本編の映像をぼかした帯の上に置く（[shorts](commands.md#shorts)） |
 | `blur` で本編の映像を置く高さ | `vertical.frame_y`（0〜1。`0` で上端、`0.5` で中央、`1` で下端）。帯を上に広く取りたいなら大きくする |
-| ショートごとに画面の作り方を変える | `shorts[].layout`（既定は `vertical.layout`）。`blur` の曲で1本だけ `reframe` にするときは、本編の .ass の歌詞の行を Aegisub で縦用 .ass にコピーする |
-| 縦用 .ass を作る | `utavideo vertical-ass`。本編の .ass の行を写し、大きさと座標を縦の解像度に変換する（`blur` では行を写さず、スタイルだけ写す） |
+| ショートごとに画面の作り方を変える | `shorts[].layout`（既定は `vertical.layout`）。`blur` の曲で1本だけ `reframe` にするときは、本編の .ass の歌詞の行を Aegisub で縦用 .ass にコピーする。`vertical-ass` と `preview-bg --vertical` は `[[shorts]]` で実際に使う `layout` に合わせます（`blur` が1本でもあれば下敷きは `blur`、`reframe` が1本でもあれば歌詞を写す） |
+| 縦用 .ass を作る | `utavideo vertical-ass`。本編の .ass の行を写し、大きさと座標を縦の解像度に変換する（使う `layout` が `blur` だけなら行を写さず、スタイルだけ写す） |
 | 縦の解像度 | `vertical.size`（`vertical-ass` の前に決める。後から変えるなら、縦用 .ass の PlayRes も同じにする） |
 | 縦用 .ass の場所・名前 | `vertical.lyrics` |
 | 縦だけ文字を大きくする・改行する | 縦用 .ass のスタイル `Lyrics` の大きさ、行の `\N`（本編の .ass は変わらない） |
@@ -104,7 +104,7 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | 縦だけ曲名表示を消す | `vertical.overlay_text = false`（本編と 16:9 版には出る。`blur` では真ん中の本編の映像からも消える） |
 | 帯の文字にフェードを入れない | スタイル名を `Vertical` で始める（自動のフェードを入れない。`\fad` を自分で書けば効く） |
 
-`blur` のぼかしの強さは変えられません（帯が落ち着いて見える強さに決めています。[検証記録](verification/20260918-shorts.md)）。
+`blur` のぼかしの強さは変えられません（帯が落ち着いて見える強さに決めています。[検証記録](verification/20260919-blur-band.md)）。
 
 ## 音源と公開
 
