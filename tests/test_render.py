@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import MakeFont
+from tests.conftest import MakeFont, invoke
 from utavideo.cli import app
 from utavideo.project import scaffold
 
@@ -101,14 +101,8 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
     return root
 
 
-def _invoke(*args: str):
-    result = runner.invoke(app, list(args))
-    assert result.exit_code == 0, result.output
-    return result
-
-
 def test_check_passes(project: Path) -> None:
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "問題ありません" in output
     assert "release 先" in output and "test-v1.2.0.mp4" in output  # 次に付く名前
 
@@ -118,7 +112,7 @@ def test_check_counts_warnings_instead_of_saying_ok(project: Path) -> None:
     lyrics = LYRICS.format(font="Test Sans") + "Dialogue: 0,0:00:01.80,0:00:03.00,Lyrics,,0,0,0,,BBBB\n"
     (project / "src/lyrics.ass").write_text(lyrics, encoding="utf-8")
 
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "問題ありません" not in output
     assert "警告 1 件" in output
 
@@ -147,7 +141,7 @@ def test_check_reports_missing_font(project: Path) -> None:
 
 
 def test_build_writes_main_mp4(project: Path) -> None:
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
 
     output = project / "build/main.mp4"
     info = _probe(output)
@@ -161,18 +155,18 @@ def test_build_writes_main_mp4(project: Path) -> None:
 
 def test_gif_background_loops_for_whole_audio(project: Path) -> None:
     (project / "utavideo.toml").write_text(TOML.format(background="loop.gif"), encoding="utf-8")
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
     video = _stream(_probe(project / "build/main.mp4"), "video")
     assert float(video["duration"]) == pytest.approx(2.0, abs=0.15)
 
 
 def test_preview_bg(project: Path) -> None:
-    _invoke("preview-bg", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
     assert _stream(_probe(project / "build/preview/bg.mp4"), "video")["codec_name"] == "h264"
 
 
 def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
-    _invoke("overlay", "-C", str(project))
+    invoke("overlay", "-C", str(project))
 
     output = project / "build/overlay.mov"
     video = _stream(_probe(output), "video")
@@ -183,8 +177,8 @@ def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
 
 
 def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
-    _invoke("build", "-C", str(project))
-    _invoke("release", "-C", str(project))
+    invoke("build", "-C", str(project))
+    invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.0.mp4").is_file()
 
     again = runner.invoke(app, ["release", "-C", str(project)])
@@ -195,8 +189,8 @@ def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
     # （テスト用のフォントは "A" しか持たないので、字を変えずに数を変える）
     lyrics = project / "src/lyrics.ass"
     lyrics.write_text(lyrics.read_text(encoding="utf-8").replace("AAAA", "A A"), encoding="utf-8")
-    _invoke("build", "-C", str(project))
-    _invoke("release", "-C", str(project))
+    invoke("build", "-C", str(project))
+    invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.1.mp4").is_file()
 
     built_at = (project / "build/main.mp4").stat().st_mtime

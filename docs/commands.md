@@ -5,7 +5,7 @@
 ## 共通
 
 - `check`・`preview-bg`・`build`・`overlay`・`description`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です
+- `sample`・`check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
@@ -47,6 +47,37 @@ utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>] [--slug <�
 | `--slug` | フォルダ名（先頭の `YYYYMMDD` は除く） | `song.slug` に書く |
 
 `src/`（`src/ref/` を除く）に音源と背景がちょうど1つずつあれば、`utavideo.toml` の `audio.file`・`video.background` に設定します。対象の拡張子は、音源が wav / flac / mp3 / m4a / aac / ogg / opus、背景が [config-reference.md](config-reference.md#video) の `background` と同じです。
+
+## sample
+
+```sh
+utavideo sample <パス> [--font <フォント名>] [--small]
+```
+
+動作確認用の見本の曲フォルダを作ります。素材をその場で合成するので、自分の曲を用意する前に一通りのコマンドを試せます。`new` が空の雛形（素材は自分で置く）なのに対して、`sample` は素材入りで、作った直後から書き出せます。
+
+| オプション | 既定値 | 内容 |
+|---|---|---|
+| `<パス>` | 必須 | 作る見本の曲フォルダのパス。既にあるとエラー（作り直すときはフォルダごと消す） |
+| `--font` | 合成フォント | 歌詞に使う実在のフォント名 |
+| `--small` | 無効 | 小さく速く作る（640x360・10fps・ultrafast）。テストと CI 用 |
+
+作るものは 1920x1080・30fps・36 秒で、合計 2MB 程度です。
+
+| ファイル | 内容 |
+|---|---|
+| `utavideo.toml` | 架空の曲名・クレジット・素材。背景の変え方はコメントに書いてある |
+| `src/lyrics.ass` | 歌詞。警告の出る行がわざと入っている（下記） |
+| `src/mix/sample-v1.0.flac` | 4 秒ごとに高さの変わる合成音。どこを切り出したか、どこでフェードしたかが耳で分かる |
+| `src/bg/loop.mp4` | カラーバー ＋ 5 秒で画面を横断する白い箱。背景の繰り返しと、切り取り・拡大の効き方が目で分かる |
+| `src/bg/still.png`・`src/bg/loop.gif` | 静止画・GIF の背景を試す用 |
+| `src/fonts/UtavideoSample.ttf` | 合成フォント（`--font` を渡したときは作らない） |
+| `README.md` | 試すコマンドの一覧 |
+
+- 合成フォントを使うときは、見本の曲フォルダで `export UTAVIDEO_FONT_DIRS="$PWD/src/fonts"` を先に実行します。この間は自分のフォントが見つかりません（`UTAVIDEO_FONT_DIRS` は探す場所を置き換えるため）
+- 合成フォントはどの文字も四角で描くので、書体や仕上がりは確かめられません。見栄えを見るときは `--font` に手元のフォント名を渡します
+- 見本は `check` で**警告が 2 件**出ます。警告の出方も見せるためで、`\pos` / `\move` を使っている行が 2 行と、空白も `\N` も無い長い行が 1 行入っています（ユーザー設定の `description` を既定から変えていると、概要欄の警告が増えることがあります）
+- 見本と書き出したものはリポジトリに入れません。要らなくなったらフォルダごと消します
 
 ## check
 

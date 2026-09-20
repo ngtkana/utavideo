@@ -1,0 +1,53 @@
+# utavideo sample が作った見本の設定。曲名・人・URL はすべて架空で、素材は合成したものです。
+# 全項目の説明:
+# https://github.com/ngtkana/utavideo/blob/main/docs/config-reference.md
+
+[song]
+title = "$title"
+slug = "sample"
+artist = "$artist"
+label = "utavideo 見本"
+original_urls = ["https://example.com/original"]
+
+[audio]
+file = "$audio"
+
+[video]
+# "$still"（静止画）・"$gif"（GIF）に書き換えると、他の形式の背景も試せる
+background = "$background"
+size = [$width, $height]
+fps = $fps
+crf = $crf
+preset = "$preset"
+fit = "cover"              # "contain" にすると、背景の縦横比が違うときの余白を見られる
+scale_flags = "lanczos"
+
+[lyrics]
+file = "src/lyrics.ass"
+fade_ms = [150, 150]
+
+[overlay_text]
+style = "Title"
+text = "{title} / {artist}"
+
+[description]
+text = """
+utavideo の動作確認用の見本です。
+"""
+hashtags = ["utavideo", "見本"]
+
+[[credits]]
+roles = ["Vocal", "Mix"]
+name = "$artist"
+urls = ["https://example.com/artist"]
+
+[[credits]]
+roles = ["イラスト"]
+name = "架空イラストレーター"
+urls = ["https://example.com/illustrator"]
+
+# files には背景を3つとも書いてある（background を書き換えても check の警告が増えないように）
+[[materials]]
+section = "使用素材"
+urls = ["https://example.com/material"]
+files = ["$background", "$still", "$gif"]
