@@ -42,16 +42,15 @@ uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
    ```sh
    utavideo sample <見本のフォルダ>
    cd <見本のフォルダ>
-   export UTAVIDEO_FONT_DIRS="$PWD/src/fonts"
    ```
 
    見栄えを見る項目があるときは `--font "<手元にあるフォント名>"` を付ける（合成フォントはどの文字も四角なので、書体は確かめられない）。
 
-2. 実行する
+2. 実行する（`--font` を付けたときは `UTAVIDEO_FONT_DIRS=src/fonts ` は要らない）
 
    ```sh
-   utavideo check
-   utavideo build
+   UTAVIDEO_FONT_DIRS=src/fonts utavideo check
+   UTAVIDEO_FONT_DIRS=src/fonts utavideo build
    ```
 
 3. 何を見れば正しいと分かるか
@@ -62,6 +61,8 @@ uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
 
 - 3 は「どこを見るか」と「どうなっていれば正しいと分かるか」を必ず対にして書く。「確認する」だけでは、読んだ人が同じ判断をできない
 - コマンドが通る・数値が合うなど、機械が判定できることはテストで確かめ、PR 本文の「確認したこと」に書く。手順には混ぜない
+- 判定は件数ではなく中身で書く。警告の数やファイルのサイズは、読む人のユーザー設定や渡したフォントで変わる
+- `UTAVIDEO_FONT_DIRS` は `export` しない。探す場所を置き換えるので、同じシェルで自分の曲に戻ったときに自分のフォントが見つからなくなる
 
 ## ドキュメントの分担
 

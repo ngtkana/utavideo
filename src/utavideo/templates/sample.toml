@@ -4,22 +4,23 @@
 
 [song]
 title = "$title"
-slug = "sample"
-artist = "$artist"
-label = "utavideo 見本"
+slug = "$slug"
+artist = "$artist"          # 原曲の人（歌った人は [[credits]] に書く）
+label = "$label"
 original_urls = ["https://example.com/original"]
 
 [audio]
 file = "$audio"
 
 [video]
-# "$still"（静止画）・"$gif"（GIF）に書き換えると、他の形式の背景も試せる
+# "$still"（4:3 の静止画）・"$gif"（GIF）に書き換えると、他の形式の背景も試せる
 background = "$background"
 size = [$width, $height]
 fps = $fps
 crf = $crf
 preset = "$preset"
-fit = "cover"              # "contain" にすると、背景の縦横比が違うときの余白を見られる
+# 4:3 の "$still" に差し替えると、"cover" は上下が切り取られ、"contain" は左右に余白が出る
+fit = "cover"
 scale_flags = "lanczos"
 
 [lyrics]
@@ -28,9 +29,13 @@ fade_ms = [150, 150]
 
 [overlay_text]
 style = "Title"
-text = "{title} / {artist}"
+text = "$overlay_text"
 
 [description]
+# タイトルはふつうユーザー設定の description.title から組み立てますが、その形も、{singers} に
+# 入る人を決める singer_roles も、人によって違います。見本は誰が動かしても同じ出力になるように、
+# タイトルをここに書いています（自分の曲では消して、ユーザー設定に任せて構いません）
+title = "$title / $artist（Cover: $singer）"
 text = """
 utavideo の動作確認用の見本です。
 """
@@ -38,8 +43,8 @@ hashtags = ["utavideo", "見本"]
 
 [[credits]]
 roles = ["Vocal", "Mix"]
-name = "$artist"
-urls = ["https://example.com/artist"]
+name = "$singer"
+urls = ["https://example.com/singer"]
 
 [[credits]]
 roles = ["イラスト"]

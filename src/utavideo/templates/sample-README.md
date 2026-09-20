@@ -8,13 +8,13 @@ $font_note
 ## 試すこと
 
 ```sh
-utavideo check        # 検査（わざと警告の出る行が入っています）
-utavideo preview-bg   # build/preview/bg.mp4（Aegisub で開く用）
-utavideo build        # build/main.mp4
-utavideo description  # build/title.txt・build/description.txt
-utavideo release      # release/sample-v1.0.0.mp4
-utavideo overlay      # build/overlay.mov（透過。大きいので必要なときだけ）
+${prefix}utavideo check        # 検査（わざと警告の出る行が入っています）
+${prefix}utavideo preview-bg   # build/preview/bg.mp4（Aegisub で開く用）
+${prefix}utavideo build        # build/main.mp4
+${prefix}utavideo description  # build/title.txt・build/description.txt
+${prefix}utavideo release      # release/sample-v1.0.0.mp4
+${prefix}utavideo overlay      # build/overlay.mov（透過。大きいので必要なときだけ）
 ```
 
 - 見本の中身とコマンドの説明: https://github.com/ngtkana/utavideo/blob/main/docs/commands.md
-- 背景の形式を変えて試すときは `utavideo.toml` の `video.background` を書き換えます
+- 背景の形式を変えて試すときは `utavideo.toml` の `video.background` を書き換えます。`src/bg/still.png` は 4:3 なので、`video.fit` を `"cover"`（上下が切り取られる）と `"contain"`（左右に余白が出る）で見比べられます

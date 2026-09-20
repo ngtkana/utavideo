@@ -308,7 +308,7 @@ def _interactive() -> bool:
 @app.command("sample")
 @_handle_errors
 def sample_command(
-    path: Annotated[Path, typer.Argument(help="作る見本の曲フォルダのパス（リポジトリの外を指す）")],
+    path: Annotated[Path, typer.Argument(help="作る見本の曲フォルダのパス（まだ無いパス）")],
     font: Annotated[
         str | None,
         typer.Option("--font", help="歌詞に使う実在のフォント名。省略時はフォントも合成する"),
@@ -316,16 +316,22 @@ def sample_command(
     small: Annotated[bool, typer.Option("--small", help="小さく速く作る（640x360・10fps）")] = False,
 ) -> None:
     """動作確認用の見本の曲フォルダを、合成した素材から作る。"""
-    require_tools()
     if path.exists():
         _fail(f"既にあります: {path}（作り直すときはフォルダごと消してください）")
-    result = sample.create(path, font=font, small=small)
+    require_tools()
+    try:
+        result = sample.create(path, font=font, small=small)
+    # path は「まだ無いパス」に自分で作ったもの。途中で失敗したら消して、同じパスでやり直せるようにする
+    except BaseException:
+        shutil.rmtree(path, ignore_errors=True)
+        raise
     console.print(f"作成しました: {path}", markup=False)
     _print_scaffold(result, path)
+    prefix = sample.command_prefix(font)
     console.print(f"次にやること:\n  cd {path}", markup=False)
-    if font is None:
-        console.print(f"  {sample.FONT_DIRS_EXPORT}", markup=False)
-    console.print("  utavideo check → utavideo build（他のコマンドは README.md）", markup=False)
+    console.print(
+        f"  {prefix}utavideo check → {prefix}utavideo build（他のコマンドは README.md）", markup=False
+    )
 
 
 @app.command()

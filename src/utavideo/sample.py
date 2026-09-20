@@ -17,15 +17,16 @@ from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 
 from utavideo import graph, subs
-from utavideo.config import PROJECT_CONFIG_NAME
+from utavideo.config import PROJECT_CONFIG_NAME, OverlayText, Song
 from utavideo.ffmpeg import run
 from utavideo.project import SCAFFOLD_DIRS, ScaffoldResult, render_template
 
 FONT_FAMILY = "Utavideo Sample"
 FONT_DIR = Path("src/fonts")
 FONT_FILE = FONT_DIR / "UtavideoSample.ttf"
-# 合成フォントは既定の探索先に無いので、環境変数で渡してもらう（UTAVIDEO_FONT_DIRS は探索先を置き換える）
-FONT_DIRS_EXPORT = f'export UTAVIDEO_FONT_DIRS="$PWD/{FONT_DIR.as_posix()}"'
+# 合成フォントは既定の探索先に無いので、環境変数で渡してもらう（UTAVIDEO_FONT_DIRS は探索先を置き換える）。
+# export にすると同じシェルで自分の曲に戻ったときにも効き続けるので、その場限りの形にする
+FONT_DIRS_PREFIX = f"UTAVIDEO_FONT_DIRS={FONT_DIR.as_posix()}"
 AUDIO_FILE = Path("src/mix/sample-v1.0.flac")
 VIDEO_BACKGROUND = Path("src/bg/loop.mp4")
 STILL_BACKGROUND = Path("src/bg/still.png")
@@ -41,10 +42,18 @@ LOOP_S = 5  # 背景が1周する秒数。36 秒の間に 7 周と少しする�
 GIF_SIZE = (480, 270)
 GIF_FPS = 8
 GIF_S = 2
+# 静止画の背景だけ 4:3 にする。動画と縦横比が違わないと、fit の cover（切り取り）と
+# contain（余白）がどちらも何もしないので、差し替えても見た目が変わらない
+STILL_ASPECT = 4 / 3
+# GIF は 256 色までなので、既定のエンコーダに任せるとカラーバーの平らな面がディザの市松模様になる。
+# 出てくる色を数えたパレットを作り、ディザ無しで割り当てる（色の潰れが背景の見え方に混ざらない）
+_GIF_PALETTE = ",split[a][b];[a]palettegen=max_colors=32[p];[b][p]paletteuse=dither=none"
 
-# 曲名表示（overlay_text.text）に入る文字。合成フォントに字形を入れるために要る
-_TITLE = "見本のうた"
-_ARTIST = "架空アーティスト"
+# 見本の曲（架空）。utavideo.toml と、合成フォントに入れる字形をここから作る
+_SONG = Song(title="見本のうた", slug="sample", artist="架空アーティスト", label="utavideo 見本")
+_SINGER = "架空シンガー"  # 歌った人（song.artist は原曲の人）
+# 曲名表示。画面に出るので、この文字も合成フォントの字形に入れる（区切りの / を含む）
+_OVERLAY_TEXT = OverlayText().text
 
 
 @dataclass(frozen=True)
@@ -114,7 +123,10 @@ def create(root: Path, *, font: str | None = None, small: bool = False) -> Scaff
     created = [
         _write(root / PROJECT_CONFIG_NAME, _config(spec)),
         _write(root / LYRICS_FILE, lyrics),
-        _write(root / "README.md", render_template("sample-README.md", font_note=font_note(font))),
+        _write(
+            root / "README.md",
+            render_template("sample-README.md", font_note=font_note(font), prefix=command_prefix(font)),
+        ),
     ]
     if font is None:
         created.append(build_box_font(root / FONT_FILE, FONT_FAMILY, chars=_drawn_text(lyrics)))
@@ -126,7 +138,7 @@ def _drawn_text(lyrics: str) -> str:
     """画面に出る文字だけ（上書きタグを除いた歌詞の行と、曲名表示）。合成フォントの字形を決める。"""
     script = pysubs2.SSAFile.from_string(lyrics, format_="ass")
     drawn = "".join(subs.OVERRIDE_BLOCK.sub("", event.text) for event in subs.dialogues(script))
-    return drawn.replace(r"\N", "") + _TITLE + _ARTIST
+    return drawn.replace(r"\N", "") + subs.format_overlay_text(_OVERLAY_TEXT, _SONG)
 
 
 def _write(path: Path, text: str) -> Path:
@@ -137,8 +149,12 @@ def _write(path: Path, text: str) -> Path:
 def _config(spec: _Spec) -> str:
     return render_template(
         "sample.toml",
-        title=_TITLE,
-        artist=_ARTIST,
+        title=_SONG.title,
+        slug=_SONG.slug,
+        artist=_SONG.artist,
+        label=_SONG.label,
+        singer=_SINGER,
+        overlay_text=_OVERLAY_TEXT,
         audio=AUDIO_FILE.as_posix(),
         background=VIDEO_BACKGROUND.as_posix(),
         still=STILL_BACKGROUND.as_posix(),
@@ -159,6 +175,7 @@ def _lyrics(spec: _Spec) -> str:
         width=str(w),
         height=str(h),
         lyrics_size=str(spec.px(100)),
+        lyrics_spacing=str(spec.px(2)),
         lyrics_outline=str(spec.px(4)),
         lyrics_margin=str(spec.px(120)),
         lyrics_marginv=str(spec.px(90)),
@@ -176,27 +193,35 @@ def _lyrics(spec: _Spec) -> str:
     )
 
 
+def command_prefix(font: str | None) -> str:
+    """合成フォントのときに、コマンドの前に付ける環境変数（末尾の空白を含む）。"""
+    return "" if font is not None else f"{FONT_DIRS_PREFIX} "
+
+
 def font_note(font: str | None) -> str:
-    """歌詞のフォントについての説明。合成フォントのときは、その場所を渡す環境変数も。"""
+    """歌詞のフォントについての説明。合成フォントのときは、その場所の渡し方も。"""
     if font is not None:
         return f"歌詞には実在のフォント {font} を使います。"
     return (
-        "歌詞のフォントも合成してあるので、この曲フォルダでコマンドを実行する前に、"
-        "その場所を渡してください（渡している間は自分のフォントが見つかりません）。\n\n"
-        f"```sh\n{FONT_DIRS_EXPORT}\n```"
+        "歌詞のフォントも合成してあるので、この曲フォルダで実行するコマンドの前に "
+        f"`{FONT_DIRS_PREFIX}` を付けて、その場所を渡します"
+        "（`UTAVIDEO_FONT_DIRS` は探す場所を置き換えるので、自分の曲に戻るときは付けません）。"
     )
 
 
 def _materials(root: Path, spec: _Spec) -> list[Path]:
-    w, h = spec.size
-    # 4 秒ごとに高さの変わる合成音。どこを切り出したか・どこでフェードしたかが耳で分かる
-    tone = "0.25*sin(2*PI*220*(1+floor(t/4)-3*floor(t/12))*t)"
+    h = spec.size[1]
+    # 4 秒ごとに 220Hz ずつ高くなる合成音。36 秒で 9 段すべて違う高さになるので、
+    # どこを切り出したか・どこでフェードしたかが耳で分かる（繰り返すと区別できない）
+    tone = "0.25*sin(2*PI*220*(1+floor(t/4))*t)"
     audio = root / AUDIO_FILE
     _ffmpeg(["-f", "lavfi", "-i", f"aevalsrc={tone}:d={DURATION_S}:s=48000", "-ac", "1"], audio)
 
-    # カラーバー（平らな色の面なので切り取り・拡大の効き方が分かる）＋ 1周で横断する白い箱
+    # カラーバーの静止画。動画と縦横比が違うので、fit の切り取り・余白の効き方が目で分かる
     bars = root / STILL_BACKGROUND
-    _ffmpeg(["-f", "lavfi", "-i", f"smptebars=size={w}x{h}", "-frames:v", "1"], bars)
+    still_w = round(h * STILL_ASPECT)
+    _ffmpeg(["-f", "lavfi", "-i", f"smptebars=size={still_w}x{h}", "-frames:v", "1"], bars)
+    # カラーバー ＋ 1周で横断する白い箱
     loop = root / VIDEO_BACKGROUND
     _ffmpeg(
         [*_box_over_bars(spec.size, spec.fps, LOOP_S),
@@ -204,17 +229,18 @@ def _materials(root: Path, spec: _Spec) -> list[Path]:
         loop,
     )  # fmt: skip
     gif = root / GIF_BACKGROUND
-    _ffmpeg(_box_over_bars(GIF_SIZE, GIF_FPS, GIF_S), gif)
+    _ffmpeg(_box_over_bars(GIF_SIZE, GIF_FPS, GIF_S, extra_filters=_GIF_PALETTE), gif)
     return [audio, bars, loop, gif]
 
 
-def _box_over_bars(size: tuple[int, int], fps: int, seconds: int) -> list[str]:
+def _box_over_bars(size: tuple[int, int], fps: int, seconds: int, *, extra_filters: str = "") -> list[str]:
+    """カラーバーの上を白い箱が1周する映像の入力。extra_filters は出力ラベルの前に足す。"""
     w, h = size
     box = max(2, round(w / 16))
     return [
         "-f", "lavfi", "-i", f"smptebars=size={w}x{h}:rate={fps}:duration={seconds}",
         "-f", "lavfi", "-i", f"color=c=white:size={box}x{box}:rate={fps}:duration={seconds}",
-        "-filter_complex", f"[0:v][1:v]overlay=x=(W-w)*t/{seconds}:y=(H-h)/2[v]",
+        "-filter_complex", f"[0:v][1:v]overlay=x=(W-w)*t/{seconds}:y=(H-h)/2{extra_filters}[v]",
         "-map", "[v]",
     ]  # fmt: skip
 
