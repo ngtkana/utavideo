@@ -426,7 +426,12 @@ def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Pat
     output = invoke("check", "-C", str(project)).output
     assert "縦用 .ass: src/vertical.ass（180x320）" in output
     assert "ショート: chorus" in output
-    assert "問題ありません" in output
+    assert "問題ありません" in output  # vertical-ass で写した歌詞は、本編と食い違わない
+
+    lyrics = project / "src/lyrics.ass"
+    lyrics.write_text(lyrics.read_text(encoding="utf-8").replace(",AAAA", ",AAAB"), encoding="utf-8")
+    output = invoke("check", "-C", str(project)).output
+    assert "本編との突き合わせ: 本編と文字が違います（0:00:00.200）: 本編「AAAB」" in output
 
     vertical = project / "src/vertical.ass"
     text = vertical.read_text(encoding="utf-8")
@@ -477,6 +482,7 @@ def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
     assert "0:00:01.600「AAAA" in output
     assert "区間の頭（0:00:01.000）が歌詞の行の途中にかかっています" in output
     assert "どの [[shorts]] の name にも合わない区間の行があります" in output
+    assert "本編との突き合わせ: 本編に時刻の重なる行がありません" in output
 
 
 def test_preview_bg_vertical_uses_the_vertical_size_and_focus(project: Path) -> None:
