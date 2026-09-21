@@ -236,9 +236,7 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
         raise typer.Exit(1)
     assert analysis.lyrics is not None and analysis.duration_s is not None and analysis.font_index is not None
 
-    script = _compose(
-        project, analysis.lyrics, round(analysis.duration_s * 1000), mode, analysis.font_index
-    )
+    script = _compose(project, analysis.lyrics, round(analysis.duration_s * 1000), mode, analysis.font_index)
     output = {
         "final": project.main_output,
         "preview": project.preview_bg_output,
@@ -548,14 +546,15 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
     # 本編の .ass は描かないが、文字が潰れる LayoutRes は本編の書き出しと同じく止める
     if project.lyrics_path.is_file():
         issues += subs.layout_res_issues(subs.load(project.lyrics_path))
-    checked = analyze_vertical(project, _FontSearch.load())
+    search = _FontSearch.load()
+    checked = analyze_vertical(project, search)
     issues += checked.issues
     _print_issues(issues)
     if any(issue.level == "error" for issue in issues):
         raise typer.Exit(1)
     assert checked.script is not None and duration_s is not None
 
-    script = _compose(project, checked.script, round(duration_s * 1000), "preview")
+    script = _compose(project, checked.script, round(duration_s * 1000), "preview", search.index)
     target = _VideoTarget(
         "preview",
         project.config.vertical.size,
@@ -564,7 +563,7 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
         project.vertical_preview_bg_output,
         "preview-bg --vertical",
     )
-    _write_video(project, script, target, duration_s, checked.font_files)
+    _write_video(project, script, target, duration_s, checked.font_files, None)
 
 
 @app.command()
