@@ -8,6 +8,7 @@ from typing import Literal
 
 import pysubs2
 
+from utavideo import fonts
 from utavideo.config import OverlayText, Song, format_setting
 from utavideo.errors import UtavideoError
 
@@ -90,6 +91,7 @@ def compose(
     fade_ms: tuple[int, int],
     duration_ms: int,
     include_lyrics: bool,
+    font_index: fonts.FontIndex,
 ) -> pysubs2.SSAFile:
     """書き出しに使うスクリプトを作る。元の lyrics は変更しない。"""
     script = copy.deepcopy(lyrics) if include_lyrics else without_events(lyrics)
@@ -104,7 +106,26 @@ def compose(
                 text=format_overlay_text(overlay.text, song),
             )
         )
+    _normalize_font_names(script, font_index)
     return script
+
+
+def _display_name(font_index: fonts.FontIndex, name: str) -> str:
+    """先頭の @（縦書き指定）を残したまま、索引にある表記に揃える。"""
+    if name.startswith("@"):
+        return "@" + font_index.display_name(name[1:])
+    return font_index.display_name(name)
+
+
+def _normalize_font_names(script: pysubs2.SSAFile, font_index: fonts.FontIndex) -> None:
+    """フォント名を、索引にあるフォントファイルが実際に持つ表記に揃える。libass は .ass の
+    名前とフォント内の名前をそのまま比べるので、Unicode の正規化が違うと（フォントが
+    見つかっていても）別のフォントで描かれる。索引に無い名前はそのまま残す（この後の
+    検査でエラーになる）。"""
+    for style in script.styles.values():
+        style.fontname = _display_name(font_index, style.fontname)
+    for event in script.events:
+        event.text = _FONT_TAG.sub(lambda m: "\\fn" + _display_name(font_index, m.group(1)), event.text)
 
 
 def _reset_styles(text: str) -> set[str]:

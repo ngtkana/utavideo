@@ -82,7 +82,7 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | 音源 | `audio.file`。ffmpeg が読める形式なら可（`init` の自動設定は wav / flac / mp3 / m4a / aac / ogg / opus） |
 | バージョン | 音源のファイル名の `v1.2` など。公開する動画には、その音源で何本目かも付く（規則は [project-layout.md](project-layout.md#名前の付け方)） |
 | 音源のバージョンを指定して公開 | `release --version v1.2`（小文字の `v`） |
-| 入力の方が新しくても公開 | `release --allow-stale` |
+| `build` の後に入力が変わっていても公開 | `release --allow-stale` |
 | 公開ファイル名 | `song.title`（ファイル名に使えない文字は `_` になる） |
 
 ## フォント
@@ -92,8 +92,22 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | 探す場所（全曲） | ユーザー設定の `font_dirs`（書くと既定の場所は探さない） |
 | 探す場所（その場だけ） | 環境変数 `UTAVIDEO_FONT_DIRS`（`:` 区切り。`font_dirs` より優先） |
 | 曲フォルダのフォント | `UTAVIDEO_FONT_DIRS=./fonts utavideo build`（相対パスは実行した場所から） |
-| 名前の照合 | ファミリー名・フルネーム・PostScript 名・タイプグラフィック・ファミリー名と、大文字小文字を区別せずに照合。同じ名前のファイルはすべて libass に渡す |
+| 名前の照合 | ファミリー名・フルネーム・PostScript 名・タイプグラフィック・ファミリー名と、大文字小文字と Unicode の正規化（NFC / NFD）の違いを区別せずに照合。同じ名前のファイルはすべて libass に渡す |
+| 描画のときの名前 | libass は名前をそのまま比べるので、書き出しに使う .ass ではフォント名をフォントファイルが実際に持つ表記に揃える（一律 NFC にはしない。macOS で名前をコピーすると NFD になりやすいが、フォント側の表記に合わせるので正しく描ける。元の .ass は変えない） |
+| 使える名前を調べる | 下のコマンド（`.ass` に書くのはフォント名です。`.ttc` などのファイル名ではありません） |
 | 一覧を作り直す | `~/.cache/utavideo/` を消す |
+
+フォントのあるディレクトリ（最後の引数）から、指定できる名前を並べます。
+
+```sh
+uv run --with git+https://github.com/ngtkana/utavideo python -c '
+import sys
+from pathlib import Path
+from utavideo.fonts import iter_font_files, read_font_names
+for path in iter_font_files([Path(sys.argv[1])]):
+    print(path.name, "|", ", ".join(sorted(read_font_names(path))))
+' ~/Library/Fonts
+```
 
 Aegisub で同じ見た目にするには、Aegisub 側にもフォントをインストールします。
 
@@ -112,6 +126,23 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 | 毎回同じクレジット・ハッシュタグ | ユーザー設定の `[defaults]`（`new` / `init` が曲の toml にコピーする） |
 | 自作の素材を検査で扱う | `[[materials]]` に `urls` を書かず `files` だけ書く（概要欄には出ない） |
 | 公開したときの文章を残す | `build/title.txt`・`build/description.txt` を自分で `release/` にコピーする（`release` がそれらをどう扱うかは [commands.md](commands.md#release)） |
+
+## SNS の告知文
+
+動画を投稿したら、`utavideo.toml` の `[[uploads]]` に URL を書き、`utavideo announce` で `build/announce.txt` に書き出します。長さは X の数え方で数えます（[commands.md](commands.md#長さの数え方)）。
+
+| やりたいこと | 書き方 |
+|---|---|
+| 動画のリンクを載せる | `[[uploads]]` の `url`（1つの動画につき1つ。サイト名は URL から決まる） |
+| 冒頭の文章・ハッシュタグ | `[announce]` の `text`・`hashtags` |
+| 見出し | ユーザー設定の `announce.header`（`""` で出さない） |
+| 作品の行の形・区切り | ユーザー設定の `announce.work`（`{title}`・`{artist}`・`{label}`・`{singers}`） |
+| リンクの行の形 | ユーザー設定の `announce.link`（`{site}`・`{url}`） |
+| サイト名・リンクの順番 | ユーザー設定の `announce.sites`（書いた順に並ぶ。書くと既定は丸ごと置き換わる） |
+| 空行・ブロックの順番 | ユーザー設定の `announce.order`（`""` の位置に空行。書かなかったブロックは出さない） |
+| 長さの警告の上限 | ユーザー設定の `announce.max_weight` |
+| 毎回同じハッシュタグ | ユーザー設定の `[defaults].announce_hashtags`（`new` / `init` が曲の toml にコピーする） |
+| 投稿前に文章だけ作る | `[[uploads]]` を書かずに `announce`（警告は出るが、リンクの無い下書きを書き出す） |
 
 ## 曲フォルダとコマンド
 
@@ -152,3 +183,4 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 - 雛形の中身、1曲で複数の .ass
 - サムネイルに描く .ass の時刻と加工の有無（[commands.md](commands.md#thumbnail)）
 - 概要欄の通し番号・前後の動画へのリンク（[roadmap.md](roadmap.md)）
+- 告知文の対象のサイト（YouTube・ニコニコ動画だけ）、ショート動画の告知、長さの数え方

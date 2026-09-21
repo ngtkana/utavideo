@@ -2,18 +2,19 @@
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import MakeFont
+from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
+from utavideo import cli
 from utavideo.cli import app
+from utavideo.ffmpeg import subtitles_filter_error
 from utavideo.project import scaffold
 
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+pytestmark = pytest.mark.skipif(subtitles_filter_error() is not None, reason="libass 付きの ffmpeg が必要")
 
 runner = CliRunner()
 
@@ -101,14 +102,8 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
     return root
 
 
-def _invoke(*args: str):
-    result = runner.invoke(app, list(args))
-    assert result.exit_code == 0, result.output
-    return result
-
-
 def test_check_passes(project: Path) -> None:
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "問題ありません" in output
     assert "release 先" in output and "test-v1.2.0.mp4" in output  # 次に付く名前
 
@@ -118,7 +113,7 @@ def test_check_counts_warnings_instead_of_saying_ok(project: Path) -> None:
     lyrics = LYRICS.format(font="Test Sans") + "Dialogue: 0,0:00:01.80,0:00:03.00,Lyrics,,0,0,0,,BBBB\n"
     (project / "src/lyrics.ass").write_text(lyrics, encoding="utf-8")
 
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "問題ありません" not in output
     assert "警告 1 件" in output
 
@@ -139,6 +134,19 @@ def test_check_reports_audio_without_sound(project: Path) -> None:
     assert "音声" in result.output
 
 
+def test_check_lists_the_other_results_when_ffmpeg_has_no_libass(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 書き出せないことは伝えつつ、1回の check で直すべきことが全部分かるように、エラーの一覧に並べる
+    use_fake_ffmpeg(tmp_path, monkeypatch, reply="Unknown filter 'subtitles'.")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+
+    assert result.exit_code == 1
+    assert "libass" in result.output
+    assert "曲名" in result.output and "歌詞" in result.output and "フォント" in result.output
+
+
 def test_check_reports_missing_font(project: Path) -> None:
     (project / "src/lyrics.ass").write_text(LYRICS.format(font="Nope Sans"), encoding="utf-8")
     result = runner.invoke(app, ["check", "-C", str(project)])
@@ -147,7 +155,7 @@ def test_check_reports_missing_font(project: Path) -> None:
 
 
 def test_build_writes_main_mp4(project: Path) -> None:
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
 
     output = project / "build/main.mp4"
     info = _probe(output)
@@ -176,18 +184,18 @@ def test_video_focus_moves_the_background(project: Path) -> None:
 
 def test_gif_background_loops_for_whole_audio(project: Path) -> None:
     (project / "utavideo.toml").write_text(TOML.format(background="loop.gif"), encoding="utf-8")
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
     video = _stream(_probe(project / "build/main.mp4"), "video")
     assert float(video["duration"]) == pytest.approx(2.0, abs=0.15)
 
 
 def test_preview_bg(project: Path) -> None:
-    _invoke("preview-bg", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
     assert _stream(_probe(project / "build/preview/bg.mp4"), "video")["codec_name"] == "h264"
 
 
 def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
-    _invoke("overlay", "-C", str(project))
+    invoke("overlay", "-C", str(project))
 
     output = project / "build/overlay.mov"
     video = _stream(_probe(output), "video")
@@ -197,9 +205,9 @@ def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
     assert _max_alpha(output, 1.8) == 0
 
 
-def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
-    _invoke("build", "-C", str(project))
-    _invoke("release", "-C", str(project))
+def test_release_numbers_videos(project: Path) -> None:
+    invoke("build", "-C", str(project))
+    invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.0.mp4").is_file()
 
     again = runner.invoke(app, ["release", "-C", str(project)])
@@ -210,15 +218,48 @@ def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
     # （テスト用のフォントは "A" しか持たないので、字を変えずに数を変える）
     lyrics = project / "src/lyrics.ass"
     lyrics.write_text(lyrics.read_text(encoding="utf-8").replace("AAAA", "A A"), encoding="utf-8")
-    _invoke("build", "-C", str(project))
-    _invoke("release", "-C", str(project))
+    invoke("build", "-C", str(project))
+    invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.1.mp4").is_file()
 
-    built_at = (project / "build/main.mp4").stat().st_mtime
-    os.utime(project / "src/lyrics.ass", (built_at + 10, built_at + 10))
-    stale = runner.invoke(app, ["release", "-C", str(project), "--version", "v1.3"])
-    assert stale.exit_code == 1
-    assert "lyrics.ass" in stale.output
+
+def test_release_compares_the_inputs_recorded_by_build(project: Path) -> None:
+    invoke("build", "-C", str(project))
+    assert (project / "build/.work/main-inputs.json").is_file()
+    later = (project / "build/main.mp4").stat().st_mtime + 10
+
+    # 実際のフォントの記録を読み戻して比べられる（細かい場合分けは test_release.py）
+    config = project / "utavideo.toml"
+    config.write_text(config.read_text(encoding="utf-8") + '[description]\ntext = "概要"\n', encoding="utf-8")
+    for path in (config, project / "src/lyrics.ass"):
+        os.utime(path, (later, later))
+    invoke("release", "-C", str(project))
+
+
+@pytest.mark.parametrize(
+    ("reader", "attr", "rel", "name"),
+    [
+        (cli.subs, "load", "src/lyrics.ass", "lyrics.file"),
+        (cli, "probe_audio", "src/mix/テスト v1.2.wav", "audio.file"),
+    ],
+)
+def test_release_stops_when_an_input_changes_after_build_read_it(
+    project: Path, monkeypatch: pytest.MonkeyPatch, reader: object, attr: str, rel: str, name: str
+) -> None:
+    # 読んだ後（フォント一覧の作成中など）に保存されると、動画は古い内容になる。記録も古い側でないと止まらない
+    original = getattr(reader, attr)
+
+    def read_then_save(path: Path):
+        result = original(path)
+        (project / rel).write_bytes((project / rel).read_bytes() + b"\n")
+        return result
+
+    monkeypatch.setattr(reader, attr, read_then_save)
+    invoke("build", "-C", str(project))
+
+    result = runner.invoke(app, ["release", "-C", str(project)])
+    assert result.exit_code == 1
+    assert f"（{name}）" in result.output
 
 
 def test_locked_output_keeps_partial(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
