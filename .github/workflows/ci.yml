@@ -47,7 +47,10 @@ jobs:
         run: uv run ruff check
       - if: steps.scope.outputs.full != 'false'
         run: uv run pyright
+      # 狭い端末のつもりで走らせる。テストが端末の幅による折り返しに依存したら、ここで落ちる
       - if: steps.scope.outputs.full != 'false'
         run: uv run pytest
+        env:
+          COLUMNS: "40"
       - if: steps.scope.outputs.full == 'false'
         run: uv run pytest tests/test_docs.py

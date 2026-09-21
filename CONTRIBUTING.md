@@ -18,6 +18,7 @@ uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
 
 - `tests/test_render.py` は ffmpeg で実際に書き出す（ffmpeg が無ければスキップ）
 - `tests/test_docs.py` は、コマンドのオプション・設定項目・環境変数がドキュメントに載っているか、文書内のリンクが切れていないかを確かめる
+- 出力を確かめるテストが折り返しで落ちないように、`tests/conftest.py` が端末の幅を広く固定する。CI は逆に狭い幅（`COLUMNS=40`）で pytest を走らせ、幅に依存していないことを確かめる
 
 ## 変更の送り方
 
