@@ -2,12 +2,16 @@ import sys
 from pathlib import Path
 
 import pytest
+from pydantic import BaseModel
 
 from utavideo.config import (
+    NOT_RENDERED,
     ConfigError,
+    ProjectConfig,
     _font_dir_candidates,
     load_project_config,
     load_user_config,
+    rendered_values,
 )
 
 MINIMAL = """
@@ -100,6 +104,22 @@ def test_font_dir_candidates_cover_fontconfig_defaults(
         assert expected in candidates
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="~ の展開が Windows では HOME を見ない")
+def test_font_dir_candidates_on_macos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
+    assert _font_dir_candidates() == [
+        Path("/System/Library/Fonts"),
+        Path("/Library/Fonts"),
+        tmp_path / "Library/Fonts",
+        Path("/usr/share/fonts"),
+        Path("/usr/local/share/fonts"),
+        tmp_path / "xdg/fonts",
+        tmp_path / ".fonts",
+    ]
+
+
 def test_hashtags_are_written_without_hash(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=r"description\.hashtags"):
         load_project_config(_write(tmp_path, MINIMAL + '[description]\nhashtags = ["#歌ってみた"]\n'))
@@ -189,3 +209,54 @@ def test_vertical_defaults_and_values(tmp_path: Path) -> None:
 def test_odd_vertical_size_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="偶数"):
         load_project_config(_write(tmp_path, MINIMAL + "[vertical]\nsize = [1081, 1920]\n"))
+
+
+def _fields(model: type[BaseModel], prefix: str = "") -> tuple[set[str], set[str]]:
+    """(印の無い末端の項目, 印の付いた項目) をドット区切りで。"""
+    unmarked: set[str] = set()
+    marked: set[str] = set()
+    for name, info in model.model_fields.items():
+        path = f"{prefix}{name}"
+        if NOT_RENDERED in info.metadata:
+            marked.add(path)
+        elif isinstance(info.annotation, type) and issubclass(info.annotation, BaseModel):
+            inner_unmarked, inner_marked = _fields(info.annotation, f"{path}.")
+            unmarked |= inner_unmarked
+            marked |= inner_marked
+        else:
+            unmarked.add(path)
+    return unmarked, marked
+
+
+def _keys(values: object, prefix: str = "") -> set[str]:
+    if not isinstance(values, dict):
+        return {prefix.removesuffix(".")}
+    return {key for name, value in values.items() for key in _keys(value, f"{prefix}{name}.")}
+
+
+def test_unmarked_settings_are_compared_by_release(tmp_path: Path) -> None:
+    # 印を付け忘れた項目は release の比較に入る（止まる側に倒れる）
+    unmarked, _ = _fields(ProjectConfig)
+    assert _keys(rendered_values(load_project_config(_write(tmp_path, MINIMAL)))) == unmarked
+
+
+def test_settings_marked_as_not_rendered() -> None:
+    # 印を足すと、その項目を変えても release が止まらなくなる。動画に描かれないことを確かめてから足す
+    _, marked = _fields(ProjectConfig)
+    assert marked == {
+        "song.slug",
+        "song.original_urls",
+        "credits",
+        "materials",
+        "description",
+        "thumbnails",
+        "vertical",
+        "uploads",
+        "announce",
+    }
+
+
+@pytest.mark.parametrize("section", ["description", "announce"])
+def test_hashtags_must_not_repeat(tmp_path: Path, section: str) -> None:
+    with pytest.raises(ConfigError, match="重複"):
+        load_project_config(_write(tmp_path, MINIMAL + f'[{section}]\nhashtags = ["cover", "Cover"]\n'))

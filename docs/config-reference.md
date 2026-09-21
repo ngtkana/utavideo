@@ -79,7 +79,7 @@
 | 項目 | 型 | 既定値 | 説明 |
 |---|---|---|---|
 | `text` | 文字列 | `""` | 冒頭の文章（TOML の `"""` で複数行を書ける）。前後の空行は取り除く |
-| `hashtags` | 文字列の配列 | `[]` | ハッシュタグ。`#` と空白は付けない |
+| `hashtags` | 文字列の配列 | `[]` | ハッシュタグ。`#` と空白は付けない。重複はエラー（大文字と小文字の違いだけのものも重複） |
 | `title` | 文字列 | なし | タイトル。書くと、ユーザー設定の `description.title` から作るタイトルの代わりに使う |
 
 ## [[thumbnails]]
@@ -103,6 +103,23 @@
 | `size` | `[幅, 高さ]` | `[1080, 1920]` | 縦の解像度（偶数）。縦用 .ass の PlayRes と同じにする。`utavideo vertical-ass` はこの大きさに変換する |
 | `lyrics` | パス | `"src/vertical.ass"` | 縦用 .ass。`utavideo vertical-ass` がここに作り、`check` はこのファイルがあるときだけ検査する |
 
+## [[uploads]]
+
+投稿した動画です。投稿して URL が決まってから、1つの動画につき1つ書きます。`utavideo announce` が、URL からサイトを判定してリンクを並べます。
+
+| 項目 | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `url` | 文字列 | 必須 | 投稿した動画の URL。受け付ける形は [commands.md](commands.md#announce) |
+
+## [announce]
+
+SNS の告知文の中身です。この表があると、`check` が告知文も検査します。
+
+| 項目 | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `text` | 文字列 | `""` | 手書きの文章（TOML の `"""` で複数行を書ける）。前後の空白・空行は取り除く |
+| `hashtags` | 文字列の配列 | `[]` | ハッシュタグ。`#` と空白は付けない。重複はエラー（`[description]` と同じ）。X でタグが途中で切れる文字は `check`・`announce` でエラー |
+
 ## ユーザー設定（~/.config/utavideo/config.toml）
 
 すべての曲に共通する設定です。ファイルが無くても動きます。
@@ -111,10 +128,13 @@
 |---|---|---|---|
 | `font_dirs` | パスの配列 | 下記 | フォントを探すディレクトリ（サブディレクトリも探す） |
 
-`font_dirs` の既定値:
+`font_dirs` の既定値（存在するディレクトリだけを使います）:
 
-- Linux / WSL2: `/mnt/c/Windows/Fonts`、`/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts` と、fontconfig が既定で見る `/usr/share/fonts`、`/usr/local/share/fonts`、`$XDG_DATA_HOME/fonts`（既定は `~/.local/share/fonts`）、`~/.fonts`（存在するものだけ）
+- Linux / WSL2: `/mnt/c/Windows/Fonts`、`/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts` と、fontconfig が既定で見る `/usr/share/fonts`、`/usr/local/share/fonts`、`$XDG_DATA_HOME/fonts`（既定は `~/.local/share/fonts`）、`~/.fonts`
+- macOS: `/System/Library/Fonts`（`Supplemental` はこの下なので一緒に探します）、`/Library/Fonts`、`~/Library/Fonts`に加え、fontconfig が既定で見る `/usr/share/fonts`、`/usr/local/share/fonts`、`$XDG_DATA_HOME/fonts`（既定は `~/.local/share/fonts`）、`~/.fonts`（Homebrew や、Linux から dotfiles ごと持ってきた環境でフォントを置いていることがあるため）。`/Network/Library/Fonts` は、マウントされていないと遅くなるため含みません。必要なら `font_dirs` に書き足してください
 - Windows: `%WINDIR%\Fonts`、`%LOCALAPPDATA%\Microsoft\Windows\Fonts`
+
+読むのは `.ttf`・`.otf`・`.ttc`・`.otc` です。それ以外（macOS の dfont など）は黙って飛ばすので、そのフォントを使いたい場合は `.ttf` や `.otf` のものを入れてください。
 
 `~` から始まるパスはホームディレクトリに展開されます。
 
@@ -139,6 +159,22 @@
 
 それ以外のブロックの間は、空行1つです。
 
+### ユーザー設定の [announce]
+
+SNS の告知文の書式です。長さの上限は X の数え方に合わせています。
+
+| 項目 | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `header` | 文字列 | `"【動画投稿】"` | 1行目。`{…}` は置き換えない |
+| `work` | 文字列 | `"『{title} / {artist}』"` | 作品の行。`{title}`・`{artist}`・`{label}`・`{singers}` が使える。`{singers}` は `description.singer_roles`・`singer_separator` で決まる |
+| `link` | 文字列 | `"{site} » {url}"` | 動画の URL の行（1つの URL を1行）。`{site}`・`{url}` が使える |
+| `sites` | 表 | `{ youtube = "YouTube", niconico = "ニコニコ動画" }` | `{site}` に入れる名前。キーは `youtube`・`niconico` だけ。リンクはここに書いた順に並べる。書くと既定は丸ごと置き換わる（書かなかったサイトの URL はエラー） |
+| `order` | 配列 | `["header", "text", "", "work", "", "links", "", "hashtags"]` | ブロックの順番。`""` は空行。書かなかったブロックは出さない。`""` 以外の重複はエラー |
+| `max_weight` | 整数（1 以上） | `280` | 告知文の長さ（X の数え方）がこれを超えたら警告する。280 は X で「さらに表示」に折りたたまれない長さ |
+
+- ブロックの間は改行1つで、`order` の `""` の位置に空行を1つ入れます
+- 中身の無いブロック（`header` が空、`text` が空、`[[uploads]]` が無い、`hashtags` が空）は出しません。その結果、空行が続けば1つにまとめ、先頭と末尾の空行は捨てます（空行を2つ続けることはできません）
+
 ### ユーザー設定の [defaults]
 
 `utavideo new` / `init` が、曲の `utavideo.toml` にコピーする既定値です。ユーザー設定を後で変えても、既存の曲は変わりません。
@@ -146,7 +182,8 @@
 | 項目 | 型 | 既定値 | 説明 |
 |---|---|---|---|
 | `credits` | `[[credits]]` と同じ | `[]` | 毎回同じクレジット（`[[defaults.credits]]` と書く） |
-| `hashtags` | 文字列の配列 | `[]` | 毎回同じハッシュタグ（`#` は付けない） |
+| `hashtags` | 文字列の配列 | `[]` | 概要欄に毎回付けるハッシュタグ（`#` は付けない）。`[description].hashtags` にコピーする |
+| `announce_hashtags` | 文字列の配列 | `[]` | 告知文に毎回付けるハッシュタグ（`#` は付けない）。`[announce].hashtags` にコピーする |
 
 ## 環境変数
 

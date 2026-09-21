@@ -1,6 +1,6 @@
 # 制作の流れ
 
-1本の動画を作る手順です。やりたいこと別の設定方法は [customization.md](customization.md)、設定とコマンドの詳細は [config-reference.md](config-reference.md)・[commands.md](commands.md)、フォルダの構成は [project-layout.md](project-layout.md) を参照してください。
+1本の動画を作る手順です。素材を用意する前に動かしてみたいときは、`utavideo sample <パス>` で見本の曲フォルダを作れます（[commands.md](commands.md#sample)）。やりたいこと別の設定方法は [customization.md](customization.md)、設定とコマンドの詳細は [config-reference.md](config-reference.md)・[commands.md](commands.md)、フォルダの構成は [project-layout.md](project-layout.md) を参照してください。
 
 ## 0. 準備（最初に一度だけ）
 
@@ -99,7 +99,27 @@ utavideo release                # release/song-vX.Y.N.mp4（vX.Y は音源のフ
 utavideo release --version v1.0 # 音源のバージョンを指定する
 ```
 
-同じ内容の動画を既に公開しているときや、`build/main.mp4` より新しい入力があるとき（書き出し忘れ）は止まります（[commands.md](commands.md#release)）。
+同じ内容の動画を既に公開しているときや、`build` の後に動画に効く入力（歌詞・素材・曲名など）を変えたとき（書き出し忘れ）は止まります。7 の概要欄の項目だけを変えたときは止まりません（比べ方は [commands.md](commands.md#release)）。
+
+## 9. 投稿して告知文を作る
+
+`release` した動画を投稿サイトに投稿（または公開を予約）してから、URL を `utavideo.toml` に書きます。
+
+```toml
+[[uploads]]
+url = "https://youtu.be/xxxxxxxxxxx"
+
+[[uploads]]
+url = "https://www.nicovideo.jp/watch/sm00000000"
+```
+
+```sh
+utavideo announce
+```
+
+`build/announce.txt` を SNS に貼ります。URL の形が誤っているときは書き出さずに止まり、X で「さらに表示」に折りたたまれる長さのときは警告します（[commands.md](commands.md#announce)）。書式は [customization.md](customization.md#sns-の告知文) を参照してください。
+
+`[[uploads]]` を書くと `utavideo.toml` が `build/main.mp4` より新しくなり、`release` が止まります。`release` を先に済ませてから URL を書いてください。
 
 ## 9. サムネイルを作る
 
