@@ -177,7 +177,7 @@ def test_video_focus_moves_the_background(project: Path) -> None:
         (project / "src/lyrics.ass").write_text(
             LYRICS.format(font="Test Sans").replace("PlayResX: 320", "PlayResX: 180"), encoding="utf-8"
         )
-        _invoke("build", "-C", str(project))
+        invoke("build", "-C", str(project))
         frames.append(_pixels(project / "build/main.mp4"))
     assert frames[0] != frames[1]
 
@@ -319,9 +319,9 @@ def _pixels(path: Path) -> bytes:
 
 def test_thumbnail_draws_ass_over_background(project: Path) -> None:
     _with_thumbnail(project)
-    bg = _invoke("thumbnail", "-C", str(project), "--bg-only")
+    bg = invoke("thumbnail", "-C", str(project), "--bg-only")
     assert "バイト" in bg.output
-    result = _invoke("thumbnail", "-C", str(project))
+    result = invoke("thumbnail", "-C", str(project))
     assert "バイト" in result.output
 
     thumbnail, background = project / "build/thumbnail/main.png", project / "build/thumbnail/bg/main.png"
@@ -335,7 +335,7 @@ def test_thumbnail_draws_ass_over_background(project: Path) -> None:
 def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
     _with_thumbnail(project)
     (project / "src/thumbnail.ass").unlink()
-    _invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("thumbnail", "-C", str(project), "--bg-only")
     result = runner.invoke(app, ["thumbnail", "-C", str(project)])
     assert result.exit_code == 1
     assert "file のファイルがありません" in result.output
@@ -344,10 +344,10 @@ def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
 def test_thumbnail_uses_the_frame_at_the_given_time(project: Path) -> None:
     # 4 fps・0.5 秒の GIF。0.25 秒のフレームは 0 秒と違う絵
     _with_thumbnail(project, "loop.gif", 'size = [90, 90]\nat = "0:00.25"')
-    _invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("thumbnail", "-C", str(project), "--bg-only")
     later = _pixels(project / "build/thumbnail/bg/main.png")
     _with_thumbnail(project, "loop.gif")
-    _invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("thumbnail", "-C", str(project), "--bg-only")
     assert _pixels(project / "build/thumbnail/bg/main.png") != later
 
 
@@ -393,5 +393,5 @@ def test_check_warns_about_thumbnail_lines_not_drawn(project: Path) -> None:
     ass.write_text(
         ass.read_text(encoding="utf-8").replace("0:00:00.00,9:59", "0:00:01.00,9:59"), encoding="utf-8"
     )
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "サムネイル main: 0 秒に表示されない行" in output
