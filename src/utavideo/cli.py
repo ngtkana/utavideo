@@ -142,10 +142,25 @@ def analyze(project: Project, mode: graph.Mode) -> Analysis:
     index = fonts.load_index(font_dirs, cache_file)
     resolution = fonts.resolve(index, subs.used_fonts(script))
     for name in resolution.missing:
-        searched = ", ".join(map(str, font_dirs)) or "（なし）"
-        issues.append(subs.Issue("error", f"フォント {name!r} が見つかりません（探した場所: {searched}）"))
+        issues.append(subs.Issue("error", _font_missing_message(name, font_dirs)))
     issues += layout.overflows(script, index.lookup)
     return Analysis(issues, duration_s, lyrics, resolution.files)
+
+
+def _font_missing_message(name: str, font_dirs: list[Path]) -> str:
+    """見つからない理由として多いもの（ファイル名を書いた・探す場所が無い）を添える。"""
+    searched = ", ".join(map(str, font_dirs)) or "（なし）"
+    path = Path(name)
+    if path.suffix.lower() in fonts.FONT_EXTS:
+        hint = f"。ファイル名ではなくフォント名を指定してください（例: {path.stem}）"
+    elif not font_dirs:
+        hint = (
+            "。環境変数 UTAVIDEO_FONT_DIRS か、"
+            "ユーザー設定の font_dirs でフォントのあるディレクトリを指定してください"
+        )
+    else:
+        hint = ""
+    return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
 def _compose(project: Project, lyrics: pysubs2.SSAFile, duration_ms: int, mode: graph.Mode):

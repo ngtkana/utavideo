@@ -137,12 +137,20 @@ def _xdg(var: str, fallback: str) -> Path:
 
 
 def _font_dir_candidates() -> list[Path]:
-    """Windows 側のシステム・ユーザーフォントと、Linux 側のフォントの場所（存在しないものも含む）。"""
+    """OS ごとのシステム・ユーザーフォントの場所（存在しないものも含む）。"""
     if sys.platform == "win32":
         dirs = [Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"]
         if local := os.environ.get("LOCALAPPDATA"):
             dirs.append(Path(local) / "Microsoft" / "Windows" / "Fonts")
         return dirs
+    if sys.platform == "darwin":
+        # /Network/Library/Fonts は、マウントされていないと存在を調べるだけで待たされるので入れない。
+        # Supplemental などのサブディレクトリは、探すときに再帰的にたどる
+        return [
+            Path("/System/Library/Fonts"),
+            Path("/Library/Fonts"),
+            Path.home() / "Library/Fonts",
+        ]
     dirs = [Path("/mnt/c/Windows/Fonts")]
     dirs += sorted(map(Path, glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts")))
     # fontconfig（/etc/fonts/fonts.conf）が既定で見る 4 か所

@@ -8,6 +8,7 @@ from typing import Literal
 
 import pysubs2
 
+from utavideo import fonts
 from utavideo.config import OverlayText, Song, format_setting
 from utavideo.errors import UtavideoError
 
@@ -89,6 +90,7 @@ def compose(
 ) -> pysubs2.SSAFile:
     """書き出しに使うスクリプトを作る。元の lyrics は変更しない。"""
     script = copy.deepcopy(lyrics) if include_lyrics else without_events(lyrics)
+    _normalize_font_names(script)
     add_fades(script, fade_ms)
     if overlay.enabled:
         script.events.append(
@@ -101,6 +103,15 @@ def compose(
             )
         )
     return script
+
+
+def _normalize_font_names(script: pysubs2.SSAFile) -> None:
+    """フォント名を NFC に揃える。libass は .ass の名前とフォント内の名前をそのまま比べるので、
+    NFD のままだと（フォントが見つかっていても）別のフォントで描かれる。"""
+    for style in script.styles.values():
+        style.fontname = fonts.to_nfc(style.fontname)
+    for event in script.events:
+        event.text = _FONT_TAG.sub(lambda m: "\\fn" + fonts.to_nfc(m.group(1)), event.text)
 
 
 def _reset_styles(text: str) -> set[str]:

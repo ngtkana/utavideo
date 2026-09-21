@@ -1,3 +1,5 @@
+import unicodedata
+
 import pysubs2
 import pytest
 
@@ -75,6 +77,24 @@ def test_compose_keeps_source_and_appends_overlay() -> None:
     assert (overlay.start, overlay.end, overlay.style) == (0, 5000, "Title")
     assert overlay.layer == subs.OVERLAY_LAYER
     assert overlay.text == "曲 / 歌手"
+
+
+def test_compose_normalizes_font_names_to_nfc() -> None:
+    # libass は .ass の名前とフォント内の名前をそのまま比べる。macOS では NFD の名前が入りやすい
+    nfc = unicodedata.normalize("NFC", "テストゴシック")
+    nfd = unicodedata.normalize("NFD", nfc)
+    lyrics = _make(
+        [_line("0:00:01.00", "0:00:02.00", rf"あ{{\fn{nfd}}}い")],
+        styles=[_style("Lyrics", nfd), _style("Title", nfd)],
+    )
+    script = subs.compose(
+        lyrics, song=SONG, overlay=OVERLAY, fade_ms=(0, 0), duration_ms=5000, include_lyrics=True
+    )
+
+    assert script.styles["Lyrics"].fontname == nfc
+    assert script.events[0].text == rf"あ{{\fn{nfc}}}い"
+    assert subs.used_fonts(script) == {nfc}
+    assert lyrics.styles["Lyrics"].fontname == nfd  # 元の .ass は変えない
 
 
 def test_overlay_text_can_put_label_on_its_own_line() -> None:

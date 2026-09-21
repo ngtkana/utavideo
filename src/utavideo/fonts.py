@@ -8,6 +8,7 @@ libass は WSL 側の fontconfig しか見ないため、Windows 側のフォン
 import hashlib
 import json
 import os
+import unicodedata
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,12 +23,22 @@ _NAME_IDS = frozenset({1, 4, 6, 16})
 _CACHE_FORMAT = 1
 
 
+def to_nfc(name: str) -> str:
+    """フォント名を NFC に揃える。macOS で名前をコピーすると NFD（「ギ」が キ ＋ 濁点）になりやすい。"""
+    return unicodedata.normalize("NFC", name)
+
+
+def match_key(name: str) -> str:
+    """照合用のキー。大文字小文字と、Unicode の正規化の違いを無視する。"""
+    return to_nfc(name).casefold()
+
+
 @dataclass(frozen=True)
 class FontIndex:
     files_by_name: dict[str, tuple[Path, ...]]
 
     def lookup(self, name: str) -> tuple[Path, ...]:
-        return self.files_by_name.get(name.casefold(), ())
+        return self.files_by_name.get(match_key(name), ())
 
 
 @dataclass(frozen=True)
@@ -98,7 +109,7 @@ def load_index(dirs: Iterable[Path], cache_file: Path) -> FontIndex:
     files_by_name: dict[str, list[Path]] = {}
     for key, entry in entries.items():
         for name in entry["names"]:
-            files_by_name.setdefault(name.casefold(), []).append(Path(key))
+            files_by_name.setdefault(match_key(name), []).append(Path(key))
     return FontIndex({name: tuple(files) for name, files in files_by_name.items()})
 
 

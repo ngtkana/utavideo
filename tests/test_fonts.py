@@ -1,4 +1,5 @@
 import json
+import unicodedata
 from pathlib import Path
 
 import pytest
@@ -35,8 +36,25 @@ def test_index_keeps_cache_of_directories_not_scanned(tmp_path: Path, make_font:
     fonts.load_index([tmp_path / "a"], cache)
 
     (tmp_path / "b").mkdir()
-    fonts.load_index([tmp_path / "b"], cache)
+    index = fonts.load_index([tmp_path / "b"], cache)
     assert str(font) in json.loads(cache.read_text(encoding="utf-8"))["files"]
+    assert index.lookup("Font A") == ()  # 対応表に入るのは、今回見たディレクトリのものだけ
+
+
+def test_index_ignores_unicode_normalization(tmp_path: Path, make_font: MakeFont) -> None:
+    # macOS で名前をコピーすると NFD（「ゴ」が コ ＋ 濁点）になることがある。フォント側の名前は NFC
+    nfc = unicodedata.normalize("NFC", "テストゴシック")
+    font = make_font(tmp_path / "nfc" / "TestGothic.ttf", nfc)
+    index = fonts.load_index([tmp_path / "nfc"], tmp_path / "cache.json")
+    assert index.lookup(nfc) == (font,)
+    assert index.lookup(unicodedata.normalize("NFD", nfc)) == (font,)
+
+
+def test_index_ignores_unicode_normalization_in_the_font(tmp_path: Path, make_font: MakeFont) -> None:
+    nfc = unicodedata.normalize("NFC", "テストゴシック")
+    font = make_font(tmp_path / "nfd" / "TestGothic.ttf", unicodedata.normalize("NFD", nfc))
+    index = fonts.load_index([tmp_path / "nfd"], tmp_path / "cache.json")
+    assert index.lookup(nfc) == (font,)
 
 
 def test_broken_font_is_ignored(tmp_path: Path) -> None:
