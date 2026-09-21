@@ -16,10 +16,17 @@ import typer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from utavideo import description, fonts, graph, layout, subs
+from utavideo import description, fonts, graph, layout, sample, subs
 from utavideo.config import PROJECT_CONFIG_NAME, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
-from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
+from utavideo.ffmpeg import (
+    partial_path,
+    probe_audio,
+    replace_partial,
+    require_tools,
+    run,
+    subtitles_filter_error,
+)
 from utavideo.names import has_date_prefix, slug_error, slug_from_dir_name
 from utavideo.project import (
     VERSION_PATTERN,
@@ -320,11 +327,42 @@ def _interactive() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
+@app.command("sample")
+@_handle_errors
+def sample_command(
+    path: Annotated[Path, typer.Argument(help="作る見本の曲フォルダのパス（まだ無いパス）")],
+    font: Annotated[
+        str | None,
+        typer.Option("--font", help="歌詞に使う実在のフォント名。省略時はフォントも合成する"),
+    ] = None,
+    small: Annotated[bool, typer.Option("--small", help="小さく速く作る（640x360・10fps）")] = False,
+) -> None:
+    """動作確認用の見本の曲フォルダを、合成した素材から作る。"""
+    if path.exists():
+        _fail(f"既にあります: {path}（作り直すときはフォルダごと消してください）")
+    require_tools(subtitles=False)  # 素材を合成するだけで、歌詞は描かない
+    try:
+        result = sample.create(path, font=font, small=small)
+    # path は「まだ無いパス」に自分で作ったもの。途中で失敗したら消して、同じパスでやり直せるようにする
+    except BaseException:
+        shutil.rmtree(path, ignore_errors=True)
+        raise
+    console.print(f"作成しました: {path}", markup=False)
+    _print_scaffold(result, path)
+    prefix = sample.command_prefix(font)
+    console.print(f"次にやること:\n  cd {path}", markup=False)
+    console.print(
+        f"  {prefix}utavideo check → {prefix}utavideo build（他のコマンドは README.md）", markup=False
+    )
+
+
 @app.command()
 @_handle_errors
 def check(project_dir: ProjectOption = None) -> None:
     """設定・素材・歌詞・フォントを検査する。"""
-    require_tools()
+    # 検査自体は ffprobe で音源を読むので要るが、libass は要らない。
+    # 無いことは Issue にして、1回の check で直すべきことが全部並ぶようにする
+    require_tools(subtitles=False)
     project = _load_project(project_dir)
     analysis = analyze(project, "final")
     config = project.config
@@ -338,6 +376,8 @@ def check(project_dir: ProjectOption = None) -> None:
     for file in analysis.font_files:
         console.print(f"  フォント: {file}", markup=False)
     issues = list(analysis.issues)
+    if (error := subtitles_filter_error()) is not None:
+        issues.append(subs.Issue("error", error))
     if version := project.version:
         dest = project.release_path(version, next_revision(project.released(version)))
         console.print(f"  release 先: {dest}", markup=False)

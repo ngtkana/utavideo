@@ -14,6 +14,8 @@
   - インストール済みのフォントは自動で探します（WSL2 では Windows 側のものも）
   - Windows ネイティブ・macOS は、フォントの場所は探しますが未検証です
 - libass 付きの ffmpeg / ffprobe（Ubuntu なら `sudo apt install ffmpeg`）
+  - libass 無しの ffmpeg では歌詞を描画できません。`preview-bg`・`build`・`overlay` は始めに調べて、書き出す前に止まります（`check` はエラーとして他の検査結果と一緒に出します）
+  - macOS は未検証ですが、Homebrew の `ffmpeg` は libass 無しなので、使うなら `brew install ffmpeg-full` が要ります
 - 雛形の字幕スタイルが使うフォント [Zen Maru Gothic](https://fonts.google.com/specimen/Zen+Maru+Gothic)（無料）
   - 別のフォントを使う場合は、.ass のスタイルで指定します
 - [uv](https://docs.astral.sh/uv/)
@@ -43,6 +45,7 @@ utavideo release      # release/song-v1.0.0.mp4 にコピー
 |---|---|
 | `new` | 雛形から曲フォルダを作る |
 | `init` | 既存のフォルダに utavideo のファイルを追加する（既存のファイルは変更しない） |
+| `sample` | 動作確認用の見本の曲フォルダを作る（素材も合成するので、そのまま書き出せる） |
 | `preview-bg` | 歌詞以外（背景・曲名表示・音声）を合成した軽いプレビュー動画を書き出す |
 | `check` | 設定・素材・歌詞・フォントを検査する |
 | `build` | 動画を書き出す（H.264 / AAC） |
@@ -50,7 +53,9 @@ utavideo release      # release/song-v1.0.0.mp4 にコピー
 | `description` | クレジット・素材から、タイトルと概要欄を書き出す |
 | `release` | 書き出した動画を、バージョン付きの名前で `release/` にコピーする |
 
-どのコマンドも曲フォルダの中で実行します（`-C <曲フォルダ>` でも指定できます）。
+`new`・`init`・`sample` 以外は曲フォルダの中で実行します（`-C <曲フォルダ>` でも指定できます）。
+
+自分の曲を用意する前に動かしてみたいときは、`utavideo sample <パス>` で合成した素材入りの見本を作れます（[commands.md](docs/commands.md#sample)）。
 
 ## ドキュメント
 

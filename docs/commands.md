@@ -5,7 +5,8 @@
 ## 共通
 
 - `check`・`preview-bg`・`build`・`overlay`・`description`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です
+- `sample`・`check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
+- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
@@ -47,6 +48,38 @@ utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>] [--slug <�
 | `--slug` | フォルダ名（先頭の `YYYYMMDD` は除く） | `song.slug` に書く |
 
 `src/`（`src/ref/` を除く）に音源と背景がちょうど1つずつあれば、`utavideo.toml` の `audio.file`・`video.background` に設定します。対象の拡張子は、音源が wav / flac / mp3 / m4a / aac / ogg / opus、背景が [config-reference.md](config-reference.md#video) の `background` と同じです。
+
+## sample
+
+```sh
+utavideo sample <パス> [--font <フォント名>] [--small]
+```
+
+動作確認用の見本の曲フォルダを作ります。素材をその場で合成するので、自分の曲を用意する前に一通りのコマンドを試せます。`new` が空の雛形（素材は自分で置く）なのに対して、`sample` は素材入りで、作った直後から書き出せます。
+
+| オプション | 既定値 | 内容 |
+|---|---|---|
+| `<パス>` | 必須 | 作る見本の曲フォルダのパス。既にあるとエラー（作り直すときはフォルダごと消す） |
+| `--font` | 合成フォント | 歌詞に使う実在のフォント名 |
+| `--small` | 無効 | 小さく速く作る（640x360・10fps・ultrafast）。テストと CI 用 |
+
+作るものは 1920x1080・30fps・36 秒で、合計 2MB 程度です。途中で失敗したときは、作りかけのフォルダを消してから終わるので、同じパスでやり直せます。
+
+| ファイル | 内容 |
+|---|---|
+| `utavideo.toml` | 架空の曲名・クレジット・素材。背景の変え方はコメントに書いてある |
+| `src/lyrics.ass` | 歌詞。警告の出る行がわざと入っている（下記） |
+| `src/mix/sample-v1.0.flac` | 4 秒ごとに 220Hz ずつ高くなる合成音（220Hz から 9 段）。同じ高さが出てこないので、どこを切り出したか、どこでフェードしたかが耳で分かる |
+| `src/bg/loop.mp4` | カラーバー ＋ 5 秒で画面を横断する白い箱。背景の繰り返しが目で分かる |
+| `src/bg/still.png` | 4:3 のカラーバー（静止画）。`video.fit` を `"cover"`（上下が切り取られる）と `"contain"`（左右に余白が出る）で見比べられる |
+| `src/bg/loop.gif` | `loop.mp4` と同じ絵の GIF（480x270・2 秒）。GIF の背景と、拡大の効き方を試す用 |
+| `src/fonts/UtavideoSample.ttf` | 合成フォント（`--font` を渡したときは作らない） |
+| `README.md` | 試すコマンドの一覧 |
+
+- 合成フォントを使うときは、見本の曲フォルダで `UTAVIDEO_FONT_DIRS=src/fonts utavideo check` のように、コマンドごとに場所を渡します（`UTAVIDEO_FONT_DIRS` は探す場所を置き換えるので、`export` すると同じシェルで自分の曲に戻ったときに自分のフォントが見つかりません）
+- 合成フォントはどの文字も四角で描くので、書体や仕上がりは確かめられません。見栄えを見るときは `--font` に手元のフォント名を渡します
+- 見本は `check` で**警告が 2 件**出ます。警告の出方も見せるためで、`\pos` / `\move` を使っている行が 2 行と、空白も `\N` も無い長い行が 1 行入っています。はみ出しの警告は行の幅の概算から出すので、`--font` に細いフォントを渡すと出なくなることがあります
+- 要らなくなったらフォルダごと消します
 
 ## check
 
@@ -119,7 +152,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
-| 実行環境 | ffmpeg・ffprobe が無い |
+| 実行環境 | ffmpeg で `subtitles` フィルタ（libass）が使えない（ffmpeg・ffprobe が無いときは検査を始める前に止まります） |
 
 ### 警告
 
