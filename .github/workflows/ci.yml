@@ -47,7 +47,7 @@ jobs:
         run: uv run ruff check
       - if: steps.scope.outputs.full != 'false'
         run: uv run pyright
-      # 狭い端末のつもりで走らせる。テストが端末の幅による折り返しに依存したら、ここで落ちる
+      # 幅の固定（tests/conftest.py）から漏れたコンソールが増えたら、この狭い幅で落ちる
       - if: steps.scope.outputs.full != 'false'
         run: uv run pytest
         env:
