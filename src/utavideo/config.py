@@ -134,9 +134,14 @@ class Material(_Model):
 
 
 def _check_hashtags(tags: tuple[str, ...]) -> tuple[str, ...]:
+    seen: set[str] = set()
     for tag in tags:
         if not tag or tag.startswith("#") or any(ch.isspace() for ch in tag):
             raise ValueError(f"ハッシュタグは # と空白を付けずに書いてください: {tag!r}")
+        # YouTube も X も大文字と小文字を区別しないので、違いがそれだけなら同じタグ
+        if (key := tag.casefold()) in seen:
+            raise ValueError(f"ハッシュタグが重複しています: {tag!r}")
+        seen.add(key)
     return tags
 
 
@@ -149,6 +154,15 @@ class Description(_Model):
     title: str | None = None
 
 
+class Upload(_Model):
+    url: str
+
+
+class Announce(_Model):
+    text: str = ""
+    hashtags: Hashtags = ()
+
+
 class ProjectConfig(_Model):
     song: Song
     audio: Audio
@@ -158,6 +172,8 @@ class ProjectConfig(_Model):
     credits: Annotated[tuple[Credit, ...], NOT_RENDERED] = ()
     materials: Annotated[tuple[Material, ...], NOT_RENDERED] = ()
     description: Annotated[Description | None, NOT_RENDERED] = None
+    uploads: Annotated[tuple[Upload, ...], NOT_RENDERED] = ()
+    announce: Annotated[Announce | None, NOT_RENDERED] = None
 
 
 def _xdg(var: str, fallback: str) -> Path:
@@ -166,15 +182,25 @@ def _xdg(var: str, fallback: str) -> Path:
 
 
 def _font_dir_candidates() -> list[Path]:
-    """Windows 側のシステム・ユーザーフォントと、Linux 側のフォントの場所（存在しないものも含む）。"""
+    """OS ごとのシステム・ユーザーフォントの場所（存在しないものも含む）。"""
     if sys.platform == "win32":
         dirs = [Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"]
         if local := os.environ.get("LOCALAPPDATA"):
             dirs.append(Path(local) / "Microsoft" / "Windows" / "Fonts")
         return dirs
-    dirs = [Path("/mnt/c/Windows/Fonts")]
-    dirs += sorted(map(Path, glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts")))
-    # fontconfig（/etc/fonts/fonts.conf）が既定で見る 4 か所
+    if sys.platform == "darwin":
+        # /Network/Library/Fonts は、マウントされていないと存在を調べるだけで待たされるので入れない。
+        # Supplemental などのサブディレクトリは、探すときに再帰的にたどる。
+        dirs = [
+            Path("/System/Library/Fonts"),
+            Path("/Library/Fonts"),
+            Path.home() / "Library/Fonts",
+        ]
+    else:
+        dirs = [Path("/mnt/c/Windows/Fonts")]
+        dirs += sorted(map(Path, glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts")))
+    # fontconfig（/etc/fonts/fonts.conf）が既定で見る 4 か所。POSIX（macOS を含む）で共通に見る。
+    # Homebrew や、Linux から dotfiles ごと持ってきた macOS 利用者のためにも残す
     dirs += [
         Path("/usr/share/fonts"),
         Path("/usr/local/share/fonts"),
@@ -211,14 +237,39 @@ class DescriptionFormat(_Model):
         return order
 
 
+type Site = Literal["youtube", "niconico"]
+SITE_NAMES: dict[Site, str] = {"youtube": "YouTube", "niconico": "ニコニコ動画"}
+type AnnounceBlock = Literal["header", "text", "work", "links", "hashtags", ""]
+
+
+class AnnounceFormat(_Model):
+    header: str = "【動画投稿】"
+    work: str = "『{title} / {artist}』"
+    link: str = "{site} » {url}"
+    # 書いた順にリンクを並べる（tomllib も pydantic の dict も順番を保つ）
+    sites: dict[Site, str] = Field(default_factory=lambda: dict(SITE_NAMES))
+    order: tuple[AnnounceBlock, ...] = ("header", "text", "", "work", "", "links", "", "hashtags")
+    max_weight: PositiveInt = 280
+
+    @field_validator("order")
+    @classmethod
+    def _unique_blocks(cls, order: tuple[AnnounceBlock, ...]) -> tuple[AnnounceBlock, ...]:
+        blocks = [block for block in order if block]  # 空行（""）は何度書いてもよい
+        if len(set(blocks)) != len(blocks):
+            raise ValueError('同じブロックを2回書かないでください（空行の "" は除く）')
+        return order
+
+
 class Defaults(_Model):
     credits: tuple[Credit, ...] = ()
     hashtags: Hashtags = ()
+    announce_hashtags: Hashtags = ()
 
 
 class UserConfig(_Model):
     font_dirs: list[Path] = Field(default_factory=default_font_dirs)
     description: DescriptionFormat = Field(default_factory=DescriptionFormat)
+    announce: AnnounceFormat = Field(default_factory=AnnounceFormat)
     defaults: Defaults = Field(default_factory=Defaults)
 
     @field_validator("font_dirs")

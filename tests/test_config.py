@@ -104,6 +104,22 @@ def test_font_dir_candidates_cover_fontconfig_defaults(
         assert expected in candidates
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="~ の展開が Windows では HOME を見ない")
+def test_font_dir_candidates_on_macos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
+    assert _font_dir_candidates() == [
+        Path("/System/Library/Fonts"),
+        Path("/Library/Fonts"),
+        tmp_path / "Library/Fonts",
+        Path("/usr/share/fonts"),
+        Path("/usr/local/share/fonts"),
+        tmp_path / "xdg/fonts",
+        tmp_path / ".fonts",
+    ]
+
+
 def test_hashtags_are_written_without_hash(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=r"description\.hashtags"):
         load_project_config(_write(tmp_path, MINIMAL + '[description]\nhashtags = ["#歌ってみた"]\n'))
@@ -141,4 +157,18 @@ def test_unmarked_settings_are_compared_by_release(tmp_path: Path) -> None:
 def test_settings_marked_as_not_rendered() -> None:
     # 印を足すと、その項目を変えても release が止まらなくなる。動画に描かれないことを確かめてから足す
     _, marked = _fields(ProjectConfig)
-    assert marked == {"song.slug", "song.original_urls", "credits", "materials", "description"}
+    assert marked == {
+        "song.slug",
+        "song.original_urls",
+        "credits",
+        "materials",
+        "description",
+        "uploads",
+        "announce",
+    }
+
+
+@pytest.mark.parametrize("section", ["description", "announce"])
+def test_hashtags_must_not_repeat(tmp_path: Path, section: str) -> None:
+    with pytest.raises(ConfigError, match="重複"):
+        load_project_config(_write(tmp_path, MINIMAL + f'[{section}]\nhashtags = ["cover", "Cover"]\n'))
