@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
-from utavideo import cli, graph
+from utavideo import analyze, graph
 from utavideo.cli import app
 from utavideo.ffmpeg import subtitles_filter_error
 from utavideo.project import scaffold
@@ -240,8 +240,8 @@ def test_release_compares_the_inputs_recorded_by_build(project: Path) -> None:
 @pytest.mark.parametrize(
     ("reader", "attr", "rel", "name"),
     [
-        (cli.subs, "load", "src/lyrics.ass", "lyrics.file"),
-        (cli, "probe_audio", "src/mix/テスト v1.2.wav", "audio.file"),
+        (analyze.subs, "load", "src/lyrics.ass", "lyrics.file"),
+        (analyze, "probe_audio", "src/mix/テスト v1.2.wav", "audio.file"),
     ],
 )
 def test_release_stops_when_an_input_changes_after_build_read_it(

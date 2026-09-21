@@ -16,6 +16,15 @@ import pysubs2
 import typer
 
 from utavideo import announce, description, fonts, graph, inputs, layout, sample, shorts, subs, vertical
+from utavideo.analyze import (
+    Analysis,
+    FontSearch,
+    analyze,
+    audio_issues,
+    background_issues,
+    check_fonts,
+    font_missing_message,
+)
 from utavideo.config import (
     PROJECT_CONFIG_NAME,
     Layout,
@@ -30,7 +39,6 @@ from utavideo.ffmpeg import (
     FFmpegError,
     NoOutputError,
     partial_path,
-    probe_audio,
     probe_duration,
     replace_partial,
     require_tools,
@@ -104,107 +112,6 @@ def _print_issues(issues: list[subs.Issue]) -> None:
 
 def _load_project(project_dir: Path | None) -> Project:
     return Project.load(find_project_root(project_dir or Path.cwd()))
-
-
-@dataclass(frozen=True)
-class Analysis:
-    issues: list[subs.Issue]
-    duration_s: float | None
-    lyrics: pysubs2.SSAFile | None
-    font_files: tuple[Path, ...]
-    font_index: fonts.FontIndex | None = None
-
-    @property
-    def ok(self) -> bool:
-        return all(issue.level != "error" for issue in self.issues)
-
-
-def analyze(project: Project, mode: graph.Mode, search: "_FontSearch | None" = None) -> Analysis:
-    """書き出しに必要なものが揃っているかを調べる。preview では歌詞の行の中身は問わない。"""
-    config = project.config
-    issues, duration_s = _audio_issues(project)
-    if not project.lyrics_path.is_file():
-        issues.append(subs.Issue("error", f"lyrics.file のファイルがありません: {project.lyrics_path}"))
-    if mode != "overlay":
-        issues += _background_issues(project)
-
-    lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
-    if lyrics is None or duration_s is None:
-        return Analysis(issues, duration_s, lyrics, ())
-
-    duration_ms = round(duration_s * 1000)
-    target = lyrics if mode != "preview" else subs.without_events(lyrics)
-    issues += subs.lint(target, size=config.video.size, duration_ms=duration_ms, overlay=config.overlay_text)
-
-    search = search or _FontSearch.load()
-    script = compose(project, lyrics, duration_ms, mode, search.index)
-    font_issues, font_files = _check_fonts(script, search)
-    return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index)
-
-
-def _audio_issues(project: Project) -> tuple[list[subs.Issue], float | None]:
-    """音源のファイルと音声の検査と、音源の長さ（秒。読めなければ None）。"""
-    path = project.audio_path
-    if not path.is_file():
-        return [subs.Issue("error", f"audio.file のファイルがありません: {path}")], None
-    audio = probe_audio(path)
-    if not audio.has_sound:
-        return [subs.Issue("error", f"audio.file に音声が入っていません: {path}")], audio.duration_s
-    return [], audio.duration_s
-
-
-def _background_issues(project: Project) -> list[subs.Issue]:
-    path = project.background_path
-    if not path.is_file():
-        return [subs.Issue("error", f"video.background のファイルがありません: {path}")]
-    ext = path.suffix.lower()
-    if ext not in graph.IMAGE_EXTS | graph.ANIMATED_EXTS:
-        return [subs.Issue("error", f"video.background の形式に対応していません: {ext}")]
-    return []
-
-
-@dataclass(frozen=True)
-class _FontSearch:
-    dirs: list[Path]
-    index: fonts.FontIndex
-
-    @classmethod
-    def load(cls) -> "_FontSearch":
-        dirs = load_user_config().font_dirs
-        cache_file = cache_dir() / "fonts.json"
-        if not cache_file.exists():
-            # 進捗であって出力ではないので、fonts <名前> をスクリプトから使えるよう stderr に出す
-            err_console.print("フォント一覧を作成しています（初回のみ時間がかかります）…")
-        return cls(dirs, fonts.load_index(dirs, cache_file))
-
-
-def _check_fonts(
-    script: pysubs2.SSAFile, search: _FontSearch, *, overflows: bool = True
-) -> tuple[list[subs.Issue], tuple[Path, ...]]:
-    """使っているフォントを探し、見つからないフォントのエラーと、はみ出しそうな行の警告を返す。"""
-    resolution = fonts.resolve(search.index, subs.used_fonts(script))
-    issues: list[subs.Issue] = []
-    for name in resolution.missing:
-        issues.append(subs.Issue("error", _font_missing_message(name, search.dirs)))
-    if overflows:
-        issues += layout.overflows(script, search.index.lookup)
-    return issues, resolution.files
-
-
-def _font_missing_message(name: str, font_dirs: list[Path]) -> str:
-    """見つからない理由として多いもの（ファイル名を書いた・探す場所が無い）を添える。"""
-    searched = ", ".join(map(str, font_dirs)) or "（なし）"
-    path = Path(name)
-    if path.suffix.lower() in fonts.FONT_EXTS:
-        hint = f"。ファイル名ではなくフォント名を指定してください（例: {path.stem}）"
-    elif not font_dirs:
-        hint = (
-            "。環境変数 UTAVIDEO_FONT_DIRS か、"
-            "ユーザー設定の font_dirs でフォントのあるディレクトリを指定してください"
-        )
-    else:
-        hint = ""
-    return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
 def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
@@ -372,11 +279,11 @@ def fonts_command(
     name: Annotated[str | None, typer.Argument(help="調べるフォント名。省略時は使える名前を一覧する")] = None,
 ) -> None:
     """.ass に書けるフォント名（check が照合する名前）を探す。"""
-    search = _FontSearch.load()
+    search = FontSearch.load()
     if name is not None:
         files = search.index.lookup(name)
         if not files:
-            _fail(_font_missing_message(name, search.dirs))
+            _fail(font_missing_message(name, search.dirs))
         for file in sorted(set(files)):
             console.print(str(file), markup=False)
         return
@@ -405,7 +312,7 @@ def check(project_dir: ProjectOption = None) -> None:
     require_tools(subtitles=False)
     project = _load_project(project_dir)
     # フォントの一覧は、歌詞とサムネイルの検査で1回だけ読む
-    search = _FontSearch.load()
+    search = FontSearch.load()
     analysis = analyze(project, "final", search)
     config = project.config
 
@@ -486,7 +393,7 @@ def preview_bg(
         _render(project_dir, "preview", "preview-bg")
 
 
-def _vertical_inputs(project: Project, search: _FontSearch, *, draws_main: bool) -> Analysis:
+def _vertical_inputs(project: Project, search: FontSearch, *, draws_main: bool) -> Analysis:
     """縦の書き出しに要るものの検査と、音源の長さ・本編の .ass（無ければ None）。
 
     draws_main は本編の映像も描くとき（blur の真ん中、wide の版）で、本編の .ass とフォントも
@@ -495,8 +402,8 @@ def _vertical_inputs(project: Project, search: _FontSearch, *, draws_main: bool)
     """
     if draws_main:
         return analyze(project, "final", search)
-    issues, duration_s = _audio_issues(project)
-    issues += _background_issues(project)
+    issues, duration_s = audio_issues(project)
+    issues += background_issues(project)
     lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
     if lyrics is not None:
         issues += subs.layout_res_issues(lyrics)
@@ -509,7 +416,7 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
     layouts = project.vertical_layouts
     # 下敷きは、実際に使う画面に合わせる。blur が1本でもあれば、真ん中に本編の映像を置く
     layout_: Layout = "blur" if "blur" in layouts else "reframe"
-    search = _FontSearch.load()
+    search = FontSearch.load()
     inputs = _vertical_inputs(project, search, draws_main=layout_ == "blur")
     issues, duration_s = inputs.issues, inputs.duration_s
     # 縦用 .ass のファイル全体の検査は、check・shorts と同じ layouts で行う（食い違わせない）
@@ -649,7 +556,7 @@ class VerticalAnalysis:
 
 
 def analyze_vertical(
-    project: Project, search: _FontSearch, *, layouts: Collection[Layout]
+    project: Project, search: FontSearch, *, layouts: Collection[Layout]
 ) -> VerticalAnalysis:
     """縦用 .ass のファイル全体の検査（PlayRes・LayoutRes・スタイル・フォント）と、blur の大きさ。
 
@@ -672,7 +579,7 @@ def analyze_vertical(
     issues = subs.lint_vertical(script, size=config.vertical.size, overlay=overlay)
     # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
     composed = compose(project, script, 0, "final", search.index, no_vertical_fade=True, overlay=overlay)
-    font_issues, font_files = _check_fonts(composed, search, overflows=False)
+    font_issues, font_files = check_fonts(composed, search, overflows=False)
     return VerticalAnalysis(sizing + subs.prefixed(issues + font_issues, "縦用 .ass: "), script, font_files)
 
 
@@ -706,7 +613,7 @@ class ShortsAnalysis:
 
 def analyze_shorts(
     project: Project,
-    search: _FontSearch,
+    search: FontSearch,
     duration_s: float | None,
     lyrics: pysubs2.SSAFile | None,
     targets: tuple[Short, ...],
@@ -762,7 +669,7 @@ def analyze_shorts(
 def _vertical_line_issues(
     script: pysubs2.SSAFile,
     by_layout: dict[Layout, list[shorts.Section]],
-    search: _FontSearch,
+    search: FontSearch,
     duration_ms: int,
 ) -> list[subs.Issue]:
     """区間に入る、描く行の警告。区間の外の行（本編の写し）は、本編と同じ警告を二重に出さない。
@@ -792,7 +699,7 @@ def shorts_command(
     require_tools()
     project = _load_project(project_dir)
     selected = _select_named(project.config.shorts, name, table="[[shorts]]", example=SHORTS_EXAMPLE)
-    search = _FontSearch.load()
+    search = FontSearch.load()
     layouts: list[Layout] = [project.short_layout(short) for short in selected]
     any_blur, any_wide = "blur" in layouts, any(s.wide for s in selected)
     # wide は本編と同じ画面、blur は真ん中に本編の映像を置くので、どちらも本編の .ass を描く
@@ -917,16 +824,16 @@ class ThumbnailAnalysis:
 
 
 def analyze_thumbnails(
-    project: Project, thumbnails: tuple[Thumbnail, ...], *, bg_only: bool, search: _FontSearch | None = None
+    project: Project, thumbnails: tuple[Thumbnail, ...], *, bg_only: bool, search: FontSearch | None = None
 ) -> ThumbnailAnalysis:
-    """サムネイルごとに書き出せるかを調べる。背景のファイル自体の検査（_background_issues）は呼び出し側で行う。
+    """サムネイルごとに書き出せるかを調べる。背景のファイル自体の検査（background_issues）は呼び出し側で行う。
 
     bg_only では at だけを見る（.ass はまだ無くてよい）。
     """
     issues: list[subs.Issue] = []
     font_files: dict[str, tuple[Path, ...]] = {}
     background = project.background_path
-    usable = not _background_issues(project)
+    usable = not background_issues(project)
     # GIF・動画の長さは、at を書いたサムネイルがあるときだけ、1回だけ調べる
     duration = None
     if usable and not graph.is_image(background) and any(t.at is not None for t in thumbnails):
@@ -937,7 +844,7 @@ def analyze_thumbnails(
             issues.append(subs.Issue("error", f"{e}（サムネイルの at を確かめられません）"))
             usable = False
     if not bg_only and search is None:
-        search = _FontSearch.load()
+        search = FontSearch.load()
 
     for thumb in thumbnails:
         found = background_time_issues(background, thumb.at, duration) if usable else []
@@ -963,7 +870,7 @@ def background_time_issues(background: Path, at: float | None, duration: float |
 
 
 def _thumbnail_ass_issues(
-    project: Project, thumb: Thumbnail, search: _FontSearch, font_files: dict[str, tuple[Path, ...]]
+    project: Project, thumb: Thumbnail, search: FontSearch, font_files: dict[str, tuple[Path, ...]]
 ) -> list[subs.Issue]:
     path = project.thumbnail_file(thumb)
     if not path.is_file():
@@ -973,7 +880,7 @@ def _thumbnail_ass_issues(
     except subs.SubtitleError as e:
         return [subs.Issue("error", str(e))]
     issues = subs.lint_still(script, size=project.thumbnail_size(thumb))
-    font_issues, font_files[thumb.name] = _check_fonts(script, search)
+    font_issues, font_files[thumb.name] = check_fonts(script, search)
     return issues + font_issues
 
 
@@ -1010,7 +917,7 @@ def thumbnail(
     thumbnails = _select_named(
         project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
     )
-    issues = _background_issues(project)
+    issues = background_issues(project)
     analysis = analyze_thumbnails(project, thumbnails, bg_only=bg_only)
     issues += analysis.issues
     _print_issues(issues)

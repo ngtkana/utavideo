@@ -8,7 +8,8 @@
 
 ## 構成
 
-- `src/utavideo/cli.py`：コマンド定義。`analyze()` で検査し、`_render()` で書き出す
+- `src/utavideo/cli.py`：コマンド定義。検査は `analyze.py`、書き出しは `render.py` に任せる
+- `analyze.py`：書き出し前の検査。曲フォルダの状態を読み、Issue のリストを返す
 - `console.py`：コマンドの出力に使う Rich の Console
 - `config.py`：toml を pydantic で検証する。未知の項目はエラー。動画の描画に効かない項目には `NOT_RENDERED` の印を付ける（付けないと、変えたときに `release` が止まる）
 - `project.py`：曲フォルダの規約（パス、バージョン名）、雛形の作成
