@@ -206,6 +206,13 @@ class Vertical(_Model):
 
     size: VideoSize = (1080, 1920)
     lyrics: Path = Path("src/vertical.ass")
+    focus: Focus | None = None  # None なら video.focus
+
+
+class Short(_Model):
+    """縦型のショート1本。区間は縦用 .ass の、本文が name のコメント行（スタイル Short）に置く。"""
+
+    name: OutputName
 
 
 class Upload(_Model):
@@ -228,6 +235,7 @@ class ProjectConfig(_Model):
     description: Annotated[Description | None, NOT_RENDERED] = None
     thumbnails: Annotated[tuple[Thumbnail, ...], NOT_RENDERED] = ()
     vertical: Annotated[Vertical, NOT_RENDERED] = Field(default_factory=Vertical)
+    shorts: Annotated[tuple[Short, ...], NOT_RENDERED] = ()
     uploads: Annotated[tuple[Upload, ...], NOT_RENDERED] = ()
     announce: Annotated[Announce | None, NOT_RENDERED] = None
 
@@ -235,6 +243,11 @@ class ProjectConfig(_Model):
     @classmethod
     def _unique_thumbnail_names(cls, thumbnails: tuple[Thumbnail, ...]) -> tuple[Thumbnail, ...]:
         return check_unique_names(thumbnails, lambda t: t.name)
+
+    @field_validator("shorts")
+    @classmethod
+    def _unique_short_names(cls, shorts: tuple[Short, ...]) -> tuple[Short, ...]:
+        return check_unique_names(shorts, lambda s: s.name)
 
 
 def _xdg(var: str, fallback: str) -> Path:

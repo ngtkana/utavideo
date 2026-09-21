@@ -397,25 +397,108 @@ def test_check_warns_about_thumbnail_lines_not_drawn(project: Path) -> None:
     assert "サムネイル main: 0 秒に表示されない行" in output
 
 
-def test_check_inspects_the_vertical_ass_only_when_it_exists(project: Path) -> None:
+VERTICAL = """
+[vertical]
+size = [180, 320]
+{extra}
+"""
+
+
+def _with_shorts(project: Path, shorts: str = '[[shorts]]\nname = "chorus"\n', extra: str = "") -> None:
+    config = TOML.format(background="bg.png") + VERTICAL.format(extra=extra) + shorts
+    (project / "utavideo.toml").write_text(config, encoding="utf-8")
+
+
+def _add_vertical_lines(project: Path, *lines: str) -> None:
+    vertical = project / "src/vertical.ass"
+    vertical.write_text(
+        vertical.read_text(encoding="utf-8") + "".join(f"{line}\n" for line in lines), encoding="utf-8"
+    )
+
+
+def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Path) -> None:
+    _with_shorts(project, shorts="")
+    invoke("vertical-ass", "-C", str(project))
     assert "縦用 .ass" not in invoke("check", "-C", str(project)).output
 
-    invoke("vertical-ass", "-C", str(project))
+    _with_shorts(project)
+    _add_vertical_lines(project, "Comment: 0,0:00:00.00,0:00:01.80,Short,,0,0,0,,chorus")
     output = invoke("check", "-C", str(project)).output
-    assert "縦用 .ass: src/vertical.ass（1080x1920）" in output
+    assert "縦用 .ass: src/vertical.ass（180x320）" in output
+    assert "ショート: chorus" in output
     assert "問題ありません" in output
 
     vertical = project / "src/vertical.ass"
     text = vertical.read_text(encoding="utf-8")
     vertical.write_text(
-        text.replace("Test Sans", "Nope Sans").replace("PlayResY: 1920", "PlayResY: 1080"), encoding="utf-8"
+        text.replace("Test Sans", "Nope Sans").replace("PlayResY: 320", "PlayResY: 180"), encoding="utf-8"
     )
     result = runner.invoke(app, ["check", "-C", str(project)])
     assert result.exit_code == 1
-    assert "縦用 .ass: PlayRes 1080x1080" in result.output
+    assert "縦用 .ass: PlayRes 180x180" in result.output
     assert "縦用 .ass: フォント 'Nope Sans'" in result.output
     # 縦用 .ass の誤りで、本編の書き出しは止めない
     invoke("build", "-C", str(project))
+
+
+def test_check_reports_a_missing_vertical_ass_and_sections(project: Path) -> None:
+    _with_shorts(project)
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "utavideo vertical-ass で作れます" in result.output
+
+    invoke("vertical-ass", "-C", str(project))
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "ショート chorus: 区間の行" in result.output
+
+    # 音源は 2 秒。歌詞の行は 0.2〜1.5 秒
+    _add_vertical_lines(project, "Comment: 0,0:00:01.00,0:00:02.50,Short,,0,0,0,,chorus")
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "音源の長さ（0:00:02.000）を超えています" in result.output
+    invoke("build", "-C", str(project))
+
+
+def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
+    _with_shorts(project)
+    invoke("vertical-ass", "-C", str(project))
+    long_line = "A" * 20
+    _add_vertical_lines(
+        project,
+        "Comment: 0,0:00:01.00,0:00:02.00,Short,,0,0,0,,chorus",
+        "Comment: 0,0:00:00.00,0:00:01.00,Short,,0,0,0,,unused",
+        # 区間の外の行ははみ出しても警告しない
+        f"Dialogue: 0,0:00:00.00,0:00:00.10,Lyrics,,0,0,0,,{long_line}",
+        f"Dialogue: 0,0:00:01.60,0:00:01.90,Lyrics,,0,0,0,,{long_line}",
+    )
+    output = invoke("check", "-C", str(project)).output
+    assert output.count("はみ出しそう") == 1
+    assert "0:00:01.600「AAAA" in output
+    assert "区間の頭（0:00:01.000）が歌詞の行の途中にかかっています" in output
+    assert "どの [[shorts]] の name にも合わない区間の行があります" in output
+
+
+def test_preview_bg_vertical_uses_the_vertical_size_and_focus(project: Path) -> None:
+    _with_shorts(project, shorts="")
+    result = runner.invoke(app, ["preview-bg", "--vertical", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "utavideo vertical-ass で作れます" in result.output
+
+    invoke("vertical-ass", "-C", str(project))
+    frames = []
+    for focus in ("[0, 0.5]", "[1, 0.5]"):
+        _with_shorts(project, shorts="", extra=f"focus = {focus}")
+        invoke("preview-bg", "--vertical", "-C", str(project))
+        output = project / "build/preview/vertical-bg.mp4"
+        info = _probe(output)
+        video = _stream(info, "video")
+        assert (video["codec_name"], video["width"], video["height"]) == ("h264", 180, 320)
+        assert _stream(info, "audio")["codec_name"] == "aac"
+        frames.append(_pixels(output))
+    assert frames[0] != frames[1]
+    assert (project / "build/.work/vertical-preview.ass").is_file()
+    assert not (project / "build/preview/bg.mp4").exists()
 
 
 def test_layout_res_that_squashes_the_lyrics_stops_the_build(project: Path) -> None:

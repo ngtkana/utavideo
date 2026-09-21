@@ -45,6 +45,11 @@ file = "src/thumbnail.ass"  # 文字を組む .ass（Aegisub で編集）
 # 縦型のショート（utavideo vertical-ass が本編の歌詞から縦用 .ass を作る）
 # size = [1080, 1920]
 # lyrics = "src/vertical.ass"
+# focus = [0.5, 0.5]       # 省略時は video.focus
+
+# [[shorts]]
+# 区間は縦用 .ass に、スタイル Short のコメント行で置き、本文を name と同じにする
+# name = "chorus"
 
 [description]
 # 概要欄とタイトル（utavideo description）。見出しなどの書式はユーザー設定で変える

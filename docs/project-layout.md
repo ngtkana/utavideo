@@ -17,7 +17,9 @@
 ├── build/               # utavideo が作るもの。丸ごと消してよい
 │   ├── main.mp4
 │   ├── overlay.mov
-│   ├── preview/bg.mp4
+│   ├── preview/
+│   │   ├── bg.mp4
+│   │   └── vertical-bg.mp4  # utavideo preview-bg --vertical（縦用 .ass の下敷き）
 │   ├── title.txt        # utavideo description
 │   ├── description.txt
 │   ├── thumbnail/       # utavideo thumbnail

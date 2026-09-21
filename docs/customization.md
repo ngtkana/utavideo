@@ -79,7 +79,7 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 
 ## 縦型のショート
 
-縦型のショートに使う歌詞は、本編とは別の縦用 .ass に組みます。手順は [workflow.md](workflow.md#10-ショートの縦用-ass-を作る)。
+縦型のショートに使う歌詞は、本編とは別の縦用 .ass に組みます。手順は [workflow.md](workflow.md#10-ショートの縦用-ass-を作り区間を置く)。
 
 | やりたいこと | 書き方 |
 |---|---|
@@ -88,8 +88,13 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | 縦用 .ass の場所・名前 | `vertical.lyrics` |
 | 縦だけ文字を大きくする・改行する | 縦用 .ass のスタイル `Lyrics` の大きさ、行の `\N`（本編の .ass は変わらない） |
 | 縦用 .ass を作り直す | 縦用 .ass を消してから `vertical-ass`（直した内容は残らない） |
+| 縦の下敷き（Aegisub で開く） | `preview-bg --vertical`（`build/preview/vertical-bg.mp4`） |
+| 縦で背景のどこを残すか | `vertical.focus`（既定は `video.focus`） |
+| 切り抜く区間 | 縦用 .ass に、スタイル `Short` のコメント行を置き、本文をショートの名前にする。`utavideo.toml` に同じ `name` の `[[shorts]]` を書く |
+| ショートを何本も作る | 区間の行と `[[shorts]]` を、名前を変えて並べる |
+| 縦だけの文字（帯の曲名など） | スタイル名を `Vertical` で始める（例: `VerticalBand`）。歌詞として扱わず、区間の端の検査をしない |
 
-縦の下敷きとショートの書き出しはまだできません（[roadmap.md](roadmap.md)）。
+ショートの書き出しはまだできません（[roadmap.md](roadmap.md)）。
 
 ## 音源と公開
 

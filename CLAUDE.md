@@ -18,6 +18,7 @@
 - `fonts.py`：fontTools でフォント名→ファイルの対応表を作る。必要なファイルだけのリンク集を libass の fontsdir に渡す
 - `timecode.py`：設定に書く時刻（`"M:SS(.fff)"` か秒の数）の読み取り
 - `vertical.py`：本編の .ass の座標・大きさを縦の解像度に変換して、縦用 .ass の雛形を作る
+- `shorts.py`：縦用 .ass からショートの区間（スタイル `Short` のコメント行）を読み、区間と区間に入る行を検査する
 - `layout.py`：行の幅を概算して、はみ出しそうな行を警告する（libass は空白の無い日本語を自動改行しない）
 - `inputs.py`：`build` の入力（素材の中身・印の無い設定・フォントの stat）を記録し、`release` で比べる
 - `graph.py`：ffmpeg の引数（動画と、サムネイルの1枚の PNG）を組み立てる純粋関数。`ffmpeg.py` が実行する

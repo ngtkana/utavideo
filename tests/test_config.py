@@ -13,6 +13,7 @@ from utavideo.config import (
     load_user_config,
     rendered_values,
 )
+from utavideo.project import Project
 
 MINIMAL = """
 [song]
@@ -211,6 +212,39 @@ def test_odd_vertical_size_is_rejected(tmp_path: Path) -> None:
         load_project_config(_write(tmp_path, MINIMAL + "[vertical]\nsize = [1081, 1920]\n"))
 
 
+def test_vertical_focus_defaults_to_video_focus(tmp_path: Path) -> None:
+    text = MINIMAL + "focus = [0.2, 0.5]\n"
+    assert Project(tmp_path, load_project_config(_write(tmp_path, text))).vertical_focus == (0.2, 0.5)
+    text += "[vertical]\nfocus = [1, 0]\n"
+    assert Project(tmp_path, load_project_config(_write(tmp_path, text))).vertical_focus == (1.0, 0.0)
+
+
+def test_vertical_focus_is_validated(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match=r"vertical\.focus"):
+        load_project_config(_write(tmp_path, MINIMAL + "[vertical]\nfocus = [1.5, 0]\n"))
+
+
+def test_shorts_names(tmp_path: Path) -> None:
+    assert load_project_config(_write(tmp_path, MINIMAL)).shorts == ()
+    text = MINIMAL + '[[shorts]]\nname = "chorus"\n[[shorts]]\nname = "intro"\n'
+    assert [s.name for s in load_project_config(_write(tmp_path, text)).shorts] == ["chorus", "intro"]
+
+
+@pytest.mark.parametrize(
+    ("shorts", "message"),
+    [
+        ('[[shorts]]\nname = "chorus"\n[[shorts]]\nname = "Chorus"\n', r"重複.*Chorus"),
+        ('[[shorts]]\nname = "a/b"\n', r"shorts\.0\.name"),
+        ('[[shorts]]\nname = "chorus.partial"\n', r"\.partial"),
+        ("[[shorts]]\n", r"shorts\.0\.name"),
+        ('[[shorts]]\nname = "chorus"\nstart = 1\n', r"shorts\.0\.start"),
+    ],
+)
+def test_shorts_are_validated(tmp_path: Path, shorts: str, message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        load_project_config(_write(tmp_path, MINIMAL + shorts))
+
+
 def _fields(model: type[BaseModel], prefix: str = "") -> tuple[set[str], set[str]]:
     """(印の無い末端の項目, 印の付いた項目) をドット区切りで。"""
     unmarked: set[str] = set()
@@ -251,6 +285,7 @@ def test_settings_marked_as_not_rendered() -> None:
         "description",
         "thumbnails",
         "vertical",
+        "shorts",
         "uploads",
         "announce",
     }
