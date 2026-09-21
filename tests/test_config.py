@@ -84,7 +84,9 @@ def test_font_dirs_expand_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert load_user_config().font_dirs == [home / "other"]
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="fontconfig の既定値は POSIX のもの")
+@pytest.mark.skipif(
+    sys.platform in ("win32", "darwin"), reason="fontconfig の既定値は Linux（WSL2 含む）のもの"
+)
 def test_font_dir_candidates_cover_fontconfig_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
