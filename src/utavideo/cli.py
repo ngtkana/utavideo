@@ -251,9 +251,7 @@ def _frame_script(
 
     build/main.mp4 と同じ画面にする。曲名表示だけ vertical.overlay_text で決まる。
     """
-    return _compose(
-        project, lyrics, duration_ms, "final", font_index, overlay=project.vertical_overlay_text
-    )
+    return _compose(project, lyrics, duration_ms, "final", font_index, overlay=project.vertical_overlay_text)
 
 
 def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
