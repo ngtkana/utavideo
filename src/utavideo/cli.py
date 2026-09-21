@@ -19,7 +19,14 @@ from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, T
 from utavideo import description, fonts, graph, layout, subs
 from utavideo.config import PROJECT_CONFIG_NAME, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
-from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
+from utavideo.ffmpeg import (
+    partial_path,
+    probe_audio,
+    replace_partial,
+    require_tools,
+    run,
+    subtitles_filter_error,
+)
 from utavideo.names import has_date_prefix, slug_error, slug_from_dir_name
 from utavideo.project import (
     VERSION_PATTERN,
@@ -309,7 +316,9 @@ def _interactive() -> bool:
 @_handle_errors
 def check(project_dir: ProjectOption = None) -> None:
     """設定・素材・歌詞・フォントを検査する。"""
-    require_tools()
+    # 検査自体は ffprobe で音源を読むので要るが、libass は要らない。
+    # 無いことは Issue にして、1回の check で直すべきことが全部並ぶようにする
+    require_tools(subtitles=False)
     project = _load_project(project_dir)
     analysis = analyze(project, "final")
     config = project.config
@@ -323,6 +332,8 @@ def check(project_dir: ProjectOption = None) -> None:
     for file in analysis.font_files:
         console.print(f"  フォント: {file}", markup=False)
     issues = list(analysis.issues)
+    if (error := subtitles_filter_error()) is not None:
+        issues.append(subs.Issue("error", error))
     if version := project.version:
         dest = project.release_path(version, next_revision(project.released(version)))
         console.print(f"  release 先: {dest}", markup=False)

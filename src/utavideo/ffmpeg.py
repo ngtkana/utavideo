@@ -21,25 +21,37 @@ class AudioInfo:
     has_sound: bool
 
 
-def require_tools() -> None:
+def require_tools(*, subtitles: bool = True) -> None:
+    """使えなければ止める。歌詞を描かない用途は subtitles=False で libass を要求しない。"""
     missing = [tool for tool in ("ffmpeg", "ffprobe") if shutil.which(tool) is None]
     if missing:
         raise FFmpegError(f"{', '.join(missing)} が見つかりません（例: sudo apt install ffmpeg）")
-    if not has_subtitles_filter():
-        raise FFmpegError(
-            "ffmpeg が subtitles フィルタ（libass）に対応していないので、歌詞を描画できません。"
-            "libass 付きの ffmpeg を入れてください"
-            "（Ubuntu: sudo apt install ffmpeg、macOS の Homebrew: brew install ffmpeg-full）"
-        )
+    if subtitles and (error := subtitles_filter_error()) is not None:
+        raise FFmpegError(error)
 
 
-def has_subtitles_filter() -> bool:
-    """ffmpeg で subtitles フィルタ（libass）が使えるか。"""
+def subtitles_filter_error() -> str | None:
+    """ffmpeg で subtitles フィルタ（libass）を使えない理由と直し方。使えるなら None。"""
     # フィルタが無くても終了コードは 0 で "Unknown filter" と出るだけなので、見出しの有無で判定する。
-    # 一覧の -filters（40KB ほど）でも同じことはできるが、どちらも 20ms なので出力の小さい方にした
-    cmd = ["ffmpeg", "-hide_banner", "-h", "filter=subtitles"]
-    out = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
-    return "Filter subtitles" in out.stdout
+    # 一覧の -filters（40KB ほど）でも同じことはできるが、どちらも 20ms なので出力の小さい方にした。
+    # 手元の 6.1 は stdout に出すが、stderr に出すビルドで誤判定しないよう両方を見る
+    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    cmd = [ffmpeg, "-hide_banner", "-h", "filter=subtitles"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    except OSError as e:
+        return f"{ffmpeg} を実行できません: {e}"
+    # 共有ライブラリが足りないなどで動かない ffmpeg を「libass 非対応」と誤診しないよう、終了コードを先に見る
+    if out.returncode != 0:
+        detail = (out.stderr.strip() or out.stdout.strip())[-500:]
+        return f"{ffmpeg} を実行できません（終了コード {out.returncode}）: {detail}"
+    if "Filter subtitles" in out.stdout + out.stderr:
+        return None
+    return (
+        f"{ffmpeg} が subtitles フィルタ（libass）に対応していないので、歌詞を描画できません。"
+        "libass 付きの ffmpeg を入れてください"
+        "（Ubuntu: sudo apt install ffmpeg、macOS の Homebrew: brew install ffmpeg-full）"
+    )
 
 
 def probe_audio(path: Path) -> AudioInfo:
