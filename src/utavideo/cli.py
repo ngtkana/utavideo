@@ -14,7 +14,6 @@ from typing import Annotated, Any, NoReturn
 
 import pysubs2
 import typer
-from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 from utavideo import announce, description, fonts, graph, inputs, layout, sample, shorts, subs, vertical
@@ -27,6 +26,7 @@ from utavideo.config import (
     cache_dir,
     load_user_config,
 )
+from utavideo.console import console, err_console
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import (
     FFmpegError,
@@ -60,8 +60,6 @@ app = typer.Typer(
     add_completion=False,
     help="utavideo.toml と歌詞 .ass から歌動画を書き出す。",
 )
-console = Console(highlight=False)
-err_console = Console(stderr=True, highlight=False)
 
 ProjectOption = Annotated[
     Path | None,
