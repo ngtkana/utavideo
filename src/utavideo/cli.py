@@ -10,17 +10,15 @@ from collections.abc import Callable, Collection
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Annotated, Any, NoReturn
+from typing import Annotated, NoReturn
 
 import pysubs2
 import typer
-from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 from utavideo import announce, description, fonts, graph, inputs, layout, sample, shorts, subs, vertical
 from utavideo.config import (
     PROJECT_CONFIG_NAME,
     Layout,
-    OverlayText,
     Short,
     Thumbnail,
     cache_dir,
@@ -38,6 +36,7 @@ from utavideo.ffmpeg import (
     require_tools,
     run,
     subtitles_filter_error,
+    write_text,
 )
 from utavideo.names import has_date_prefix, slug_error, slug_from_dir_name
 from utavideo.project import (
@@ -53,6 +52,7 @@ from utavideo.project import (
     scaffold,
     to_windows_path,
 )
+from utavideo.render import Frame, VideoTarget, compose, frame_script, write_video
 from utavideo.timecode import format_time
 
 app = typer.Typer(
@@ -106,13 +106,6 @@ def _load_project(project_dir: Path | None) -> Project:
     return Project.load(find_project_root(project_dir or Path.cwd()))
 
 
-def _write_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = partial_path(path)
-    tmp.write_text(text, encoding="utf-8", newline="\n")
-    replace_partial(tmp, path)
-
-
 @dataclass(frozen=True)
 class Analysis:
     issues: list[subs.Issue]
@@ -144,7 +137,7 @@ def analyze(project: Project, mode: graph.Mode, search: "_FontSearch | None" = N
     issues += subs.lint(target, size=config.video.size, duration_ms=duration_ms, overlay=config.overlay_text)
 
     search = search or _FontSearch.load()
-    script = _compose(project, lyrics, duration_ms, mode, search.index)
+    script = compose(project, lyrics, duration_ms, mode, search.index)
     font_issues, font_files = _check_fonts(script, search)
     return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index)
 
@@ -214,45 +207,6 @@ def _font_missing_message(name: str, font_dirs: list[Path]) -> str:
     return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
-def _compose(
-    project: Project,
-    lyrics: pysubs2.SSAFile,
-    duration_ms: int,
-    mode: graph.Mode,
-    font_index: fonts.FontIndex,
-    *,
-    no_vertical_fade: bool = False,
-    overlay: OverlayText | None = None,
-) -> pysubs2.SSAFile:
-    """書き出しに使うスクリプトを作る。
-
-    no_vertical_fade は縦用 .ass を描くとき。Vertical で始まるスタイルの行に自動のフェードを
-    入れない（区間いっぱいに置く帯の文字が、繰り返し再生のつなぎ目で点滅しないようにする）。
-    overlay を渡すと、曲名表示の設定をそれで上書きする（縦の書き出しは必ず渡す）。
-    """
-    config = project.config
-    return subs.compose(
-        lyrics,
-        song=config.song,
-        overlay=overlay if overlay is not None else config.overlay_text,
-        fade_ms=config.lyrics.fade_ms,
-        duration_ms=duration_ms,
-        include_lyrics=mode != "preview",
-        font_index=font_index,
-        no_fade_style_prefix=vertical.VERTICAL_STYLE_PREFIX if no_vertical_fade else None,
-    )
-
-
-def _frame_script(
-    project: Project, lyrics: pysubs2.SSAFile, duration_ms: int, font_index: fonts.FontIndex
-) -> pysubs2.SSAFile:
-    """blur の真ん中に置く本編の映像に描く .ass。
-
-    build/main.mp4 と同じ画面にする。曲名表示だけ vertical.overlay_text で決まる。
-    """
-    return _compose(project, lyrics, duration_ms, "final", font_index, overlay=project.vertical_overlay_text)
-
-
 def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     require_tools()
     project = _load_project(project_dir)
@@ -264,111 +218,15 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
         raise typer.Exit(1)
     assert analysis.lyrics is not None and analysis.duration_s is not None and analysis.font_index is not None
 
-    script = _compose(project, analysis.lyrics, round(analysis.duration_s * 1000), mode, analysis.font_index)
+    script = compose(project, analysis.lyrics, round(analysis.duration_s * 1000), mode, analysis.font_index)
     output = {
         "final": project.main_output,
         "preview": project.preview_bg_output,
         "overlay": project.overlay_output,
     }[mode]
     video = project.config.video
-    target = _VideoTarget(mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label)
-    return _write_video(project, script, target, analysis.duration_s, analysis.font_files, built_inputs)
-
-
-@dataclass(frozen=True)
-class _Frame:
-    """blur の画面で、ぼかした帯の上に置く本編の映像。"""
-
-    script: pysubs2.SSAFile  # 本編の合成したスクリプト
-    subtitles_path: Path  # 描画に使った .ass を書く場所
-
-
-@dataclass(frozen=True)
-class _VideoTarget:
-    """書き出す動画ごとに違うもの。ほかの設定（fps・fit・crf など）は [video] を使う。"""
-
-    mode: graph.Mode
-    size: tuple[int, int]
-    focus: tuple[float, float]
-    subtitles_path: Path  # 描画に使った .ass を書く場所
-    output: Path
-    label: str
-    clip: graph.Clip | None = None  # 切り出す区間（None なら曲全体）
-    frame: _Frame | None = None  # None なら背景を size に合わせる画面（reframe）
-
-
-def _write_video(
-    project: Project,
-    script: pysubs2.SSAFile,
-    target: _VideoTarget,
-    duration_s: float,
-    font_files: tuple[Path, ...],
-    built_inputs: dict[str, Any] | None,
-) -> Path:
-    """合成したスクリプトを target.subtitles_path に書き、動画を target.output に書き出す。"""
-    subtitles_path, output = target.subtitles_path, target.output
-    _save_script(script, subtitles_path)
-
-    video = project.config.video
-    frame = None
-    if target.frame is not None:
-        _save_script(target.frame.script, target.frame.subtitles_path)
-        frame = graph.Frame(
-            size=video.size,
-            focus=video.focus,
-            subtitles=target.frame.subtitles_path.absolute(),
-            frame_y=project.config.vertical.frame_y,
-            fit=video.fit,
-        )
-    spec = graph.RenderSpec(
-        mode=target.mode,
-        size=target.size,
-        fps=video.fps,
-        duration_s=duration_s,
-        audio=project.audio_path.absolute(),
-        subtitles=subtitles_path.absolute(),
-        fontsdir=fonts.prepare_fontsdir(font_files, cache_dir() / "fontsets"),
-        background=project.background_path.absolute(),
-        fit=video.fit,
-        focus=target.focus,
-        scale_flags=video.scale_flags,
-        pad_color=video.pad_color,
-        crf=video.crf,
-        preset=video.preset,
-        clip=target.clip,
-        frame=frame,
-    )
-    if built_inputs is not None:
-        # フォントは ffmpeg が書き出し中に読むので、その前に stat を取る
-        built_inputs = inputs.with_fonts(built_inputs, font_files)
-        # 書き出しが途中で終わったとき、前の記録が新しい動画のものに見えないように先に消す
-        project.inputs_record.unlink(missing_ok=True)
-
-    with Progress(
-        TextColumn("{task.description}"),
-        BarColumn(),
-        TaskProgressColumn(),
-        TimeRemainingColumn(),
-        console=console,
-    ) as progress:
-        task = progress.add_task(target.label, total=1.0)
-        run(
-            graph.build_args(spec),
-            output,
-            total_s=duration_s,
-            on_progress=lambda fraction: progress.update(task, completed=fraction),
-        )
-    if built_inputs is not None:
-        _write_text(project.inputs_record, inputs.record_text(project, built_inputs))
-    console.print(f"書き出しました: {output}", markup=False)
-    if windows_path := to_windows_path(output):
-        console.print(f"  Windows: {windows_path}", markup=False)
-    return output
-
-
-def _save_script(script: pysubs2.SSAFile, path: Path) -> None:
-    """描画に使う .ass を書く。ほかの出力と同じく .partial に書いてから名前を変える。"""
-    _write_text(path, script.to_string("ass"))
+    target = VideoTarget(mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label)
+    return write_video(project, script, target, analysis.duration_s, analysis.font_files, built_inputs)
 
 
 def _print_scaffold(result: ScaffoldResult, root: Path) -> None:
@@ -664,17 +522,17 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
 
     duration_ms = round(duration_s * 1000)
     overlay = project.vertical_script_overlay_text([layout_])
-    script = _compose(
+    script = compose(
         project, checked.script, duration_ms, "preview", search.index, no_vertical_fade=True, overlay=overlay
     )
     frame, font_files = None, checked.font_files
     if layout_ == "blur":
         # 下敷きも完成図と同じ画面にする。本編の歌詞は真ん中の映像に入れ、縦用 .ass の行は入れない
         assert inputs.lyrics is not None
-        frame_script = _frame_script(project, inputs.lyrics, duration_ms, search.index)
-        frame = _Frame(frame_script, project.work_dir / "vertical-preview-frame.ass")
+        frame_ass = frame_script(project, inputs.lyrics, duration_ms, search.index)
+        frame = Frame(frame_ass, project.work_dir / "vertical-preview-frame.ass")
         font_files += inputs.font_files
-    target = _VideoTarget(
+    target = VideoTarget(
         "preview",
         project.config.vertical.size,
         project.vertical_focus,
@@ -683,7 +541,7 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
         "preview-bg --vertical",
         frame=frame,
     )
-    _write_video(project, script, target, duration_s, font_files, None)
+    write_video(project, script, target, duration_s, font_files, None)
 
 
 @app.command()
@@ -710,8 +568,8 @@ def description_command(project_dir: ProjectOption = None) -> None:
     body = description.render_body(project.config, fmt)
     if project.config.description is not None:
         _print_issues(description.lint(project, fmt))
-    _write_text(project.title_output, title)
-    _write_text(project.description_output, body)
+    write_text(project.title_output, title)
+    write_text(project.description_output, body)
     console.print(title, markup=False)
     console.print()
     console.print(body, markup=False, end="")
@@ -732,7 +590,7 @@ def announce_command(project_dir: ProjectOption = None) -> None:
     if any(issue.level == "error" for issue in issues):
         _fail("告知文を書き出しませんでした")
     text = announce.render(project.config, fmt, user_config.description)
-    _write_text(project.announce_output, text)
+    write_text(project.announce_output, text)
     console.print(text, markup=False, end="")
     console.print(f"長さ: {announce.weight(text)} / {fmt.max_weight}（X の数え方）", markup=False)
     console.print(f"書き出しました: {project.announce_output}", markup=False)
@@ -813,7 +671,7 @@ def analyze_vertical(
     overlay = project.vertical_script_overlay_text(layouts)
     issues = subs.lint_vertical(script, size=config.vertical.size, overlay=overlay)
     # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
-    composed = _compose(project, script, 0, "final", search.index, no_vertical_fade=True, overlay=overlay)
+    composed = compose(project, script, 0, "final", search.index, no_vertical_fade=True, overlay=overlay)
     font_issues, font_files = _check_fonts(composed, search, overflows=False)
     return VerticalAnalysis(sizing + subs.prefixed(issues + font_issues, "縦用 .ass: "), script, font_files)
 
@@ -952,13 +810,13 @@ def shorts_command(
     fps = config.video.fps
     duration_ms = round(duration_s * 1000)
     # 本編の .ass はどのショートでも同じなので、合成は1回だけ（曲名表示の設定が wide と blur で違う）
-    wide_script = frame_script = None
+    wide_script = frame_ass = None
     if draws_main:
         assert lyrics is not None
         if any_wide:
-            wide_script = _compose(project, lyrics, duration_ms, "final", search.index)
+            wide_script = compose(project, lyrics, duration_ms, "final", search.index)
         if any_blur:
-            frame_script = _frame_script(project, lyrics, duration_ms, search.index)
+            frame_ass = frame_script(project, lyrics, duration_ms, search.index)
     # blur では本編の .ass も描くので、そのフォントも渡す（どのショートでも同じ）
     blur_font_files = analysis.font_files + inputs.font_files
     for short, layout_ in zip(selected, layouts, strict=True):
@@ -969,15 +827,15 @@ def shorts_command(
         # .ass の時刻はずらさない。区間の頭をまたぐ行の \\move・\\fad を本編と同じ状態で描くため
         in_section = shorts.lines_in_sections(analysis.script, [section], vertical_only=blur)
         overlay = project.vertical_script_overlay_text([layout_])
-        script = _compose(
+        script = compose(
             project, in_section, duration_ms, "final", search.index, no_vertical_fade=True, overlay=overlay
         )
         frame, font_files = None, analysis.font_files
         if blur:
-            assert frame_script is not None
-            frame = _Frame(frame_script, project.short_work_ass(short, "frame"))
+            assert frame_ass is not None
+            frame = Frame(frame_ass, project.short_work_ass(short, "frame"))
             font_files = blur_font_files
-        target = _VideoTarget(
+        target = VideoTarget(
             "final",
             config.vertical.size,
             project.short_focus(short),
@@ -987,11 +845,11 @@ def shorts_command(
             clip,
             frame,
         )
-        _write_video(project, script, target, length_s, font_files, None)
+        write_video(project, script, target, length_s, font_files, None)
         if not short.wide:
             continue
         assert wide_script is not None
-        wide_target = _VideoTarget(
+        wide_target = VideoTarget(
             "final",
             config.video.size,
             config.video.focus,
@@ -1001,7 +859,7 @@ def shorts_command(
             clip,
         )
         # 本編と同じ .ass・同じ大きさで描くので、区間のコマは build/main.mp4 と一致する
-        _write_video(project, wide_script, wide_target, length_s, inputs.font_files, None)
+        write_video(project, wide_script, wide_target, length_s, inputs.font_files, None)
 
 
 @app.command("vertical-ass")
@@ -1027,7 +885,7 @@ def vertical_ass(project_dir: ProjectOption = None) -> None:
         source_dir=_path_from(dest.parent, source.parent),
         include_lyrics=include_lyrics,
     )
-    _write_text(dest, conversion.script.to_string("ass"))
+    write_text(dest, conversion.script.to_string("ass"))
 
     console.print(f"作成しました: {dest}（{size[0]}x{size[1]}）", markup=False)
     if conversion.unconverted:

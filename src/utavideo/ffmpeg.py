@@ -103,6 +103,14 @@ def replace_partial(tmp: Path, output: Path) -> None:
         ) from e
 
 
+def write_text(path: Path, text: str) -> None:
+    """テキストを .partial に書いてから名前を変える。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = partial_path(path)
+    tmp.write_text(text, encoding="utf-8", newline="\n")
+    replace_partial(tmp, path)
+
+
 def run(
     args: Sequence[str],
     output: Path,
