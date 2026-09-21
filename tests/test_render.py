@@ -591,9 +591,12 @@ def test_shorts_fades_the_audio_at_both_edges(project: Path) -> None:
     _with_section(project, shorts='[[shorts]]\nname = "chorus"\n')
     invoke("shorts", "-C", str(project))
     output = project / "build/shorts/chorus.mp4"
-    # フェードは [100, 200] ミリ秒
+    # フェードは [100, 200] ミリ秒。フェードインの窓（フェード期間 100ms の前半）は、
+    # afade のランプ形状が ffmpeg のバージョンで微妙に変わり、10dB 差ちょうどでは
+    # ffmpeg 9.0.2 で数 dB 足りず落ちることがある（実測 8.7dB。issue #49）ので、
+    # 実測に余裕を持たせた 7dB を境目にする
     middle = _mean_volume(output, 0.5, 0.8)
-    assert _mean_volume(output, 0, 0.05) < middle - 10
+    assert _mean_volume(output, 0, 0.05) < middle - 7
     assert _mean_volume(output, 1.25, 1.3) < middle - 10
 
 
@@ -659,13 +662,18 @@ FRAME_HEIGHT = graph.frame_height((320, 180), 180)
 
 
 def _greens_per_row(path: Path, size: tuple[int, int]) -> list[int]:
-    """1フレーム目の、行ごとの緑（本編の映像に描いた色）の画素の数。"""
+    """1フレーム目の、行ごとの緑（本編の映像に描いた色）の画素の数。
+
+    純粋な緑 (0,255,0) は out_range=tv（BT.709 の legal レンジ）を経由するので厳密には
+    戻らず、量子化・圧縮の丸め方が ffmpeg・x264 のバージョンで変わりうる（実測で G が 233
+    に留まることがある。issue #50）。しきい値は 240 ではなく 200 にして揺れを吸収する。
+    """
     width, height = size
     raw = _pixels(path)
     counts = []
     for y in range(height):
         row = raw[y * width * 3 : (y + 1) * width * 3]
-        green = (row[x] < 16 and row[x + 1] > 240 and row[x + 2] < 16 for x in range(0, width * 3, 3))
+        green = (row[x] < 16 and row[x + 1] > 200 and row[x + 2] < 16 for x in range(0, width * 3, 3))
         counts.append(sum(green))
     return counts
 
