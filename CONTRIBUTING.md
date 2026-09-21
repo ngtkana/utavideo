@@ -10,7 +10,7 @@ uv tool install --editable .   # utavideo コマンドが手元のコードで�
 
 ## 確認
 
-commit の前に通してください。CI（`.github/workflows/ci.yml`）も同じ確認をします（format は `--check` で実行）。変わったのが `docs/`・`README.md`・`CONTRIBUTING.md`・`CLAUDE.md` だけなら、CI は `tests/test_docs.py` だけを実行します。
+commit の前に通してください。CI（`.github/workflows/ci.yml`）も同じ確認をします（format は `--check`、pytest は `COLUMNS=40` で実行）。変わったのが `docs/`・`README.md`・`CONTRIBUTING.md`・`CLAUDE.md` だけなら、CI は `tests/test_docs.py` だけを実行します。
 
 ```sh
 uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
@@ -20,6 +20,7 @@ uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
 - `tests/test_render.py` は ffmpeg で実際に書き出す（ffmpeg が無ければスキップ）
 - `tests/test_sample.py` は `utavideo sample` で見本の曲フォルダを作り、小さい寸法（`--small`）で各コマンドを動かす（同じくスキップあり）
 - `tests/test_docs.py` は、コマンドのオプション・設定項目・環境変数がドキュメントに載っているか、文書内のリンクが切れていないかを確かめる
+- 出力を確かめるテストが折り返しで落ちないように、`tests/conftest.py` が `cli` のコンソールの幅を固定する。CI が狭い幅で走らせるのは、この固定から漏れたコンソールが増えたときに気づくため
 
 ## 変更の送り方
 
