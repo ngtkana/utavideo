@@ -8,8 +8,8 @@ from typer.testing import CliRunner
 
 from tests.conftest import MakeFont
 from utavideo import subs
-from utavideo.analyze import font_missing_message
-from utavideo.cli import analyze_thumbnails, app
+from utavideo.analyze import analyze_thumbnails, font_missing_message
+from utavideo.cli import app
 from utavideo.config import load_project_config
 from utavideo.ffmpeg import FFmpegError
 from utavideo.project import Project
@@ -109,7 +109,7 @@ def test_unreadable_background_becomes_an_issue_instead_of_stopping(
     def unreadable(path: Path) -> float:
         raise FFmpegError(f"{path} を読めません")
 
-    monkeypatch.setattr("utavideo.cli.probe_duration", unreadable)
+    monkeypatch.setattr("utavideo.analyze.probe_duration", unreadable)
     project = Project.load(tmp_path)
     issues = analyze_thumbnails(project, project.config.thumbnails, bg_only=True).issues
 

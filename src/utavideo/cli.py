@@ -7,7 +7,6 @@ import re
 import shutil
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from typing import Annotated, NoReturn
@@ -19,9 +18,9 @@ from utavideo.analyze import (
     FontSearch,
     analyze,
     analyze_shorts,
+    analyze_thumbnails,
     analyze_vertical,
     background_issues,
-    check_fonts,
     font_missing_message,
     vertical_inputs,
 )
@@ -36,10 +35,8 @@ from utavideo.config import (
 from utavideo.console import console, err_console
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import (
-    FFmpegError,
     NoOutputError,
     partial_path,
-    probe_duration,
     replace_partial,
     require_tools,
     run,
@@ -61,7 +58,6 @@ from utavideo.project import (
     to_windows_path,
 )
 from utavideo.render import Frame, VideoTarget, compose, frame_script, write_video
-from utavideo.timecode import format_time
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -657,73 +653,6 @@ def _path_from(start: Path, path: Path) -> str:
         return Path(os.path.relpath(path, start)).as_posix()
     except ValueError:  # Windows でドライブが違うと相対パスにできない
         return path.absolute().as_posix()
-
-
-@dataclass(frozen=True)
-class ThumbnailAnalysis:
-    issues: list[subs.Issue]
-    font_files: dict[str, tuple[Path, ...]]
-
-
-def analyze_thumbnails(
-    project: Project, thumbnails: tuple[Thumbnail, ...], *, bg_only: bool, search: FontSearch | None = None
-) -> ThumbnailAnalysis:
-    """サムネイルごとに書き出せるかを調べる。背景のファイル自体の検査（background_issues）は呼び出し側で行う。
-
-    bg_only では at だけを見る（.ass はまだ無くてよい）。
-    """
-    issues: list[subs.Issue] = []
-    font_files: dict[str, tuple[Path, ...]] = {}
-    background = project.background_path
-    usable = not background_issues(project)
-    # GIF・動画の長さは、at を書いたサムネイルがあるときだけ、1回だけ調べる
-    duration = None
-    if usable and not graph.is_image(background) and any(t.at is not None for t in thumbnails):
-        try:
-            duration = probe_duration(background)
-        except FFmpegError as e:
-            # check で歌詞やフォントの検査結果まで出なくならないよう、止めずに検査の問題にする
-            issues.append(subs.Issue("error", f"{e}（サムネイルの at を確かめられません）"))
-            usable = False
-    if not bg_only and search is None:
-        search = FontSearch.load()
-
-    for thumb in thumbnails:
-        found = background_time_issues(background, thumb.at, duration) if usable else []
-        if not bg_only:
-            assert search is not None
-            found += _thumbnail_ass_issues(project, thumb, search, font_files)
-        issues += subs.prefixed(found, f"サムネイル {thumb.name}: ")
-    return ThumbnailAnalysis(issues, font_files)
-
-
-def background_time_issues(background: Path, at: float | None, duration: float | None) -> list[subs.Issue]:
-    """背景の at 秒のフレームを使えるか。duration は probe_duration の結果（画像では使わない）。"""
-    if at is None:
-        return []
-    if graph.is_image(background):
-        return [subs.Issue("error", "at は背景が GIF・動画のときだけ書けます（video.background は画像）")]
-    if duration is None:
-        return [subs.Issue("warning", "背景の長さを取得できないので、at が長さに収まるかを確かめられません")]
-    if at >= duration:
-        message = f"at（{format_time(at)}）が背景の長さ（{format_time(duration)}）以上です"
-        return [subs.Issue("error", message)]
-    return []
-
-
-def _thumbnail_ass_issues(
-    project: Project, thumb: Thumbnail, search: FontSearch, font_files: dict[str, tuple[Path, ...]]
-) -> list[subs.Issue]:
-    path = project.thumbnail_file(thumb)
-    if not path.is_file():
-        return [subs.Issue("error", f"file のファイルがありません: {path}")]
-    try:
-        script = subs.load(path)
-    except subs.SubtitleError as e:
-        return [subs.Issue("error", str(e))]
-    issues = subs.lint_still(script, size=project.thumbnail_size(thumb))
-    font_issues, font_files[thumb.name] = check_fonts(script, search)
-    return issues + font_issues
 
 
 def _select_named[T: Thumbnail | Short](
