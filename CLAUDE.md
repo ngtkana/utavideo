@@ -23,6 +23,7 @@
 - `layout.py`：行の幅を概算して、はみ出しそうな行を警告する（libass は空白の無い日本語を自動改行しない）
 - `inputs.py`：`build` の入力（素材の中身・印の無い設定・フォントの stat）を記録し、`release` で比べる
 - `graph.py`：ffmpeg の引数（動画と、サムネイルの1枚の PNG）を組み立てる純粋関数。`ffmpeg.py` が実行する
+- `render.py`：検査を通った歌詞を合成し、ffmpeg で動画に書き出す
 - `templates/`：`new` / `init` が書き出す雛形と、`sample` が書き出す見本（`sample*`）
 
 ## 約束
