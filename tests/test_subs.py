@@ -74,6 +74,19 @@ def test_add_fades_only_where_missing() -> None:
     ]
 
 
+def test_add_fades_skips_the_vertical_only_styles() -> None:
+    script = _make(
+        [
+            _line("0:00:01.00", "0:00:02.00", "あ"),
+            _line("0:00:01.00", "0:00:09.00", "帯の文字", "VerticalBand"),
+        ],
+        styles=[_style("Lyrics"), _style("VerticalBand")],
+    )
+    subs.add_fades(script, (150, 150), no_fade_style_prefix="Vertical")
+    # 区間いっぱいに置く帯の文字は、繰り返し再生のつなぎ目で点滅しないよう、フェードを入れない
+    assert [e.text for e in script.events] == [r"{\fad(150,150)}あ", "帯の文字"]
+
+
 def test_compose_keeps_source_and_appends_overlay() -> None:
     lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
     script = subs.compose(

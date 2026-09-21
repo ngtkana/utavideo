@@ -4,6 +4,7 @@
 utavideo.toml の [[shorts]] と名前でつなぐ。区間の外の行は書き出しにも検査にも使わない。
 """
 
+import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
@@ -39,10 +40,17 @@ def _is_lyric_line(event: pysubs2.SSAEvent) -> bool:
     return event.style != SHORT_STYLE and not event.style.startswith(VERTICAL_STYLE_PREFIX)
 
 
-def check_sections(script: pysubs2.SSAFile, names: Sequence[str], *, duration_ms: int | None) -> SectionCheck:
-    """[[shorts]] のすべての name の区間を縦用 .ass から探して検査する。
+def check_sections(
+    script: pysubs2.SSAFile,
+    names: Sequence[str],
+    *,
+    duration_ms: int | None,
+    report_unused: bool = True,
+) -> SectionCheck:
+    """names の区間を縦用 .ass から探して検査する。
 
     duration_ms は音源の長さ（分からなければ None で、長さとの比較をしない）。
+    report_unused は、どの name にも合わない区間の行を警告するか（名前を絞ったときは警告しない）。
     """
     issues: list[Issue] = []
     lines: dict[str, list[pysubs2.SSAEvent]] = {}
@@ -85,7 +93,7 @@ def check_sections(script: pysubs2.SSAFile, names: Sequence[str], *, duration_ms
             issues += subs.prefixed(_edge_issues(lyric_lines, section), prefix)
 
     unused = [e for name, found in lines.items() if name not in names for e in found]
-    if unused:
+    if unused and report_unused:
         where = ", ".join(describe(e) for e in unused)
         issues.append(Issue("warning", f"どの [[shorts]] の name にも合わない区間の行があります: {where}"))
     return SectionCheck(issues, sections)
@@ -103,6 +111,73 @@ def _edge_issues(lyric_lines: list[pysubs2.SSAEvent], section: Section) -> list[
                 )
                 issues.append(Issue("warning", message))
     return issues
+
+
+# 投稿先ごとの長さの上限（秒）。区間の長さで判定する（docs/verification/20260918-shorts.md）
+SHORT_LIMIT_S = 180  # YouTube のショート
+WIDE_LIMIT_S = 140  # X の通常のアカウント
+
+
+def clip_frames(section: Section, fps: int) -> tuple[int, int]:
+    """区間の頭と終わりを、いちばん近いフレームの番号にする。映像・音声・.ass に同じ値を使う。
+
+    Aegisub の時刻はセンチ秒なので、丸めないと映像が音声より最大1フレーム先に進む。
+    ちょうど半分のときは後ろのフレームにする（round は偶数側に丸めるので使わない）。
+    """
+    return _frame(section.start_ms, fps), _frame(section.end_ms, fps)
+
+
+def _frame(ms: int, fps: int) -> int:
+    # pysubs2 の ms_to_frames は round（偶数側に丸める）なので使わない
+    return math.floor(ms * fps / 1000 + 0.5)
+
+
+def render_issues(
+    section: Section,
+    *,
+    fps: int,
+    duration_ms: int | None,
+    audio_fade_ms: tuple[int, int],
+    wide: bool,
+) -> list[Issue]:
+    """書き出す区間の検査（フレームに丸めた長さ・音源の長さ・フェードの長さ・投稿先の上限）。
+
+    check_sections は Aegisub に書いた時刻で検査するので、フレームに丸めて増える分をここで見る。
+    """
+    start_frame, end_frame = clip_frames(section, fps)
+    if end_frame <= start_frame:
+        message = f"区間がフレームに丸めると長さ 0 になります（{fps} fps で1フレームより短い）"
+        return [Issue("error", message)]
+    end_ms = pysubs2.time.frames_to_ms(end_frame, fps)
+    issues: list[Issue] = []
+    if duration_ms is not None and end_ms > duration_ms:
+        # 区間の終わりが音源より後ろだと、映像より音声の短い動画ができる
+        message = (
+            f"区間の終わりをフレームに丸めた {_time(end_ms)} が、"
+            f"音源の長さ（{_time(duration_ms)}）を超えています"
+        )
+        issues.append(Issue("error", message))
+    # 丸めを1回にして、実際に書き出す長さ（graph.Clip.duration_s）と揃える
+    length_ms = pysubs2.time.frames_to_ms(end_frame - start_frame, fps)
+    fade_in, fade_out = audio_fade_ms
+    if fade_in + fade_out > length_ms:
+        message = (
+            f"音声のフェード（vertical.audio_fade_ms の {fade_in} + {fade_out} ミリ秒）が、"
+            f"区間の長さ（{_time(length_ms)}）を超えています"
+            "（区間を長くするか、vertical.audio_fade_ms を短くする）"
+        )
+        issues.append(Issue("error", message))
+    if length_ms > SHORT_LIMIT_S * 1000:
+        issues.append(_over_limit(length_ms, "YouTube のショート", SHORT_LIMIT_S))
+    if wide and length_ms > WIDE_LIMIT_S * 1000:
+        issues.append(_over_limit(length_ms, "X の通常のアカウント", WIDE_LIMIT_S))
+    return issues
+
+
+def _over_limit(length_ms: int, where: str, limit_s: int) -> Issue:
+    return Issue(
+        "warning", f"区間の長さ（{_time(length_ms)}）が、{where}の上限（{limit_s} 秒）を超えています"
+    )
 
 
 def _in_sections(event: pysubs2.SSAEvent, sections: Sequence[Section]) -> bool:

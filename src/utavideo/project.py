@@ -13,7 +13,9 @@ from utavideo.config import (
     ConfigError,
     Credit,
     Defaults,
+    OverlayText,
     ProjectConfig,
+    Short,
     Thumbnail,
     load_project_config,
 )
@@ -28,6 +30,11 @@ _INT = r"(?:0|[1-9][0-9]*)"
 VERSION_PATTERN = rf"v{_INT}\.{_INT}"
 _VERSION_RE = re.compile(rf"(?<![0-9A-Za-z]){VERSION_PATTERN}(?![0-9A-Za-z]|\.[0-9A-Za-z])", re.IGNORECASE)
 _REVISION_RE = re.compile(_INT)
+
+# utavideo.toml に [[shorts]] が無いときに、shorts が見せる書き足し方
+SHORTS_EXAMPLE = """[[shorts]]
+name = "chorus"
+"""
 
 THUMBNAIL_TEMPLATE_PATH = "src/thumbnail.ass"
 # utavideo.toml を書き換えない場面（既存の曲フォルダでの init、[[thumbnails]] が無いときの thumbnail）で見せる
@@ -101,6 +108,27 @@ class Project:
     @property
     def vertical_focus(self) -> tuple[float, float]:
         return self.config.vertical.focus or self.config.video.focus
+
+    @property
+    def vertical_overlay_text(self) -> OverlayText:
+        """縦で使う曲名表示の設定。vertical.overlay_text = false なら出さない。"""
+        overlay = self.config.overlay_text
+        return overlay.model_copy(update={"enabled": overlay.enabled and self.config.vertical.overlay_text})
+
+    def short_focus(self, short: Short) -> tuple[float, float]:
+        return short.focus or self.vertical_focus
+
+    @property
+    def shorts_dir(self) -> Path:
+        return self.build_dir / "shorts"
+
+    def short_output(self, short: Short, *, wide: bool = False) -> Path:
+        # 16:9 版は別のフォルダに置く。<name>-wide.mp4 だと、name = "chorus-wide" のショートとぶつかる
+        return (self.shorts_dir / "wide" if wide else self.shorts_dir) / f"{short.name}.mp4"
+
+    def short_work_ass(self, short: Short, *, wide: bool = False) -> Path:
+        folder = self.work_dir / "shorts"
+        return (folder / "wide" if wide else folder) / f"{short.name}.ass"
 
     @property
     def thumbnail_dir(self) -> Path:

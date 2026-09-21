@@ -46,10 +46,14 @@ file = "src/thumbnail.ass"  # 文字を組む .ass（Aegisub で編集）
 # size = [1080, 1920]
 # lyrics = "src/vertical.ass"
 # focus = [0.5, 0.5]       # 省略時は video.focus
+# overlay_text = true      # false にすると、縦だけ曲名表示を消す
+# audio_fade_ms = [300, 1000]  # 区間の端の音声のフェード（wide にも効く）
 
 # [[shorts]]
 # 区間は縦用 .ass に、スタイル Short のコメント行で置き、本文を name と同じにする
-# name = "chorus"
+# name = "chorus"          # utavideo shorts → build/shorts/chorus.mp4
+# focus = [0.5, 0.5]       # 省略時は vertical.focus
+# wide = true              # 同じ区間の 16:9 版も書き出す
 
 [description]
 # 概要欄とタイトル（utavideo description）。見出しなどの書式はユーザー設定で変える

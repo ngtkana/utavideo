@@ -52,6 +52,9 @@ class _Model(BaseModel):
 Ratio = Annotated[float, Field(ge=0, le=1, strict=True)]
 type Focus = tuple[Ratio, Ratio]
 
+# フェードの長さ（イン, アウト）。ミリ秒
+type FadeMs = tuple[NonNegativeInt, NonNegativeInt]
+
 # "M:SS(.fff)" または秒の数。読むときに秒（float）にする
 Time = Annotated[float, BeforeValidator(parse_time)]
 
@@ -149,7 +152,7 @@ class Video(_Model):
 
 class Lyrics(_Model):
     file: Path = Path("src/lyrics.ass")
-    fade_ms: tuple[NonNegativeInt, NonNegativeInt] = (150, 150)
+    fade_ms: FadeMs = (150, 150)
 
 
 class OverlayText(_Model):
@@ -207,12 +210,16 @@ class Vertical(_Model):
     size: VideoSize = (1080, 1920)
     lyrics: Path = Path("src/vertical.ass")
     focus: Focus | None = None  # None なら video.focus
+    overlay_text: bool = True  # false なら、縦だけ曲名表示（[overlay_text]）を出さない
+    audio_fade_ms: FadeMs = (300, 1000)  # 区間の端の音声のフェード。wide の版にも効く
 
 
 class Short(_Model):
     """縦型のショート1本。区間は縦用 .ass の、本文が name のコメント行（スタイル Short）に置く。"""
 
     name: OutputName
+    focus: Focus | None = None  # None なら vertical.focus
+    wide: bool = False  # 同じ区間の 16:9 版（build/shorts/wide/<name>.mp4）も書き出す
 
 
 class Upload(_Model):

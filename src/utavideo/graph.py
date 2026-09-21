@@ -40,6 +40,18 @@ _TO_BT709 = "scale=out_color_matrix=bt709:out_range=tv"
 
 
 @dataclass(frozen=True)
+class Clip:
+    """曲の一部だけを書き出す区間。フレームの番号（fps で数える）で、end_frame は含まない。"""
+
+    start_frame: int
+    end_frame: int
+    audio_fade_ms: tuple[int, int]  # 区間の端の音声のフェード（イン, アウト）
+
+    def duration_s(self, fps: int) -> float:
+        return (self.end_frame - self.start_frame) / fps
+
+
+@dataclass(frozen=True)
 class RenderSpec:
     mode: Mode
     size: tuple[int, int]
@@ -56,6 +68,7 @@ class RenderSpec:
     pad_color: str = "black"
     crf: int = 18
     preset: Preset = "slow"
+    clip: Clip | None = None  # None なら曲全体
 
 
 def escape_filter_arg(value: str) -> str:
@@ -126,7 +139,10 @@ def subtitles_filter(subtitles: Path, fontsdir: Path, *, alpha: bool = False) ->
 def build_args(spec: RenderSpec) -> list[str]:
     """出力ファイル名を除いた ffmpeg の引数。入力 0 が映像、入力 1 が音声。"""
     w, h = spec.size
+    clip = spec.clip
     if spec.mode == "overlay":
+        if clip is not None:
+            raise ValueError("mode=overlay では区間を切り出せません")
         inputs = ["-f", "lavfi", "-i", f"color=c=black@0:s={w}x{h}:r={spec.fps},format=rgba"]
         subtitles = subtitles_filter(spec.subtitles, spec.fontsdir, alpha=True)
         video = f"[0:v]{subtitles},{_TO_BT709},format=yuva444p10le[v]"
@@ -137,10 +153,13 @@ def build_args(spec: RenderSpec) -> list[str]:
             raise ValueError(f"mode={spec.mode} には background が必要です")
         inputs = background_input(spec.background, spec.fps)
         # YUV 上で合成すると .ass の色が変換行列の違いでずれるため、RGB で合成してから YUV にする
+        # 字幕は元の時刻のまま描いてから、setpts で 0 秒に戻す。.ass の時刻をずらすと、区間の頭を
+        # またぐ行の \move・\fad がずれる（docs/verification/20260918-shorts.md）
+        cut, back_to_zero = (_clip_video(clip, spec.fps), "setpts=PTS-STARTPTS,") if clip else ("", "")
         video = (
-            f"[0:v]{fit_filter(spec.size, spec.fit, spec.scale_flags, spec.pad_color, spec.focus)},"
+            f"[0:v]{cut}{fit_filter(spec.size, spec.fit, spec.scale_flags, spec.pad_color, spec.focus)},"
             f"setsar=1,fps={spec.fps},format=rgb24,{subtitles_filter(spec.subtitles, spec.fontsdir)},"
-            f"{_TO_BT709},format=yuv420p[v]"
+            f"{back_to_zero}{_TO_BT709},format=yuv420p[v]"
         )
         if spec.mode == "final":
             codec = ["-c:v", "libx264", "-preset", spec.preset, "-crf", str(spec.crf)]
@@ -154,15 +173,43 @@ def build_args(spec: RenderSpec) -> list[str]:
         *_COMMON,
         *inputs,
         "-i", str(spec.audio),
-        "-filter_complex", video,
+        "-filter_complex", video + (f";{_clip_audio(clip, spec.fps)}" if clip else ""),
         "-map", "[v]",
-        "-map", "1:a:0",
+        "-map", "[a]" if clip else "1:a:0",
         *codec,
         *_BT709,
         "-ar", "48000",
         "-r", str(spec.fps),
         "-t", f"{spec.duration_s:.3f}",
     ]  # fmt: skip
+
+
+def _seconds(value: float) -> str:
+    return f"{value:.6f}"
+
+
+def _clip_video(clip: Clip, fps: int) -> str:
+    """区間の外の背景を捨てるフィルタ。入力側の -ss は使わない。
+
+    -stream_loop の2周目以降へ -ss でシークすると、本編とコマがずれる。デコードの直後に fps で
+    本編と同じコマにしてから切ると、本編のフレームと一致する（docs/verification/20260918-shorts.md）。
+    fps の出力の時間の単位は 1/fps なので、trim の pts はフレームの番号と同じになる。
+    後ろの fps は区間を切っても残す（本編と同じフィルタの並びのままにするため）。
+    """
+    return f"fps={fps},trim=start_pts={clip.start_frame}:end_pts={clip.end_frame},"
+
+
+def _clip_audio(clip: Clip, fps: int) -> str:
+    """区間の音声を切り出してフェードする filtergraph（[1:a]...[a]）。"""
+    start, end = clip.start_frame / fps, clip.end_frame / fps
+    fade_in, fade_out = (ms / 1000 for ms in clip.audio_fade_ms)
+    # 入力側の -ss は mp3・m4a で頭の数ミリ秒がデコーダーの立ち上がりで本編と違うので、atrim で切る
+    audio = f"[1:a]atrim=start={_seconds(start)}:end={_seconds(end)},asetpts=PTS-STARTPTS"
+    if fade_in > 0:
+        audio += f",afade=t=in:st=0:d={_seconds(fade_in)}"
+    if fade_out > 0:
+        audio += f",afade=t=out:st={_seconds(end - start - fade_out)}:d={_seconds(fade_out)}"
+    return audio + "[a]"
 
 
 @dataclass(frozen=True)

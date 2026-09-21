@@ -18,7 +18,7 @@ from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
 from utavideo import announce, description, fonts, graph, inputs, layout, sample, shorts, subs, vertical
-from utavideo.config import PROJECT_CONFIG_NAME, Thumbnail, cache_dir, load_user_config
+from utavideo.config import PROJECT_CONFIG_NAME, Short, Thumbnail, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import (
     FFmpegError,
@@ -33,6 +33,7 @@ from utavideo.ffmpeg import (
 )
 from utavideo.names import has_date_prefix, slug_error, slug_from_dir_name
 from utavideo.project import (
+    SHORTS_EXAMPLE,
     THUMBNAIL_EXAMPLE,
     THUMBNAIL_TEMPLATE_PATH,
     VERSION_PATTERN,
@@ -212,16 +213,25 @@ def _compose(
     duration_ms: int,
     mode: graph.Mode,
     font_index: fonts.FontIndex,
-):
+    *,
+    for_vertical: bool = False,
+) -> pysubs2.SSAFile:
+    """書き出しに使うスクリプトを作る。
+
+    for_vertical は縦用 .ass から作るとき。曲名表示は vertical.overlay_text で決まり、
+    Vertical で始まるスタイルの行には自動のフェードを入れない
+    （区間いっぱいに置く帯の文字が、繰り返し再生のつなぎ目で点滅しないようにする）。
+    """
     config = project.config
     return subs.compose(
         lyrics,
         song=config.song,
-        overlay=config.overlay_text,
+        overlay=project.vertical_overlay_text if for_vertical else config.overlay_text,
         fade_ms=config.lyrics.fade_ms,
         duration_ms=duration_ms,
         include_lyrics=mode != "preview",
         font_index=font_index,
+        no_fade_style_prefix=vertical.VERTICAL_STYLE_PREFIX if for_vertical else None,
     )
 
 
@@ -257,6 +267,7 @@ class _VideoTarget:
     subtitles_path: Path  # 描画に使った .ass を書く場所
     output: Path
     label: str
+    clip: graph.Clip | None = None  # 切り出す区間（None なら曲全体）
 
 
 def _write_video(
@@ -288,6 +299,7 @@ def _write_video(
         pad_color=video.pad_color,
         crf=video.crf,
         preset=video.preset,
+        clip=target.clip,
     )
     if built_inputs is not None:
         # フォントは ffmpeg が書き出し中に読むので、その前に stat を取る
@@ -328,7 +340,9 @@ _NEXT_STEPS = """次にやること（詳しくは docs/workflow.md）:
   1. utavideo.toml の audio.file / video.background を合わせ、song を確認する
   2. utavideo preview-bg → Aegisub で src/lyrics.ass と build/preview/bg.mp4 を開いて歌詞を入れる
   3. utavideo check → utavideo build → utavideo release
-  4. utavideo thumbnail --bg-only → Aegisub で src/thumbnail.ass を開いて文字を組む → utavideo thumbnail"""
+  4. utavideo thumbnail --bg-only → Aegisub で src/thumbnail.ass を開いて文字を組む → utavideo thumbnail
+  5. 縦型のショートを作るなら、utavideo vertical-ass → utavideo preview-bg --vertical → Aegisub で
+     src/vertical.ass を組み、区間を置く → utavideo.toml に [[shorts]] → utavideo shorts"""
 
 
 @app.command()
@@ -507,7 +521,10 @@ def check(project_dir: ProjectOption = None) -> None:
         size = config.vertical.size
         console.print(f"  縦用 .ass: {config.vertical.lyrics}（{size[0]}x{size[1]}）", markup=False)
         console.print(f"  ショート: {', '.join(s.name for s in config.shorts)}", markup=False)
-        issues += analyze_shorts(project, search, analysis.duration_s, analysis.lyrics)
+        found = analyze_shorts(
+            project, search, analysis.duration_s, analysis.lyrics, config.shorts, report_unused=True
+        )
+        issues += found.issues
 
     _print_issues(issues)
     if any(issue.level == "error" for issue in issues):
@@ -538,14 +555,23 @@ def preview_bg(
         _render(project_dir, "preview", "preview-bg")
 
 
+def _vertical_inputs(project: Project) -> tuple[list[subs.Issue], float | None, pysubs2.SSAFile | None]:
+    """縦の書き出しに要るものの検査と、音源の長さ・本編の .ass（無ければ None）。
+
+    本編の .ass は縦には描かないが、文字が潰れる LayoutRes は本編の書き出しと同じく止める。
+    """
+    issues, duration_s = _audio_issues(project)
+    issues += _background_issues(project)
+    lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
+    if lyrics is not None:
+        issues += subs.layout_res_issues(lyrics)
+    return issues, duration_s, lyrics
+
+
 def _render_vertical_preview(project_dir: Path | None) -> None:
     require_tools()
     project = _load_project(project_dir)
-    issues, duration_s = _audio_issues(project)
-    issues += _background_issues(project)
-    # 本編の .ass は描かないが、文字が潰れる LayoutRes は本編の書き出しと同じく止める
-    if project.lyrics_path.is_file():
-        issues += subs.layout_res_issues(subs.load(project.lyrics_path))
+    issues, duration_s, _ = _vertical_inputs(project)
     search = _FontSearch.load()
     checked = analyze_vertical(project, search)
     issues += checked.issues
@@ -554,7 +580,9 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
         raise typer.Exit(1)
     assert checked.script is not None and duration_s is not None
 
-    script = _compose(project, checked.script, round(duration_s * 1000), "preview", search.index)
+    script = _compose(
+        project, checked.script, round(duration_s * 1000), "preview", search.index, for_vertical=True
+    )
     target = _VideoTarget(
         "preview",
         project.config.vertical.size,
@@ -686,40 +714,134 @@ def analyze_vertical(project: Project, search: _FontSearch) -> VerticalAnalysis:
     except subs.SubtitleError as e:
         return VerticalAnalysis([subs.Issue("error", f"縦用 .ass: {e}")], None, ())
     config = project.config
-    issues = subs.lint_vertical(script, size=config.vertical.size, overlay=config.overlay_text)
+    issues = subs.lint_vertical(script, size=config.vertical.size, overlay=project.vertical_overlay_text)
     # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
-    font_issues, font_files = _check_fonts(
-        _compose(project, script, 0, "final", search.index), search, overflows=False
-    )
+    composed = _compose(project, script, 0, "final", search.index, for_vertical=True)
+    font_issues, font_files = _check_fonts(composed, search, overflows=False)
     return VerticalAnalysis(subs.prefixed(issues + font_issues, "縦用 .ass: "), script, font_files)
 
 
+@dataclass(frozen=True)
+class ShortsAnalysis:
+    issues: list[subs.Issue]
+    script: pysubs2.SSAFile | None  # 縦用 .ass（読めなかったときは None）
+    sections: dict[str, shorts.Section]  # 検査を通った区間（ショートの名前ごと）
+    font_files: tuple[Path, ...]
+
+
 def analyze_shorts(
-    project: Project, search: _FontSearch, duration_s: float | None, lyrics: pysubs2.SSAFile | None
-) -> list[subs.Issue]:
-    """すべてのショートの検査。縦用 .ass のファイル全体と、区間の行、区間に入る行。
+    project: Project,
+    search: _FontSearch,
+    duration_s: float | None,
+    lyrics: pysubs2.SSAFile | None,
+    targets: tuple[Short, ...],
+    *,
+    report_unused: bool,
+) -> ShortsAnalysis:
+    """targets のショートの検査。縦用 .ass のファイル全体と、区間の行、区間に入る行。
 
     duration_s は音源の長さ（読めなければ None で、長さとの比較と行の検査をしない）。
     lyrics は本編の .ass（読めなければ None で、本編との突き合わせをしない）。
+    report_unused は、どの name にも合わない区間の行を警告するか。
     """
     checked = analyze_vertical(project, search)
     if checked.script is None:
-        return checked.issues
+        return ShortsAnalysis(checked.issues, None, {}, checked.font_files)
     script = checked.script
-    names = [s.name for s in project.config.shorts]
+    config = project.config
     duration_ms = None if duration_s is None else round(duration_s * 1000)
-    found = shorts.check_sections(script, names, duration_ms=duration_ms)
+    found = shorts.check_sections(
+        script, [s.name for s in targets], duration_ms=duration_ms, report_unused=report_unused
+    )
     issues = checked.issues + found.issues
+    sections = {section.name: section for section in found.sections}
+    for short in targets:
+        if (section := sections.get(short.name)) is None:
+            continue
+        # 書き出しの前に必ず通す検査。区間が音源より後ろだと、ffmpeg は音声の無い動画を書いてしまう
+        render = shorts.render_issues(
+            section,
+            fps=config.video.fps,
+            duration_ms=duration_ms,
+            audio_fade_ms=config.vertical.audio_fade_ms,
+            wide=short.wide,
+        )
+        issues += subs.prefixed(render, f"ショート {short.name}: ")
     if lyrics is not None:
         matched = shorts.match_lyrics(lyrics, script, found.sections)
         issues += subs.prefixed(matched, "本編との突き合わせ: ")
-    if duration_ms is None or not found.sections:
-        return issues
-    # 区間の外の行（本編の写し）について、本編と同じ警告を二重に出さない
-    in_sections = shorts.lines_in_sections(script, found.sections)
-    line_issues = subs.lint_lines(in_sections.events, duration_ms=duration_ms)
-    line_issues += layout.overflows(in_sections, search.index.lookup)
-    return issues + subs.prefixed(line_issues, "縦用 .ass: ")
+    if duration_ms is not None and found.sections:
+        # 区間の外の行（本編の写し）について、本編と同じ警告を二重に出さない
+        in_sections = shorts.lines_in_sections(script, found.sections)
+        line_issues = subs.lint_lines(in_sections.events, duration_ms=duration_ms)
+        line_issues += layout.overflows(in_sections, search.index.lookup)
+        issues += subs.prefixed(line_issues, "縦用 .ass: ")
+    return ShortsAnalysis(issues, script, sections, checked.font_files)
+
+
+@app.command("shorts")
+@_handle_errors
+def shorts_command(
+    project_dir: ProjectOption = None,
+    name: Annotated[str | None, typer.Option("--name", help="[[shorts]] の name。省略時はすべて")] = None,
+) -> None:
+    """縦型の切り抜きショートを build/shorts/<name>.mp4 に書き出す。"""
+    require_tools()
+    project = _load_project(project_dir)
+    selected = _select_named(project.config.shorts, name, table="[[shorts]]", example=SHORTS_EXAMPLE)
+    search = _FontSearch.load()
+    # wide は本編と同じ画面なので、本編の .ass とフォントも build と同じ条件で検査する
+    main = analyze(project, "final", search) if any(s.wide for s in selected) else None
+    if main is not None:
+        issues, duration_s, lyrics = list(main.issues), main.duration_s, main.lyrics
+    else:
+        issues, duration_s, lyrics = _vertical_inputs(project)
+    analysis = analyze_shorts(project, search, duration_s, lyrics, selected, report_unused=name is None)
+    issues += analysis.issues
+    _print_issues(issues)
+    if any(issue.level == "error" for issue in issues):
+        raise typer.Exit(1)
+    assert analysis.script is not None and duration_s is not None
+
+    config = project.config
+    fps = config.video.fps
+    duration_ms = round(duration_s * 1000)
+    # 本編の .ass はどのショートでも同じなので、wide の合成は1回だけ
+    wide_script = None
+    if main is not None:
+        assert lyrics is not None
+        wide_script = _compose(project, lyrics, duration_ms, "final", search.index)
+    for short in selected:
+        section = analysis.sections[short.name]
+        clip = graph.Clip(*shorts.clip_frames(section, fps), config.vertical.audio_fade_ms)
+        length_s = clip.duration_s(fps)
+        # .ass の時刻はずらさない。区間の頭をまたぐ行の \\move・\\fad を本編と同じ状態で描くため
+        in_section = shorts.lines_in_sections(analysis.script, [section])
+        script = _compose(project, in_section, duration_ms, "final", search.index, for_vertical=True)
+        target = _VideoTarget(
+            "final",
+            config.vertical.size,
+            project.short_focus(short),
+            project.short_work_ass(short),
+            project.short_output(short),
+            f"shorts {short.name}",
+            clip,
+        )
+        _write_video(project, script, target, length_s, analysis.font_files, None)
+        if not short.wide:
+            continue
+        assert main is not None and wide_script is not None
+        wide_target = _VideoTarget(
+            "final",
+            config.video.size,
+            config.video.focus,
+            project.short_work_ass(short, wide=True),
+            project.short_output(short, wide=True),
+            f"shorts {short.name}（wide）",
+            clip,
+        )
+        # 本編と同じ .ass・同じ大きさで描くので、区間のコマは build/main.mp4 と一致する
+        _write_video(project, wide_script, wide_target, length_s, main.font_files, None)
 
 
 @app.command("vertical-ass")
@@ -830,16 +952,18 @@ def _thumbnail_ass_issues(
     return issues + font_issues
 
 
-def _select_thumbnails(project: Project, name: str | None) -> tuple[Thumbnail, ...]:
-    thumbnails = project.config.thumbnails
-    if not thumbnails:
-        _fail(f"utavideo.toml に [[thumbnails]] がありません。次を書き足してください:\n{THUMBNAIL_EXAMPLE}")
+def _select_named[T: Thumbnail | Short](
+    items: tuple[T, ...], name: str | None, *, table: str, example: str
+) -> tuple[T, ...]:
+    """utavideo.toml の表から、--name で選んだものを取り出す。無ければ書き足し方を見せて止まる。"""
+    if not items:
+        _fail(f"utavideo.toml に {table} がありません。次を書き足してください:\n{example}")
     if name is None:
-        return thumbnails
-    found = tuple(t for t in thumbnails if t.name == name)
+        return items
+    found = tuple(item for item in items if item.name == name)
     if not found:
-        names = ", ".join(t.name for t in thumbnails)
-        _fail(f"[[thumbnails]] に name = {name!r} がありません（あるのは {names}）")
+        names = ", ".join(item.name for item in items)
+        _fail(f"{table} に name = {name!r} がありません（あるのは {names}）")
     return found
 
 
@@ -858,7 +982,9 @@ def thumbnail(
     """背景のフレームにサムネイル用の .ass を描いて、build/thumbnail/<name>.png に書き出す。"""
     require_tools()
     project = _load_project(project_dir)
-    thumbnails = _select_thumbnails(project, name)
+    thumbnails = _select_named(
+        project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
+    )
     issues = _background_issues(project)
     analysis = analyze_thumbnails(project, thumbnails, bg_only=bg_only)
     issues += analysis.issues

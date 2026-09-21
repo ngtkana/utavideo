@@ -13,6 +13,7 @@
 - 縦型のショート（1段目）: `vertical-ass` で本編の .ass から縦用 .ass を作る（大きさ・座標の変換）。`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う .ass をエラーにする
 - 縦型のショート（2段目）: `preview-bg --vertical` で縦の下敷き（`vertical.focus`）。区間は縦用 .ass のコメント行（スタイル `Short`、本文がショートの名前）に置き、`[[shorts]]` の `name` とつなぐ。`check` で縦用 .ass と区間を検査する
 - 縦型のショート（3段目）: `check` で、区間に入る縦用 .ass の歌詞を本編の歌詞と突き合わせる（本編を直して縦を直し忘れたら警告する）
+- 縦型のショート（4段目）: `utavideo shorts` で区間を書き出す（`build/shorts/<name>.mp4`、`wide = true` の 16:9 版、区間のフレームの丸め、区間の端の音声のフェード、`shorts[].focus`、`vertical.overlay_text`、投稿先の長さの上限の警告）
 
 ## 予定
 
@@ -39,7 +40,6 @@
 
 本編から区間を指定して、縦型の切り抜きショートを書き出す（issue #22）。
 
-- `utavideo shorts`：`build/shorts/<name>.mp4`。同じ区間の 16:9 版（`build/shorts/wide/<name>.mp4`）、区間の端の音声のフェード、ショートごとの `focus`、区間の長さが投稿先の上限を超える警告
 - 画面の作り方 `layout = "blur"`：本編をぼかした背景の帯に置く（`preview-bg --vertical` の下敷きにも）。`blur` の区間では、本編との突き合わせとはみ出しの検査をしない
 - 後で: ショートのタイトル・概要欄、`release` でショートも残す、アバターを縦で別の位置に置く
 

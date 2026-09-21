@@ -4,9 +4,9 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`description`・`release`・`announce`・`vertical-ass` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
-- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`description`・`release`・`announce`・`vertical-ass` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
+- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
@@ -87,7 +87,7 @@ utavideo sample <パス> [--font <フォント名>] [--small]
 utavideo check [-C <曲フォルダ>]
 ```
 
-[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさ・縦用 .ass の場所と大きさ・ショートの名前を表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。`[[shorts]]` があれば、縦用 .ass とすべてのショートの区間も検査します（[ショートの検査](#ショートの検査)）。`[[shorts]]` が無ければ、縦用 .ass のファイルがあっても見ません。
+[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさ・縦用 .ass の場所と大きさ・ショートの名前を表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。`[[shorts]]` があれば、縦用 .ass とすべてのショートの区間も検査します（[ショートの検査](#ショートの検査)。書き出しは [shorts](#shorts)）。`[[shorts]]` が無ければ、縦用 .ass のファイルがあっても見ません。
 
 ## preview-bg / build / overlay
 
@@ -116,6 +116,7 @@ utavideo overlay [-C <曲フォルダ>]
 - 曲名表示は、縦用 .ass の `overlay_text.style` のスタイルとフォントで描きます。縦用 .ass が要るので、`vertical-ass` の後に実行します
 - `[[shorts]]` は無くてもかまいません（区間を置く前に使うため）。検査は[ショートの検査](#ショートの検査)の表の `preview-bg --vertical` の列のとおりです
 - 縦型のショートの画面の作り方のうち、背景を縦に切り取る形だけに対応しています（本編をぼかした帯に置く形は [roadmap.md](roadmap.md)）
+- 曲名表示は `vertical.overlay_text = false` で消せます（`shorts` と同じ）
 
 ## thumbnail
 
@@ -145,6 +146,40 @@ utavideo thumbnail [-C <曲フォルダ>] [--name <name>] [--bg-only]
 - `[[thumbnails]]` が無い（書き足し方を表示します）
 - `--name` の名前が `[[thumbnails]]` に無い（ある名前を表示します）
 - ffmpeg が正常に終わっても何も書き出さなかった（背景の終わり近くの `at` で、それ以降のフレームが無いとき）
+
+## shorts
+
+```sh
+utavideo shorts [-C <曲フォルダ>] [--name <name>]
+```
+
+`[[shorts]]`（[config-reference.md](config-reference.md#shorts)）ごとに、縦用 .ass の区間を切り出した縦型のショートを書き出します。
+
+| オプション | 既定値 | 内容 |
+|---|---|---|
+| `--name` | すべて | この `name` のショートだけを検査して書き出す |
+
+| 出力 | 画面 | 使う .ass |
+|---|---|---|
+| `build/shorts/<name>.mp4` | 背景を `vertical.size` に切り取り（`[video]` の `fit`・`scale_flags`・`pad_color` と `shorts[].focus`）、縦用 .ass の行と曲名表示を重ねる | 縦用 .ass の、区間に入る行 |
+| `build/shorts/wide/<name>.mp4`（`wide = true`） | `build/main.mp4` と同じ画面（`video.size`・`video.focus`） | 本編の .ass |
+
+- 区間の頭と終わりは、`round(時刻 × fps) / fps` でフレームに丸めます（Aegisub の時刻はセンチ秒なので、丸めないと映像が音声より最大1フレーム先に進みます）。映像・音声・.ass に同じ値を使います
+- 背景は本編と同じコマを使います。`wide` の版のフレームは `build/main.mp4` の同じ区間と一致します（[検証記録](verification/20260918-shorts.md)）
+- .ass の時刻はずらしません。区間の頭をまたぐ行の `\move`・`\fad`・`\k` が、本編と同じ状態で描かれます
+- 音声は区間の端で `vertical.audio_fade_ms` のフェードをかけます。映像はフェードしません
+- 曲名表示は `[overlay_text]` の書式を、縦用 .ass の `overlay_text.style` のスタイルで描きます。`vertical.overlay_text = false` なら縦には出しません（`wide` には出します）
+- 自動のフェード（`lyrics.fade_ms`）は、`Vertical` で始まるスタイルの行には入れません（区間いっぱいに置く帯の文字が、繰り返し再生のつなぎ目で点滅しないため）
+- fps・crf・preset・`video.fit` は `[video]` と同じです。出力の形式は `build/main.mp4` と同じです
+- 描画に使った .ass を `build/.work/shorts/<name>.ass`（`wide` は `build/.work/shorts/wide/<name>.ass`）に書きます
+- 書き出す前に[検査](#ショートの検査)し、エラーがあれば1本も書き出しません。`--name` を渡すと、そのショートだけを検査します（ほかのショートのエラーでは止まりません）
+- 縦型のショートの画面の作り方のうち、背景を縦に切り取る形だけに対応しています（本編をぼかした帯に置く形は [roadmap.md](roadmap.md)）
+
+次のときは止まります。
+
+- `[[shorts]]` が無い（書き足し方を表示します）
+- `--name` の名前が `[[shorts]]` に無い（ある名前を表示します）
+- ffmpeg が正常に終わっても何も書き出さなかった
 
 ## vertical-ass
 
@@ -296,26 +331,31 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 
 ### ショートの検査
 
-縦用 .ass（`vertical.lyrics`）と、そこに置くショートの区間の検査です。縦用 .ass の誤りで本編の `build`・`preview-bg`・`overlay` は止めません。`check` は `[[shorts]]` があるときだけ行い、エラーがあれば終了コード 1 にします。
+縦用 .ass（`vertical.lyrics`）と、そこに置くショートの区間の検査です。縦用 .ass の誤りで本編の `build`・`preview-bg`・`overlay` は止めません。`check` は `[[shorts]]` があるときだけ行い、エラーがあれば終了コード 1 にします。`shorts` はエラーがあれば書き出しません。`--name X` を渡したときの「X だけ」は、そのショートについてだけ検査することです。
 
-| 条件 | 扱い | `check` | `preview-bg --vertical` |
-|---|---|---|---|
-| 本編の .ass（`lyrics.file`）の `LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う | エラー | ○（[歌詞](#エラー書き出さない)の検査） | ○（本編の .ass があるとき） |
-| 縦用 .ass が無い（`utavideo vertical-ass` で作れる、と表示）・読めない | エラー | ○ | ○ |
-| 縦用 .ass の `PlayResX`・`PlayResY` が無い・`vertical.size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイル、曲名表示を出すのに `overlay_text.style` のスタイルが無い、フォント（曲名表示を含む）が見つからない | エラー | ○ | ○ |
-| `[[shorts]]` の `name` に対応する区間の行が無い・2つ以上ある | エラー | ○ | － |
-| スタイル `Short` の行が、コメント行でなく Dialogue になっている（画面に出てしまう） | エラー | ○ | － |
-| 区間の終わりが始まり以前、区間の終わりが音源の長さを超える | エラー | ○ | － |
-| どの `[[shorts]]` の `name` にも合わない区間の行がある | 警告 | ○ | － |
-| 区間の頭か終わりが、歌詞の行の途中にかかる（行の時刻を表示） | 警告 | ○ | － |
-| 区間に入る行の、[歌詞の行](#警告)と同じ警告（`\pos`・`\move`、表示時間、音源の長さ、重なり、はみ出し） | 警告 | ○ | － |
-| 区間に入る縦の歌詞が、本編の .ass と食い違う（[本編との突き合わせ](#本編との突き合わせ)） | 警告 | ○ | － |
+| 条件 | 扱い | `check` | `shorts` | `shorts --name X` | `preview-bg --vertical` |
+|---|---|---|---|---|---|
+| 本編の .ass（`lyrics.file`）の `LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う | エラー | ○（[歌詞](#エラー書き出さない)の検査） | ○ | ○ | ○（本編の .ass があるとき） |
+| 縦用 .ass が無い（`utavideo vertical-ass` で作れる、と表示）・読めない | エラー | ○ | ○ | ○ | ○ |
+| 縦用 .ass の `PlayResX`・`PlayResY` が無い・`vertical.size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイル、曲名表示を出すのに `overlay_text.style` のスタイルが無い、フォント（曲名表示を含む）が見つからない | エラー | ○ | ○ | ○ | ○ |
+| `[[shorts]]` の `name` に対応する区間の行が無い・2つ以上ある | エラー | ○ | ○ | X だけ | － |
+| スタイル `Short` の行が、コメント行でなく Dialogue になっている（画面に出てしまう） | エラー | ○ | ○ | ○ | － |
+| 区間の終わりが始まり以前、区間の終わりが音源の長さを超える（フレームに丸めた終わりでも見る） | エラー | ○ | ○ | X だけ | － |
+| フレームに丸めると区間の長さが 0 になる | エラー | ○ | ○ | X だけ | － |
+| `vertical.audio_fade_ms` のイン ＋ アウトが区間の長さを超える | エラー | ○ | ○ | X だけ | － |
+| 区間の長さが投稿先の上限を超える（YouTube のショートは 3 分、`wide` では X の通常のアカウントの 2 分 20 秒。[検証記録](verification/20260918-shorts.md)） | 警告 | ○ | ○ | X だけ | － |
+| どの `[[shorts]]` の `name` にも合わない区間の行がある | 警告 | ○ | ○ | － | － |
+| 区間の頭か終わりが、歌詞の行の途中にかかる（行の時刻を表示） | 警告 | ○ | ○ | X だけ | － |
+| 区間に入る行の、[歌詞の行](#警告)と同じ警告（`\pos`・`\move`、表示時間、音源の長さ、重なり、はみ出し） | 警告 | ○ | ○ | X だけ | － |
+| 区間に入る縦の歌詞が、本編の .ass と食い違う（[本編との突き合わせ](#本編との突き合わせ)） | 警告 | ○ | ○ | X だけ | － |
 
 - 区間の行は、スタイル `Short` の行で、本文の前後の空白を除いたものを `name` と大文字小文字も含めて比べます
 - 歌詞の行は、Dialogue 行のうち、スタイルが `Short` でも `Vertical` で始まるもの（`VerticalBand` など、縦だけの文字）でもない行です
 - 区間に入る行は、区間と時刻が重なる Dialogue 行（`Short` を除く）です。区間の外の行（本編から写したまま使わない行）は、行ごとの検査をしません
 - 区間の行が無い・2つ以上ある・区間の終わりが始まり以前・区間の終わりが音源の長さを超える区間では、区間の端と区間に入る行の検査をしません（区間の行が Dialogue になっているだけなら、エラーを出したうえで検査します）
 - 音源の長さが分からないとき（音源が無い・読めない）は、音源の長さとの比較と、区間に入る行の検査をしません。区間の端の検査はします
+- `wide = true` のショートを書き出すときは、本編の .ass とフォントも `build` と同じ条件で検査します（同じ画面を描くため）
+- 本編の .ass にスタイル `Short` の行があるときの警告は `check` だけです
 
 #### 本編との突き合わせ
 
@@ -356,7 +396,7 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 
 | 出力 | 映像 | 音声 |
 |---|---|---|
-| `build/main.mp4` | H.264（`video.crf`・`video.preset`）、yuv420p、BT.709 | AAC 320kbps、48kHz |
+| `build/main.mp4`・`build/shorts/<name>.mp4`・`build/shorts/wide/<name>.mp4` | H.264（`video.crf`・`video.preset`）、yuv420p、BT.709 | AAC 320kbps、48kHz |
 | `build/preview/bg.mp4`・`build/preview/vertical-bg.mp4` | H.264（ultrafast、CRF 28、15 フレームごとにキーフレーム） | AAC 160kbps、48kHz |
 | `build/overlay.mov` | ProRes 4444（アルファ付き）、BT.709 | PCM 24bit、48kHz |
 | `build/thumbnail/<name>.png`・`build/thumbnail/bg/<name>.png` | PNG（RGB 8bit、圧縮レベル 9） | なし |

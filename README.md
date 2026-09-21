@@ -53,6 +53,7 @@ utavideo announce     # SNS の告知文 → build/announce.txt
 | `build` | 動画を書き出す（H.264 / AAC） |
 | `overlay` | 歌詞と曲名表示だけを透過 ProRes 4444 で書き出す |
 | `vertical-ass` | 本編の歌詞 .ass から、縦型のショート用の .ass を作る |
+| `shorts` | 縦用 .ass の区間を切り抜いて、縦型のショート（と 16:9 版）を書き出す |
 | `description` | クレジット・素材から、タイトルと概要欄を書き出す |
 | `release` | 書き出した動画を、バージョン付きの名前で `release/` にコピーする |
 | `announce` | 投稿した動画の URL と曲の情報から、SNS の告知文を書き出す |

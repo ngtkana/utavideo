@@ -94,8 +94,14 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | ショートを何本も作る | 区間の行と `[[shorts]]` を、名前を変えて並べる |
 | 縦だけの文字（帯の曲名など） | スタイル名を `Vertical` で始める（例: `VerticalBand`）。歌詞として扱わず、区間の端の検査と本編との突き合わせをしない |
 | 本編の行を縦では出さない | 縦用 .ass の対応する行を、文字はそのままでコメント行にする（[本編との突き合わせ](commands.md#本編との突き合わせ)で警告しない） |
+| ショートを書き出す | `utavideo shorts`（`--name <name>` で1本だけ） |
+| 区間ごとに背景の残す位置を変える | `shorts[].focus`（既定は `vertical.focus`） |
+| 同じ区間の 16:9 版も書き出す | `shorts[].wide = true`（`build/shorts/wide/<name>.mp4`） |
+| 区間の端の音声のフェード | `vertical.audio_fade_ms`（16:9 版にも効く）。映像はフェードしない |
+| 縦だけ曲名表示を消す | `vertical.overlay_text = false`（本編と 16:9 版には出る） |
+| 帯の文字にフェードを入れない | スタイル名を `Vertical` で始める（自動のフェードを入れない。`\fad` を自分で書けば効く） |
 
-ショートの書き出しはまだできません（[roadmap.md](roadmap.md)）。
+画面の作り方は、背景を縦に切り取る形だけです（本編をぼかした帯に置く形は [roadmap.md](roadmap.md)）。
 
 ## 音源と公開
 

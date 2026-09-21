@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 import subprocess
 from pathlib import Path
 
@@ -400,12 +401,18 @@ def test_check_warns_about_thumbnail_lines_not_drawn(project: Path) -> None:
 VERTICAL = """
 [vertical]
 size = [180, 320]
+audio_fade_ms = [100, 200]  # 音源が 2 秒なので、既定値（300, 1000）では区間に収まらない
 {extra}
 """
 
 
-def _with_shorts(project: Path, shorts: str = '[[shorts]]\nname = "chorus"\n', extra: str = "") -> None:
-    config = TOML.format(background="bg.png") + VERTICAL.format(extra=extra) + shorts
+def _with_shorts(
+    project: Path,
+    shorts: str = '[[shorts]]\nname = "chorus"\n',
+    extra: str = "",
+    background: str = "bg.png",
+) -> None:
+    config = TOML.format(background=background) + VERTICAL.format(extra=extra) + shorts
     (project / "utavideo.toml").write_text(config, encoding="utf-8")
 
 
@@ -516,3 +523,126 @@ def test_layout_res_that_squashes_the_lyrics_stops_the_build(project: Path) -> N
     result = runner.invoke(app, ["build", "-C", str(project)])
     assert result.exit_code == 1
     assert "LayoutResX / LayoutResY 180x320" in result.output
+
+
+def _frame_md5(path: Path) -> list[str]:
+    out = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(path), "-map", "0:v", "-f", "framemd5", "-c:v", "rawvideo", "-"],
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stdout
+    return [line.split(",")[-1].strip() for line in out.splitlines() if not line.startswith("#")]
+
+
+def _mean_volume(path: Path, start: float, end: float) -> float:
+    out = subprocess.run(
+        ["ffmpeg", "-v", "info", "-ss", str(start), "-to", str(end), "-i", str(path),
+         "-af", "volumedetect", "-f", "null", "-"],
+        capture_output=True,
+        check=True,
+        text=True,
+    ).stderr  # fmt: skip
+    found = re.search(r"mean_volume: (-?[\d.]+) dB", out)
+    assert found is not None, out
+    return float(found[1])
+
+
+def _with_section(
+    project: Path,
+    *,
+    shorts: str,
+    line: str = "Comment: 0,0:00:00.53,0:00:01.77,Short,,0,0,0,,chorus",
+    background: str = "bg.png",
+) -> None:
+    _with_shorts(project, shorts=shorts, background=background)
+    invoke("vertical-ass", "-C", str(project))
+    _add_vertical_lines(project, line)
+
+
+def test_shorts_writes_the_section_and_the_wide_version_matches_main(project: Path) -> None:
+    # 背景は 0.5 秒で一周する loop.gif。入力側で -ss せずに切ることを確かめるため、
+    # 区間（0.53〜1.77 秒）が背景の2周目・3周目・4周目にまたがるようにする
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n', background="loop.gif")
+    # 可逆で書き出して、本編と同じコマかをフレームの md5 で比べる
+    config = project / "utavideo.toml"
+    config.write_text(config.read_text(encoding="utf-8").replace("fps = 10", "fps = 10\ncrf = 0"), "utf-8")
+    invoke("build", "-C", str(project))
+    invoke("shorts", "-C", str(project))
+
+    vertical_mp4 = project / "build/shorts/chorus.mp4"
+    wide_mp4 = project / "build/shorts/wide/chorus.mp4"
+    assert _stream(_probe(vertical_mp4), "video")["width"] == 180
+    wide_info = _probe(wide_mp4)
+    assert (_stream(wide_info, "video")["width"], _stream(wide_info, "video")["height"]) == (320, 180)
+    # 区間は 0.53〜1.77 秒。10fps では 5〜18 フレーム目
+    assert float(wide_info["format"]["duration"]) == pytest.approx(1.3, abs=0.05)
+    main = _frame_md5(project / "build/main.mp4")
+    wide = _frame_md5(wide_mp4)
+    assert len(wide) == 13
+    assert main[5:18] == wide
+    assert main[4:17] != wide  # 1 フレームずれていない
+    assert (project / "build/.work/shorts/chorus.ass").is_file()
+    assert (project / "build/.work/shorts/wide/chorus.ass").is_file()
+
+
+def test_shorts_fades_the_audio_at_both_edges(project: Path) -> None:
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n')
+    invoke("shorts", "-C", str(project))
+    output = project / "build/shorts/chorus.mp4"
+    # フェードは [100, 200] ミリ秒
+    middle = _mean_volume(output, 0.5, 0.8)
+    assert _mean_volume(output, 0, 0.05) < middle - 10
+    assert _mean_volume(output, 1.25, 1.3) < middle - 10
+
+
+def test_shorts_draw_only_the_section_lines_and_can_drop_the_vertical_title(project: Path) -> None:
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n')
+    config = project / "utavideo.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8")
+        .replace("enabled = false", "enabled = true")
+        .replace("[vertical]", "[vertical]\noverlay_text = false"),
+        encoding="utf-8",
+    )
+    vertical = project / "src/vertical.ass"
+    vertical.write_text(
+        vertical.read_text(encoding="utf-8").replace(
+            "Style: Title,",
+            "Style: VerticalBand,Test Sans,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
+            "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1\nStyle: Title,",
+        ),
+        encoding="utf-8",
+    )
+    _add_vertical_lines(
+        project,
+        "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,,AA",
+        "Dialogue: 0,0:00:01.90,0:00:02.00,Lyrics,,0,0,0,,AA",  # 区間の外の行
+    )
+    invoke("shorts", "-C", str(project))
+
+    work = (project / "build/.work/shorts/chorus.ass").read_text(encoding="utf-8")
+    # vertical.overlay_text = false なので、縦には曲名表示を入れない（wide には入れる）
+    assert "テスト / テスター" not in work
+    assert "テスト / テスター" in (project / "build/.work/shorts/wide/chorus.ass").read_text(encoding="utf-8")
+    # 区間の外の行は描かない。帯の文字（Vertical で始まるスタイル）には自動のフェードを入れない
+    assert work.count("Dialogue:") == 2
+    assert "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,,AA" in work
+    assert r"{\fad(150,150)}AAAA" in work
+
+
+def test_shorts_needs_a_name_that_exists(project: Path) -> None:
+    _with_shorts(project, shorts="")
+    result = runner.invoke(app, ["shorts", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "[[shorts]] がありません" in result.output
+
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n[[shorts]]\nname = "intro"\n')
+    result = runner.invoke(app, ["shorts", "-C", str(project), "--name", "nope"])
+    assert result.exit_code == 1
+    assert "あるのは chorus, intro" in result.output
+
+    # --name を渡すと、区間の行の無いもう1本（intro）のエラーでは止まらない
+    invoke("shorts", "-C", str(project), "--name", "chorus")
+    assert (project / "build/shorts/chorus.mp4").is_file()
+    assert not (project / "build/shorts/intro.mp4").exists()
