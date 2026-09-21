@@ -8,7 +8,8 @@ from typer.testing import CliRunner
 
 from tests.conftest import MakeFont
 from utavideo import subs
-from utavideo.cli import _font_missing_message, analyze_thumbnails, app
+from utavideo.analyze import font_missing_message
+from utavideo.cli import analyze_thumbnails, app
 from utavideo.config import load_project_config
 from utavideo.ffmpeg import FFmpegError
 from utavideo.project import Project
@@ -193,19 +194,19 @@ def test_vertical_ass_in_another_folder_rebases_the_aegisub_paths(tmp_path: Path
 
 
 def test_missing_font_message_points_at_the_font_name_for_a_file_name() -> None:
-    message = _font_missing_message("ヒラギノ丸ゴ ProN W4.ttc", [Path("/Library/Fonts")])
+    message = font_missing_message("ヒラギノ丸ゴ ProN W4.ttc", [Path("/Library/Fonts")])
     assert "ファイル名ではなくフォント名" in message
     assert "ヒラギノ丸ゴ ProN W4）" in message  # 拡張子を外した例を出す
 
 
 def test_missing_font_message_tells_how_to_add_a_place_when_there_is_none() -> None:
-    message = _font_missing_message("BIZ UDGothic", [])
+    message = font_missing_message("BIZ UDGothic", [])
     assert "（なし）" in message
     assert "UTAVIDEO_FONT_DIRS" in message and "font_dirs" in message
 
 
 def test_missing_font_message_only_lists_the_places_when_the_name_is_plain() -> None:
-    message = _font_missing_message("BIZ UDGothic", [Path("/Library/Fonts")])
+    message = font_missing_message("BIZ UDGothic", [Path("/Library/Fonts")])
     assert message == "フォント 'BIZ UDGothic' が見つかりません（探した場所: /Library/Fonts）"
 
 

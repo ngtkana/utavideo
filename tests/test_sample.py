@@ -10,7 +10,8 @@ from typer.testing import CliRunner
 from tests.conftest import invoke
 from utavideo import sample as sample_module
 from utavideo import subs
-from utavideo.cli import analyze, app
+from utavideo.analyze import analyze
+from utavideo.cli import app
 from utavideo.errors import UtavideoError
 from utavideo.project import Project
 
