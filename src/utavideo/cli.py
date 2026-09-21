@@ -12,13 +12,13 @@ from datetime import date
 from pathlib import Path
 from typing import Annotated, NoReturn
 
-import pysubs2
 import typer
 
-from utavideo import announce, description, fonts, graph, inputs, layout, sample, shorts, subs, vertical
+from utavideo import announce, description, fonts, graph, inputs, sample, shorts, subs, vertical
 from utavideo.analyze import (
     FontSearch,
     analyze,
+    analyze_shorts,
     analyze_vertical,
     background_issues,
     check_fonts,
@@ -529,92 +529,6 @@ def release(
     shutil.copy2(source, tmp)
     replace_partial(tmp, dest)
     console.print(f"コピーしました: {dest}", markup=False)
-
-
-@dataclass(frozen=True)
-class ShortsAnalysis:
-    issues: list[subs.Issue]
-    script: pysubs2.SSAFile | None  # 縦用 .ass（読めなかったときは None）
-    sections: dict[str, shorts.Section]  # 検査を通った区間（ショートの名前ごと）
-    font_files: tuple[Path, ...]
-
-
-def analyze_shorts(
-    project: Project,
-    search: FontSearch,
-    duration_s: float | None,
-    lyrics: pysubs2.SSAFile | None,
-    targets: tuple[Short, ...],
-    *,
-    report_unused: bool,
-) -> ShortsAnalysis:
-    """targets のショートの検査。縦用 .ass のファイル全体と、区間の行、区間に入る行。
-
-    duration_s は音源の長さ（読めなければ None で、長さとの比較と行の検査をしない）。
-    lyrics は本編の .ass（読めなければ None で、本編との突き合わせをしない）。
-    report_unused は、どの name にも合わない区間の行を警告するか。
-    """
-    checked = analyze_vertical(project, search, layouts=[project.short_layout(s) for s in targets])
-    if checked.script is None:
-        return ShortsAnalysis(checked.issues, None, {}, checked.font_files)
-    script = checked.script
-    config = project.config
-    duration_ms = None if duration_s is None else round(duration_s * 1000)
-    found = shorts.check_sections(
-        script, [s.name for s in targets], duration_ms=duration_ms, report_unused=report_unused
-    )
-    issues = checked.issues + found.issues
-    sections = {section.name: section for section in found.sections}
-    # blur の区間では、縦用 .ass に歌詞を置かない。歌詞についての検査は本編の .ass で行う
-    edge_lines: dict[Layout, list[pysubs2.SSAEvent]] = {
-        "reframe": shorts.lyric_lines(script),
-        "blur": [] if lyrics is None else shorts.lyric_lines(lyrics),
-    }
-    by_layout: dict[Layout, list[shorts.Section]] = {}
-    for short in targets:
-        if (section := sections.get(short.name)) is None:
-            continue
-        layout_ = project.short_layout(short)
-        by_layout.setdefault(layout_, []).append(section)
-        found_issues = shorts.edge_issues(edge_lines[layout_], section)
-        # 書き出しの前に必ず通す検査。区間が音源より後ろだと、ffmpeg は音声の無い動画を書いてしまう
-        found_issues += shorts.render_issues(
-            section,
-            fps=config.video.fps,
-            duration_ms=duration_ms,
-            audio_fade_ms=config.vertical.audio_fade_ms,
-            wide=short.wide,
-        )
-        issues += subs.prefixed(found_issues, f"ショート {short.name}: ")
-    if lyrics is not None and (reframed := by_layout.get("reframe")):
-        matched = shorts.match_lyrics(lyrics, script, reframed)
-        issues += subs.prefixed(matched, "本編との突き合わせ: ")
-    if duration_ms is not None:
-        issues += subs.prefixed(_vertical_line_issues(script, by_layout, search, duration_ms), "縦用 .ass: ")
-    return ShortsAnalysis(issues, script, sections, checked.font_files)
-
-
-def _vertical_line_issues(
-    script: pysubs2.SSAFile,
-    by_layout: dict[Layout, list[shorts.Section]],
-    search: FontSearch,
-    duration_ms: int,
-) -> list[subs.Issue]:
-    """区間に入る、描く行の警告。区間の外の行（本編の写し）は、本編と同じ警告を二重に出さない。
-
-    描く行は画面の作り方で変わる（blur では帯の文字だけ）ので、まとめてから1回だけ検査する。
-    そうしないと、reframe と blur の両方の区間に入る行の警告が2回出る。
-    はみ出しは blur でも見る。帯の文字こそ vertical.size の幅に収まるか確かめたい行のため。
-    """
-    drawn = subs.without_events(script)
-    drawn.events = [
-        event
-        for event in subs.dialogues(script)
-        if any(shorts.draws(event, group, vertical_only=name == "blur") for name, group in by_layout.items())
-    ]
-    return subs.lint_lines(drawn.events, duration_ms=duration_ms) + layout.overflows(
-        drawn, search.index.lookup
-    )
 
 
 @app.command("shorts")
