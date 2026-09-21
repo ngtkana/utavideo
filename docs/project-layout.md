@@ -28,7 +28,8 @@
 │   ├── shorts/          # utavideo shorts
 │   │   ├── chorus.mp4   # [[shorts]] の name ごと
 │   │   └── wide/chorus.mp4  # wide = true の 16:9 版
-│   └── .work/           # 書き出しに使った中間ファイル（描画に使った .ass など）
+│   ├── announce.txt     # utavideo announce
+│   └── .work/           # 書き出しに使った中間ファイル（描画に使った .ass など）と、build の入力の記録（main-inputs.json）
 ├── release/             # 公開した動画（概要欄を残すなら自分でコピー）。消さない
 └── share/               # 人とやり取りしたファイル
     └── YYYYMMDD-相手/

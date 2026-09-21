@@ -65,6 +65,16 @@ text = """
 hashtags = $hashtags  # 先頭の # は付けない
 # title = "..."            # 自動で作るタイトルを使わないとき
 
+[announce]
+# SNS の告知文（utavideo announce）。見出しやサイト名などの書式はユーザー設定で変える
+text = """
+"""
+hashtags = $announce_hashtags  # 先頭の # は付けない
+
+# 投稿した動画の URL（投稿した後に書く。サイト名は URL から決まる）
+# [[uploads]]
+# url = "https://youtu.be/..."
+
 # 概要欄のクレジット。roles が同じ人は1つの見出しにまとめる
 ${credits}# [[credits]]
 # roles = ["Vocal", "Mix"]

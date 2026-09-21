@@ -3,19 +3,19 @@
 import json
 import os
 import re
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import MakeFont
-from utavideo import graph
+from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
+from utavideo import cli, graph
 from utavideo.cli import app
+from utavideo.ffmpeg import subtitles_filter_error
 from utavideo.project import scaffold
 
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+pytestmark = pytest.mark.skipif(subtitles_filter_error() is not None, reason="libass 付きの ffmpeg が必要")
 
 runner = CliRunner()
 
@@ -103,14 +103,8 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
     return root
 
 
-def _invoke(*args: str):
-    result = runner.invoke(app, list(args))
-    assert result.exit_code == 0, result.output
-    return result
-
-
 def test_check_passes(project: Path) -> None:
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "問題ありません" in output
     assert "release 先" in output and "test-v1.2.0.mp4" in output  # 次に付く名前
 
@@ -120,7 +114,7 @@ def test_check_counts_warnings_instead_of_saying_ok(project: Path) -> None:
     lyrics = LYRICS.format(font="Test Sans") + "Dialogue: 0,0:00:01.80,0:00:03.00,Lyrics,,0,0,0,,BBBB\n"
     (project / "src/lyrics.ass").write_text(lyrics, encoding="utf-8")
 
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "問題ありません" not in output
     assert "警告 1 件" in output
 
@@ -141,6 +135,19 @@ def test_check_reports_audio_without_sound(project: Path) -> None:
     assert "音声" in result.output
 
 
+def test_check_lists_the_other_results_when_ffmpeg_has_no_libass(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 書き出せないことは伝えつつ、1回の check で直すべきことが全部分かるように、エラーの一覧に並べる
+    use_fake_ffmpeg(tmp_path, monkeypatch, reply="Unknown filter 'subtitles'.")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+
+    assert result.exit_code == 1
+    assert "libass" in result.output
+    assert "曲名" in result.output and "歌詞" in result.output and "フォント" in result.output
+
+
 def test_check_reports_missing_font(project: Path) -> None:
     (project / "src/lyrics.ass").write_text(LYRICS.format(font="Nope Sans"), encoding="utf-8")
     result = runner.invoke(app, ["check", "-C", str(project)])
@@ -149,7 +156,7 @@ def test_check_reports_missing_font(project: Path) -> None:
 
 
 def test_build_writes_main_mp4(project: Path) -> None:
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
 
     output = project / "build/main.mp4"
     info = _probe(output)
@@ -171,25 +178,25 @@ def test_video_focus_moves_the_background(project: Path) -> None:
         (project / "src/lyrics.ass").write_text(
             LYRICS.format(font="Test Sans").replace("PlayResX: 320", "PlayResX: 180"), encoding="utf-8"
         )
-        _invoke("build", "-C", str(project))
+        invoke("build", "-C", str(project))
         frames.append(_pixels(project / "build/main.mp4"))
     assert frames[0] != frames[1]
 
 
 def test_gif_background_loops_for_whole_audio(project: Path) -> None:
     (project / "utavideo.toml").write_text(TOML.format(background="loop.gif"), encoding="utf-8")
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
     video = _stream(_probe(project / "build/main.mp4"), "video")
     assert float(video["duration"]) == pytest.approx(2.0, abs=0.15)
 
 
 def test_preview_bg(project: Path) -> None:
-    _invoke("preview-bg", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
     assert _stream(_probe(project / "build/preview/bg.mp4"), "video")["codec_name"] == "h264"
 
 
 def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
-    _invoke("overlay", "-C", str(project))
+    invoke("overlay", "-C", str(project))
 
     output = project / "build/overlay.mov"
     video = _stream(_probe(output), "video")
@@ -199,9 +206,9 @@ def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
     assert _max_alpha(output, 1.8) == 0
 
 
-def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
-    _invoke("build", "-C", str(project))
-    _invoke("release", "-C", str(project))
+def test_release_numbers_videos(project: Path) -> None:
+    invoke("build", "-C", str(project))
+    invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.0.mp4").is_file()
 
     again = runner.invoke(app, ["release", "-C", str(project)])
@@ -212,15 +219,48 @@ def test_release_numbers_videos_and_detects_stale_build(project: Path) -> None:
     # （テスト用のフォントは "A" しか持たないので、字を変えずに数を変える）
     lyrics = project / "src/lyrics.ass"
     lyrics.write_text(lyrics.read_text(encoding="utf-8").replace("AAAA", "A A"), encoding="utf-8")
-    _invoke("build", "-C", str(project))
-    _invoke("release", "-C", str(project))
+    invoke("build", "-C", str(project))
+    invoke("release", "-C", str(project))
     assert (project / "release/test-v1.2.1.mp4").is_file()
 
-    built_at = (project / "build/main.mp4").stat().st_mtime
-    os.utime(project / "src/lyrics.ass", (built_at + 10, built_at + 10))
-    stale = runner.invoke(app, ["release", "-C", str(project), "--version", "v1.3"])
-    assert stale.exit_code == 1
-    assert "lyrics.ass" in stale.output
+
+def test_release_compares_the_inputs_recorded_by_build(project: Path) -> None:
+    invoke("build", "-C", str(project))
+    assert (project / "build/.work/main-inputs.json").is_file()
+    later = (project / "build/main.mp4").stat().st_mtime + 10
+
+    # 実際のフォントの記録を読み戻して比べられる（細かい場合分けは test_release.py）
+    config = project / "utavideo.toml"
+    config.write_text(config.read_text(encoding="utf-8") + '[description]\ntext = "概要"\n', encoding="utf-8")
+    for path in (config, project / "src/lyrics.ass"):
+        os.utime(path, (later, later))
+    invoke("release", "-C", str(project))
+
+
+@pytest.mark.parametrize(
+    ("reader", "attr", "rel", "name"),
+    [
+        (cli.subs, "load", "src/lyrics.ass", "lyrics.file"),
+        (cli, "probe_audio", "src/mix/テスト v1.2.wav", "audio.file"),
+    ],
+)
+def test_release_stops_when_an_input_changes_after_build_read_it(
+    project: Path, monkeypatch: pytest.MonkeyPatch, reader: object, attr: str, rel: str, name: str
+) -> None:
+    # 読んだ後（フォント一覧の作成中など）に保存されると、動画は古い内容になる。記録も古い側でないと止まらない
+    original = getattr(reader, attr)
+
+    def read_then_save(path: Path):
+        result = original(path)
+        (project / rel).write_bytes((project / rel).read_bytes() + b"\n")
+        return result
+
+    monkeypatch.setattr(reader, attr, read_then_save)
+    invoke("build", "-C", str(project))
+
+    result = runner.invoke(app, ["release", "-C", str(project)])
+    assert result.exit_code == 1
+    assert f"（{name}）" in result.output
 
 
 def test_locked_output_keeps_partial(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -280,9 +320,9 @@ def _pixels(path: Path) -> bytes:
 
 def test_thumbnail_draws_ass_over_background(project: Path) -> None:
     _with_thumbnail(project)
-    bg = _invoke("thumbnail", "-C", str(project), "--bg-only")
+    bg = invoke("thumbnail", "-C", str(project), "--bg-only")
     assert "バイト" in bg.output
-    result = _invoke("thumbnail", "-C", str(project))
+    result = invoke("thumbnail", "-C", str(project))
     assert "バイト" in result.output
 
     thumbnail, background = project / "build/thumbnail/main.png", project / "build/thumbnail/bg/main.png"
@@ -296,7 +336,7 @@ def test_thumbnail_draws_ass_over_background(project: Path) -> None:
 def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
     _with_thumbnail(project)
     (project / "src/thumbnail.ass").unlink()
-    _invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("thumbnail", "-C", str(project), "--bg-only")
     result = runner.invoke(app, ["thumbnail", "-C", str(project)])
     assert result.exit_code == 1
     assert "file のファイルがありません" in result.output
@@ -305,10 +345,10 @@ def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
 def test_thumbnail_uses_the_frame_at_the_given_time(project: Path) -> None:
     # 4 fps・0.5 秒の GIF。0.25 秒のフレームは 0 秒と違う絵
     _with_thumbnail(project, "loop.gif", 'size = [90, 90]\nat = "0:00.25"')
-    _invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("thumbnail", "-C", str(project), "--bg-only")
     later = _pixels(project / "build/thumbnail/bg/main.png")
     _with_thumbnail(project, "loop.gif")
-    _invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("thumbnail", "-C", str(project), "--bg-only")
     assert _pixels(project / "build/thumbnail/bg/main.png") != later
 
 
@@ -354,7 +394,7 @@ def test_check_warns_about_thumbnail_lines_not_drawn(project: Path) -> None:
     ass.write_text(
         ass.read_text(encoding="utf-8").replace("0:00:00.00,9:59", "0:00:01.00,9:59"), encoding="utf-8"
     )
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "サムネイル main: 0 秒に表示されない行" in output
 
 
@@ -385,19 +425,19 @@ def _add_vertical_lines(project: Path, *lines: str) -> None:
 
 def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Path) -> None:
     _with_shorts(project, shorts="")
-    _invoke("vertical-ass", "-C", str(project))
-    assert "縦用 .ass" not in _invoke("check", "-C", str(project)).output
+    invoke("vertical-ass", "-C", str(project))
+    assert "縦用 .ass" not in invoke("check", "-C", str(project)).output
 
     _with_shorts(project)
     _add_vertical_lines(project, "Comment: 0,0:00:00.00,0:00:01.80,Short,,0,0,0,,chorus")
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "縦用 .ass: src/vertical.ass（180x320）" in output
     assert "ショート: chorus" in output
     assert "問題ありません" in output  # vertical-ass で写した歌詞は、本編と食い違わない
 
     lyrics = project / "src/lyrics.ass"
     lyrics.write_text(lyrics.read_text(encoding="utf-8").replace(",AAAA", ",AAAB"), encoding="utf-8")
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "本編との突き合わせ: 本編と文字が違います（0:00:00.200）: 本編「AAAB」" in output
 
     vertical = project / "src/vertical.ass"
@@ -410,7 +450,7 @@ def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Pat
     assert "縦用 .ass: PlayRes 180x180" in result.output
     assert "縦用 .ass: フォント 'Nope Sans'" in result.output
     # 縦用 .ass の誤りで、本編の書き出しは止めない
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
 
 
 def test_check_reports_a_missing_vertical_ass_and_sections(project: Path) -> None:
@@ -419,7 +459,7 @@ def test_check_reports_a_missing_vertical_ass_and_sections(project: Path) -> Non
     assert result.exit_code == 1
     assert "utavideo vertical-ass で作れます" in result.output
 
-    _invoke("vertical-ass", "-C", str(project))
+    invoke("vertical-ass", "-C", str(project))
     result = runner.invoke(app, ["check", "-C", str(project)])
     assert result.exit_code == 1
     assert "ショート chorus: 区間の行" in result.output
@@ -429,12 +469,12 @@ def test_check_reports_a_missing_vertical_ass_and_sections(project: Path) -> Non
     result = runner.invoke(app, ["check", "-C", str(project)])
     assert result.exit_code == 1
     assert "音源の長さ（0:00:02.000）を超えています" in result.output
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
 
 
 def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
     _with_shorts(project)
-    _invoke("vertical-ass", "-C", str(project))
+    invoke("vertical-ass", "-C", str(project))
     long_line = "A" * 20
     _add_vertical_lines(
         project,
@@ -444,7 +484,7 @@ def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
         f"Dialogue: 0,0:00:00.00,0:00:00.10,Lyrics,,0,0,0,,{long_line}",
         f"Dialogue: 0,0:00:01.60,0:00:01.90,Lyrics,,0,0,0,,{long_line}",
     )
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert output.count("はみ出しそう") == 1
     assert "0:00:01.600「AAAA" in output
     assert "区間の頭（0:00:01.000）が歌詞の行の途中にかかっています" in output
@@ -458,11 +498,11 @@ def test_preview_bg_vertical_uses_the_vertical_size_and_focus(project: Path) -> 
     assert result.exit_code == 1
     assert "utavideo vertical-ass で作れます" in result.output
 
-    _invoke("vertical-ass", "-C", str(project))
+    invoke("vertical-ass", "-C", str(project))
     frames = []
     for focus in ("[0, 0.5]", "[1, 0.5]"):
         _with_shorts(project, shorts="", extra=f"focus = {focus}")
-        _invoke("preview-bg", "--vertical", "-C", str(project))
+        invoke("preview-bg", "--vertical", "-C", str(project))
         output = project / "build/preview/vertical-bg.mp4"
         info = _probe(output)
         video = _stream(info, "video")
@@ -517,7 +557,7 @@ def _with_section(
     background: str = "bg.png",
 ) -> None:
     _with_shorts(project, shorts=shorts, extra=extra, background=background)
-    _invoke("vertical-ass", "-C", str(project))
+    invoke("vertical-ass", "-C", str(project))
     _add_vertical_lines(project, line)
 
 
@@ -528,8 +568,8 @@ def test_shorts_writes_the_section_and_the_wide_version_matches_main(project: Pa
     # 可逆で書き出して、本編と同じコマかをフレームの md5 で比べる
     config = project / "utavideo.toml"
     config.write_text(config.read_text(encoding="utf-8").replace("fps = 10", "fps = 10\ncrf = 0"), "utf-8")
-    _invoke("build", "-C", str(project))
-    _invoke("shorts", "-C", str(project))
+    invoke("build", "-C", str(project))
+    invoke("shorts", "-C", str(project))
 
     vertical_mp4 = project / "build/shorts/chorus.mp4"
     wide_mp4 = project / "build/shorts/wide/chorus.mp4"
@@ -549,7 +589,7 @@ def test_shorts_writes_the_section_and_the_wide_version_matches_main(project: Pa
 
 def test_shorts_fades_the_audio_at_both_edges(project: Path) -> None:
     _with_section(project, shorts='[[shorts]]\nname = "chorus"\n')
-    _invoke("shorts", "-C", str(project))
+    invoke("shorts", "-C", str(project))
     output = project / "build/shorts/chorus.mp4"
     # フェードは [100, 200] ミリ秒
     middle = _mean_volume(output, 0.5, 0.8)
@@ -580,7 +620,7 @@ def test_shorts_draw_only_the_section_lines_and_can_drop_the_vertical_title(proj
         "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,,AA",
         "Dialogue: 0,0:00:01.90,0:00:02.00,Lyrics,,0,0,0,,AA",  # 区間の外の行
     )
-    _invoke("shorts", "-C", str(project))
+    invoke("shorts", "-C", str(project))
 
     work = (project / "build/.work/shorts/chorus.ass").read_text(encoding="utf-8")
     # vertical.overlay_text = false なので、縦には曲名表示を入れない（wide には入れる）
@@ -604,7 +644,7 @@ def test_shorts_needs_a_name_that_exists(project: Path) -> None:
     assert "あるのは chorus, intro" in result.output
 
     # --name を渡すと、区間の行の無いもう1本（intro）のエラーでは止まらない
-    _invoke("shorts", "-C", str(project), "--name", "chorus")
+    invoke("shorts", "-C", str(project), "--name", "chorus")
     assert (project / "build/shorts/chorus.mp4").is_file()
     assert not (project / "build/shorts/intro.mp4").exists()
 
@@ -640,7 +680,7 @@ def test_shorts_blur_places_the_main_video_by_frame_y_and_keeps_it_out_of_the_ba
         "-f", "lavfi", "-i", "color=c=gray:size=640x360", "-frames:v", "1", str(project / "src/bg/bg.png")
     )
     _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"\nframe_y = 0')
-    _invoke("shorts", "-C", str(project))
+    invoke("shorts", "-C", str(project))
     output = project / "build/shorts/chorus.mp4"
     video = _stream(_probe(output), "video")
     assert (video["width"], video["height"]) == (180, 320)
@@ -655,7 +695,7 @@ def test_shorts_blur_places_the_main_video_by_frame_y_and_keeps_it_out_of_the_ba
 
     config = project / "utavideo.toml"
     config.write_text(config.read_text(encoding="utf-8").replace("frame_y = 0", "frame_y = 1"), "utf-8")
-    _invoke("shorts", "-C", str(project))
+    invoke("shorts", "-C", str(project))
     # frame_y = 1 なら本編の上端は (320 - 102) * 1 で、上が帯になる
     counts = _greens_per_row(output, (180, 320))
     assert counts[-1] == 180
@@ -686,7 +726,7 @@ def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_mai
         # blur では歌詞を縦用 .ass に置いても描かない（本編の映像に入っているため）
         "Dialogue: 0,0:00:00.60,0:00:01.00,Lyrics,,0,0,0,,AAAA",
     )
-    _invoke("shorts", "-C", str(project))
+    invoke("shorts", "-C", str(project))
 
     work = (project / "build/.work/shorts/chorus.ass").read_text(encoding="utf-8")
     assert work.count("Dialogue:") == 1
@@ -700,7 +740,7 @@ def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_mai
         config.read_text(encoding="utf-8").replace("[vertical]", "[vertical]\noverlay_text = false"),
         encoding="utf-8",
     )
-    _invoke("shorts", "-C", str(project))
+    invoke("shorts", "-C", str(project))
     assert "テスト / テスター" not in (project / "build/.work/shorts/frame/chorus.ass").read_text("utf-8")
 
 
@@ -712,7 +752,7 @@ def test_check_for_a_blur_section_uses_the_main_lyrics(project: Path) -> None:
         "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1",
         "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,," + "A" * 20,
     )
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     # 縦用 .ass に歌詞が無くても、区間の端は本編の .ass（0.20〜1.50 秒の行）で見る
     assert "区間の頭（0:00:00.530）が歌詞の行の途中にかかっています" in output
     # 歌詞は本編の画面で見るので、突き合わせはしない
@@ -735,7 +775,7 @@ def test_check_does_not_repeat_a_warning_for_mixed_layouts(project: Path) -> Non
         "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1",
         "Dialogue: 0,0:00:00.60,0:00:01.00,VerticalBand,,0,0,0,,{\\pos(90,40)}BAND",
     )
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert output.count("\\pos / \\move を使っています") == 1
 
 
@@ -756,8 +796,8 @@ def test_check_rejects_a_video_size_taller_than_the_vertical_size(project: Path)
 
 def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> None:
     _with_shorts(project, shorts="", extra='layout = "blur"\nframe_y = 0')
-    _invoke("vertical-ass", "-C", str(project))
-    _invoke("preview-bg", "--vertical", "-C", str(project))
+    invoke("vertical-ass", "-C", str(project))
+    invoke("preview-bg", "--vertical", "-C", str(project))
 
     output = project / "build/preview/vertical-bg.mp4"
     video = _stream(_probe(output), "video")
@@ -772,7 +812,7 @@ def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> Non
 def test_preview_bg_vertical_follows_the_layouts_the_shorts_use(project: Path) -> None:
     """vertical.layout = "reframe" でも、blur のショートがあれば下敷きを blur の画面にする。"""
     _with_section(project, shorts='[[shorts]]\nname = "chorus"\nlayout = "blur"\n')
-    _invoke("preview-bg", "--vertical", "-C", str(project))
+    invoke("preview-bg", "--vertical", "-C", str(project))
     # 完成図と同じく、真ん中に本編の映像（歌詞入り）を置く
     frame = (project / "build/.work/vertical-preview-frame.ass").read_text(encoding="utf-8")
     assert "AAAA" in frame

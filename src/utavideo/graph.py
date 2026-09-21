@@ -27,7 +27,9 @@ type Preset = Literal[
     "placebo",
 ]
 
-_COMMON = ["-hide_banner", "-nostdin", "-loglevel", "error", "-nostats", "-progress", "pipe:1", "-y"]
+# 進捗以外を黙らせる共通の引数。見本の素材を合成するとき（sample.py）にも使う
+QUIET = ["-hide_banner", "-nostdin", "-loglevel", "error", "-nostats", "-y"]
+_COMMON = [*QUIET, "-progress", "pipe:1"]
 _BT709 = [
     "-colorspace", "bt709",
     "-color_primaries", "bt709",
