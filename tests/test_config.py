@@ -119,3 +119,9 @@ def test_font_dir_candidates_on_macos(tmp_path: Path, monkeypatch: pytest.Monkey
 def test_hashtags_are_written_without_hash(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=r"description\.hashtags"):
         load_project_config(_write(tmp_path, MINIMAL + '[description]\nhashtags = ["#歌ってみた"]\n'))
+
+
+@pytest.mark.parametrize("section", ["description", "announce"])
+def test_hashtags_must_not_repeat(tmp_path: Path, section: str) -> None:
+    with pytest.raises(ConfigError, match="重複"):
+        load_project_config(_write(tmp_path, MINIMAL + f'[{section}]\nhashtags = ["cover", "Cover"]\n'))

@@ -11,5 +11,6 @@ utavideo の曲フォルダ。制作の流れ: https://github.com/ngtkana/utavid
 - [ ] `utavideo build` → `build/main.mp4` を確認
 - [ ] `utavideo release`
 - [ ] `utavideo description` → `build/title.txt`・`build/description.txt` を投稿画面に貼る
+- [ ] 投稿したら `utavideo.toml` の `[[uploads]]` に動画の URL を書く → `utavideo announce` → `build/announce.txt` で SNS に告知する
 
 ## メモ

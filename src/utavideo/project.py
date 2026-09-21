@@ -85,6 +85,10 @@ class Project:
         return self.build_dir / "description.txt"
 
     @property
+    def announce_output(self) -> Path:
+        return self.build_dir / "announce.txt"
+
+    @property
     def version(self) -> str | None:
         return extract_version(self.audio_path.stem)
 
@@ -193,6 +197,7 @@ def scaffold(
             audio=_toml_string(audio),
             background=_toml_string(background),
             hashtags=_toml_array(defaults.hashtags),
+            announce_hashtags=_toml_array(defaults.announce_hashtags),
             credits=_toml_credits(defaults.credits),
         ),
         "src/lyrics.ass": render_template("lyrics.ass"),

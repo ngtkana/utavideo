@@ -18,6 +18,7 @@
 │   ├── preview/bg.mp4
 │   ├── title.txt        # utavideo description
 │   ├── description.txt
+│   ├── announce.txt     # utavideo announce
 │   └── .work/           # 書き出しに使った中間ファイル
 ├── release/             # 公開した動画（概要欄を残すなら自分でコピー）。消さない
 └── share/               # 人とやり取りしたファイル
