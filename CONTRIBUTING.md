@@ -8,6 +8,8 @@ cd utavideo
 uv tool install --editable .   # utavideo コマンドが手元のコードで動く
 ```
 
+Node.js を別に入れる必要はありません。`uv run pyright` が使う Node は、開発依存の `pyright[nodejs]` として PyPI から入ります。
+
 ## 確認
 
 commit の前に通してください。CI（`.github/workflows/ci.yml`）も同じ確認をします（format は `--check` で実行）。変わったのが `docs/`・`README.md`・`CONTRIBUTING.md`・`CLAUDE.md` だけなら、CI は `tests/test_docs.py` だけを実行します。
