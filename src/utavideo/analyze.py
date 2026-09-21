@@ -1,12 +1,13 @@
 """書き出し前の検査。曲フォルダの状態を読み、Issue のリストを返す。"""
 
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
 
 import pysubs2
 
 from utavideo import fonts, graph, layout, subs
-from utavideo.config import cache_dir, load_user_config
+from utavideo.config import Layout, cache_dir, load_user_config
 from utavideo.console import err_console
 from utavideo.ffmpeg import probe_audio
 from utavideo.project import Project
@@ -112,3 +113,75 @@ def font_missing_message(name: str, font_dirs: list[Path]) -> str:
     else:
         hint = ""
     return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
+
+
+def vertical_inputs(project: Project, search: FontSearch, *, draws_main: bool) -> Analysis:
+    """縦の書き出しに要るものの検査と、音源の長さ・本編の .ass（無ければ None）。
+
+    draws_main は本編の映像も描くとき（blur の真ん中、wide の版）で、本編の .ass とフォントも
+    build と同じ条件で検査する。描かないなら、本編の .ass は突き合わせと LayoutRes にだけ使い、
+    フォントは縦用 .ass のものだけでよい（文字が潰れる LayoutRes は本編の書き出しと同じく止める）。
+    """
+    if draws_main:
+        return analyze(project, "final", search)
+    issues, duration_s = audio_issues(project)
+    issues += background_issues(project)
+    lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
+    if lyrics is not None:
+        issues += subs.layout_res_issues(lyrics)
+    return Analysis(issues, duration_s, lyrics, ())
+
+
+@dataclass(frozen=True)
+class VerticalAnalysis:
+    issues: list[subs.Issue]
+    script: pysubs2.SSAFile | None  # 読めなかったときは None
+    font_files: tuple[Path, ...]
+
+
+def analyze_vertical(
+    project: Project, search: FontSearch, *, layouts: Collection[Layout]
+) -> VerticalAnalysis:
+    """縦用 .ass のファイル全体の検査（PlayRes・LayoutRes・スタイル・フォント）と、blur の大きさ。
+
+    layouts は、この縦用 .ass から描く画面の作り方（曲名表示のスタイルが要るかが変わる）。
+    区間の外の行は書き出しに使わないので、行ごとの検査（はみ出しを含む）はここでは行わない。
+    """
+    sizing = _blur_frame_issues(project) if "blur" in layouts else []
+    path = project.vertical_lyrics_path
+    if not path.is_file():
+        message = (
+            f"縦用 .ass（vertical.lyrics）のファイルがありません: {path}（utavideo vertical-ass で作れます）"
+        )
+        return VerticalAnalysis([*sizing, subs.Issue("error", message)], None, ())
+    try:
+        script = subs.load(path)
+    except subs.SubtitleError as e:
+        return VerticalAnalysis([*sizing, subs.Issue("error", f"縦用 .ass: {e}")], None, ())
+    config = project.config
+    overlay = project.vertical_script_overlay_text(layouts)
+    issues = subs.lint_vertical(script, size=config.vertical.size, overlay=overlay)
+    # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
+    composed = compose(project, script, 0, "final", search.index, no_vertical_fade=True, overlay=overlay)
+    font_issues, font_files = check_fonts(composed, search, overflows=False)
+    return VerticalAnalysis(sizing + subs.prefixed(issues + font_issues, "縦用 .ass: "), script, font_files)
+
+
+def _blur_frame_issues(project: Project) -> list[subs.Issue]:
+    """blur の真ん中に置く本編の映像が、縦の画面に収まるか。
+
+    video.size が vertical.size より縦長だと、幅いっぱいに縮めた本編が縦からはみ出し、
+    黙って上下を切られる（frame_y の 0〜1 が「上端から下端まで」を指さなくなる）。
+    """
+    video = project.config.video
+    width, height = project.config.vertical.size
+    frame = graph.frame_height(video.size, width)
+    if frame <= height:
+        return []
+    message = (
+        f"blur の画面を作れません: video.size（{video.size[0]}x{video.size[1]}）が "
+        f"vertical.size（{width}x{height}）より縦長なので、縦の幅に縮めた本編の映像"
+        f"（{width}x{frame}）が縦の画面に収まりません"
+        '（vertical.size を高くするか、vertical.layout = "reframe" にします）'
+    )
+    return [subs.Issue("error", message)]
