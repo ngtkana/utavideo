@@ -4,9 +4,9 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`description`・`release`・`announce` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `sample`・`check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
-- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`description`・`release`・`announce` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
+- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
@@ -87,7 +87,7 @@ utavideo sample <パス> [--font <フォント名>] [--small]
 utavideo check [-C <曲フォルダ>]
 ```
 
-[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前を表示します。
+[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさを表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。
 
 ## preview-bg / build / overlay
 
@@ -108,6 +108,35 @@ utavideo overlay [-C <曲フォルダ>]
 - 動画の長さは音源の長さです
 - 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass` に書きます（自動のフェードと曲名表示が入ったもの）
 - `build` は、書き出しに成功した後、使った入力の記録を `build/.work/main-inputs.json` に書きます（[release](#release) が比べる）。書き出しを始める前に前の記録を消すので、途中で止まったときは記録が残りません
+
+## thumbnail
+
+```sh
+utavideo thumbnail [-C <曲フォルダ>] [--name <name>] [--bg-only]
+```
+
+`[[thumbnails]]`（[config-reference.md](config-reference.md#thumbnails)）ごとに、背景の1フレームにサムネイル用の .ass を描いた PNG を書き出します。
+
+| オプション | 既定値 | 内容 |
+|---|---|---|
+| `--name` | すべて | この `name` のサムネイルだけを検査して書き出す |
+| `--bg-only` | 無効 | 文字を描かず、背景だけを書き出す（Aegisub で文字を組むときの下敷き） |
+
+| 出力 | 入るもの |
+|---|---|
+| `build/thumbnail/<name>.png` | 背景のフレーム＋ .ass |
+| `build/thumbnail/bg/<name>.png`（`--bg-only`） | 背景のフレームだけ |
+
+- 背景が GIF・動画のときは、`at` 秒以降の最初のフレームを使います（繰り返しません）
+- .ass は加工せずに、**0 秒**の状態を描きます。`lyrics.fade_ms` の自動フェードと `[overlay_text]` の曲名表示は入りません。`\t`・`\move`・`\k` なども 0 秒の状態になります
+- 書き出したら、パスとバイト数を表示します
+- 書き出す前に[検査](#検査項目)し、エラーがあれば1枚も書き出しません。`--bg-only` では、背景と `at` だけを検査します（.ass はまだ無くてよい）
+
+次のときは止まります。
+
+- `[[thumbnails]]` が無い（書き足し方を表示します）
+- `--name` の名前が `[[thumbnails]]` に無い（ある名前を表示します）
+- ffmpeg が正常に終わっても何も書き出さなかった（背景の終わり近くの `at` で、それ以降のフレームが無いとき）
 
 ## description
 
@@ -196,11 +225,13 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 
 | 対象 | 内容 |
 |---|---|
-| 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある（ハッシュタグの重複、`announce.order` の `""` 以外の重複、`announce.sites` の知らないキーを含む）。ユーザー設定も同じ |
+| 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある（`[[thumbnails]]` の `name` の文字・重複、`focus` の範囲、`at` の書式、ハッシュタグの重複、`announce.order` の `""` 以外の重複、`announce.sites` の知らないキーを含む）。ユーザー設定も同じ |
 | 素材 | `audio.file`・`lyrics.file`・`video.background`（`overlay` では不要）のファイルが無い、背景の形式に対応していない、音源に音声が入っていない |
 | 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
+| サムネイル（`thumbnail`・`check`） | 背景が画像なのに `at` を書いた、`at` が背景の長さ以上（長さは ffprobe で取る） |
+| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、未定義のスタイルを使っている、フォントが見つからない |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
 | 告知文（`announce`、`[announce]` がある曲の `check`） | ユーザー設定の `announce.work`・`announce.link` の書式が不正、`[[uploads]]` の URL が[受け付ける形](#受け付ける-url)でない・同じサイトが2つある・サイトが `announce.sites` に無い、`[announce].hashtags` に [X でタグが切れる文字](#ハッシュタグ)がある |
 | 実行環境 | ffmpeg で `subtitles` フィルタ（libass）が使えない（ffmpeg・ffprobe が無いときは検査を始める前に止まります） |
@@ -210,6 +241,8 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 | 対象 | 内容 |
 |---|---|
 | 歌詞の行 | `\pos`・`\move` を使っている、表示時間が 0 以下、音声が終わった後に始まる、音声の終わりで途中で切られる、同じスタイル・同じレイヤーで重なる、画面からはみ出しそう |
+| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | 0 秒に表示されない行（始まりが 0 秒より後、または終わりが 0 秒以前）、`\fad`・`\fade` のフェードインが 0 秒で終わっていない、画面からはみ出しそう（`\pos` の行は対象外なので、サムネイルではほとんど検査されない） |
+| サムネイル（`thumbnail`・`check`） | 背景の長さを取得できず、`at` を確かめられない |
 | `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空 |
 | 概要欄（`[description]` がある曲の `check`） | `video.background` がどの `materials.files` にも無い、`materials.files` のファイルが無い、タイトルの `{singers}` に入る人がいない、タイトルが 100 文字・概要欄が 5000 バイトを超える、`<` か `>` を含む（YouTube の上限） |
 | 告知文（`announce`、`[announce]` がある曲の `check`） | `[[uploads]]` が無い（`announce` だけ）、URL に動画の頭から再生されないパラメータが付いている（[受け付ける URL](#受け付ける-url)）、`work` の `{singers}` に入る人がいない、[長さ](#長さの数え方)が `announce.max_weight` を超える |
@@ -223,3 +256,4 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 | `build/main.mp4` | H.264（`video.crf`・`video.preset`）、yuv420p、BT.709 | AAC 320kbps、48kHz |
 | `build/preview/bg.mp4` | H.264（ultrafast、CRF 28、15 フレームごとにキーフレーム） | AAC 160kbps、48kHz |
 | `build/overlay.mov` | ProRes 4444（アルファ付き）、BT.709 | PCM 24bit、48kHz |
+| `build/thumbnail/<name>.png`・`build/thumbnail/bg/<name>.png` | PNG（RGB 8bit、圧縮レベル 9） | なし |

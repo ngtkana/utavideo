@@ -167,6 +167,21 @@ def test_build_writes_main_mp4(project: Path) -> None:
     assert not (project / "build/main.partial.mp4").exists()
 
 
+def test_video_focus_moves_the_background(project: Path) -> None:
+    frames = []
+    for focus in ("[0, 0.5]", "[1, 0.5]"):
+        config = TOML.format(background="bg.png").replace(
+            "size = [320, 180]", f"size = [180, 180]\nfocus = {focus}"
+        )
+        (project / "utavideo.toml").write_text(config, encoding="utf-8")
+        (project / "src/lyrics.ass").write_text(
+            LYRICS.format(font="Test Sans").replace("PlayResX: 320", "PlayResX: 180"), encoding="utf-8"
+        )
+        invoke("build", "-C", str(project))
+        frames.append(_pixels(project / "build/main.mp4"))
+    assert frames[0] != frames[1]
+
+
 def test_gif_background_loops_for_whole_audio(project: Path) -> None:
     (project / "utavideo.toml").write_text(TOML.format(background="loop.gif"), encoding="utf-8")
     invoke("build", "-C", str(project))
@@ -260,3 +275,123 @@ def test_locked_output_keeps_partial(project: Path, monkeypatch: pytest.MonkeyPa
     assert result.exit_code == 1
     assert "他のアプリ" in result.output
     assert (project / "build/preview/bg.partial.mp4").is_file()
+
+
+THUMBNAIL = """
+[[thumbnails]]
+name = "main"
+file = "src/thumbnail.ass"
+{extra}
+"""
+THUMBNAIL_ASS = LYRICS.replace("PlayResX: 320\nPlayResY: 180", "PlayResX: 90\nPlayResY: 90").replace(
+    "Dialogue: 0,0:00:00.20,0:00:01.50,Lyrics,,0,0,0,,AAAA",
+    "Dialogue: 0,0:00:00.00,9:59:59.99,Lyrics,,0,0,0,,AA",
+)
+
+
+def _with_thumbnail(project: Path, background: str = "bg.png", extra: str = "size = [90, 90]") -> None:
+    config = TOML.format(background=background) + THUMBNAIL.format(extra=extra)
+    (project / "utavideo.toml").write_text(config, encoding="utf-8")
+    (project / "src/thumbnail.ass").write_text(THUMBNAIL_ASS.format(font="Test Sans"), encoding="utf-8")
+
+
+def _pixels(path: Path) -> bytes:
+    out = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-i",
+            str(path),
+            "-frames:v",
+            "1",
+            "-f",
+            "rawvideo",
+            "-pix_fmt",
+            "rgb24",
+            "-",
+        ],
+        capture_output=True,
+        check=True,
+    )
+    return out.stdout
+
+
+def test_thumbnail_draws_ass_over_background(project: Path) -> None:
+    _with_thumbnail(project)
+    bg = invoke("thumbnail", "-C", str(project), "--bg-only")
+    assert "バイト" in bg.output
+    result = invoke("thumbnail", "-C", str(project))
+    assert "バイト" in result.output
+
+    thumbnail, background = project / "build/thumbnail/main.png", project / "build/thumbnail/bg/main.png"
+    for path in (thumbnail, background):
+        video = _stream(_probe(path), "video")
+        assert (video["codec_name"], video["width"], video["height"]) == ("png", 90, 90)
+    assert _pixels(thumbnail) != _pixels(background)  # 文字が描かれている
+    assert not (project / "build/thumbnail/main.partial.png").exists()
+
+
+def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
+    _with_thumbnail(project)
+    (project / "src/thumbnail.ass").unlink()
+    invoke("thumbnail", "-C", str(project), "--bg-only")
+    result = runner.invoke(app, ["thumbnail", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "file のファイルがありません" in result.output
+
+
+def test_thumbnail_uses_the_frame_at_the_given_time(project: Path) -> None:
+    # 4 fps・0.5 秒の GIF。0.25 秒のフレームは 0 秒と違う絵
+    _with_thumbnail(project, "loop.gif", 'size = [90, 90]\nat = "0:00.25"')
+    invoke("thumbnail", "-C", str(project), "--bg-only")
+    later = _pixels(project / "build/thumbnail/bg/main.png")
+    _with_thumbnail(project, "loop.gif")
+    invoke("thumbnail", "-C", str(project), "--bg-only")
+    assert _pixels(project / "build/thumbnail/bg/main.png") != later
+
+
+@pytest.mark.parametrize(
+    ("background", "at", "message"),
+    [
+        ("bg.png", "at = 1", "画像"),
+        ("loop.gif", 'at = "0:01"', "背景の長さ（0:00.500）以上"),
+    ],
+)
+def test_thumbnail_rejects_unusable_time(project: Path, background: str, at: str, message: str) -> None:
+    _with_thumbnail(project, background, f"size = [90, 90]\n{at}")
+    for command in (["thumbnail", "--bg-only"], ["check"]):
+        result = runner.invoke(app, [*command, "-C", str(project)])
+        assert result.exit_code == 1
+        assert message in result.output
+
+
+def test_thumbnail_reports_when_ffmpeg_writes_nothing(project: Path) -> None:
+    # 長さ 0.5 秒の GIF の最後のフレームは 0.25 秒。それより後には書き出すフレームが無い
+    _with_thumbnail(project, "loop.gif", "size = [90, 90]\nat = 0.4")
+    result = runner.invoke(app, ["thumbnail", "-C", str(project), "--bg-only"])
+    assert result.exit_code == 1
+    assert "何も書き出しませんでした" in result.output
+    assert list((project / "build/thumbnail/bg").glob("*.png")) == []
+
+
+def test_thumbnail_name_selection(project: Path) -> None:
+    _with_thumbnail(project)
+    result = runner.invoke(app, ["thumbnail", "-C", str(project), "--name", "square"])
+    assert result.exit_code == 1
+    assert "main" in result.output
+
+    (project / "utavideo.toml").write_text(TOML.format(background="bg.png"), encoding="utf-8")
+    empty = runner.invoke(app, ["thumbnail", "-C", str(project)])
+    assert empty.exit_code == 1
+    assert "[[thumbnails]]" in empty.output
+
+
+def test_check_warns_about_thumbnail_lines_not_drawn(project: Path) -> None:
+    _with_thumbnail(project)
+    ass = project / "src/thumbnail.ass"
+    ass.write_text(
+        ass.read_text(encoding="utf-8").replace("0:00:00.00,9:59", "0:00:01.00,9:59"), encoding="utf-8"
+    )
+    output = invoke("check", "-C", str(project)).output
+    assert "サムネイル main: 0 秒に表示されない行" in output

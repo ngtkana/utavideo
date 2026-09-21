@@ -20,6 +20,7 @@ size = [1920, 1080]        # src/lyrics.ass の PlayRes と同じにする
 fps = 30
 crf = 18
 fit = "cover"              # cover: はみ出しを切る / contain: 余白を pad_color で埋める
+focus = [0.5, 0.5]         # 縦横比が違う背景のどこを残すか（[横, 縦] を 0〜1。[0, 0] は左上）
 scale_flags = "lanczos"    # ドット絵をくっきり拡大するなら "neighbor"
 
 [lyrics]
@@ -31,6 +32,14 @@ fade_ms = [150, 150]       # \fad が無い行に自動で付ける（[0, 0] で
 # 改行は \N（TOML では "\\N" と書く）。例: text = "{label}\\N{title} / {artist}"
 style = "Title"
 text = "{title} / {artist}"
+
+[[thumbnails]]
+# サムネイル（utavideo thumbnail → build/thumbnail/main.png）。サイズ違いは [[thumbnails]] を並べる
+name = "main"
+file = "src/thumbnail.ass"  # 文字を組む .ass（Aegisub で編集）
+# size = [1080, 1080]      # 省略時は video.size
+# at = "1:23.5"            # 背景が GIF・動画のとき、使うフレームの時刻（省略時は 0）
+# focus = [0.5, 0.5]       # 省略時は video.focus
 
 [description]
 # 概要欄とタイトル（utavideo description）。見出しなどの書式はユーザー設定で変える

@@ -16,9 +16,10 @@
 - `description.py`：クレジット・素材から概要欄とタイトルを組み立てる
 - `announce.py`：投稿した動画の URL と曲の情報から SNS（X）の告知文を組み立て、URL・ハッシュタグ・長さを検査する
 - `fonts.py`：fontTools でフォント名→ファイルの対応表を作る。必要なファイルだけのリンク集を libass の fontsdir に渡す
+- `timecode.py`：設定に書く時刻（`"M:SS(.fff)"` か秒の数）の読み取り
 - `layout.py`：行の幅を概算して、はみ出しそうな行を警告する（libass は空白の無い日本語を自動改行しない）
 - `inputs.py`：`build` の入力（素材の中身・印の無い設定・フォントの stat）を記録し、`release` で比べる
-- `graph.py`：ffmpeg の引数を組み立てる純粋関数。`ffmpeg.py` が実行する
+- `graph.py`：ffmpeg の引数（動画と、サムネイルの1枚の PNG）を組み立てる純粋関数。`ffmpeg.py` が実行する
 - `templates/`：`new` / `init` が書き出す雛形と、`sample` が書き出す見本（`sample*`）
 
 ## 約束

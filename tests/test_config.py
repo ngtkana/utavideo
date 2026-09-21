@@ -125,6 +125,80 @@ def test_hashtags_are_written_without_hash(tmp_path: Path) -> None:
         load_project_config(_write(tmp_path, MINIMAL + '[description]\nhashtags = ["#歌ってみた"]\n'))
 
 
+THUMBNAILS = """
+[[thumbnails]]
+name = "main"
+file = "src/thumbnail.ass"
+"""
+
+
+def test_focus_defaults_to_center_and_thumbnails_inherit_video(tmp_path: Path) -> None:
+    config = load_project_config(_write(tmp_path, MINIMAL + THUMBNAILS))
+    assert config.video.focus == (0.5, 0.5)
+    (thumbnail,) = config.thumbnails
+    assert (thumbnail.size, thumbnail.at, thumbnail.focus) == (None, None, None)
+
+
+def test_config_without_thumbnails_still_loads(tmp_path: Path) -> None:
+    assert load_project_config(_write(tmp_path, MINIMAL)).thumbnails == ()
+
+
+def test_thumbnail_fields(tmp_path: Path) -> None:
+    text = (
+        MINIMAL.replace("[video]\n", "[video]\nfocus = [1, 0]\n")
+        + THUMBNAILS
+        + (
+            'at = "1:23.5"\nsize = [1081, 1081]\nfocus = [0.25, 1.0]\n'
+            '[[thumbnails]]\nname = "square"\nfile = "a.ass"\nat = 2\n'
+        )
+    )
+    config = load_project_config(_write(tmp_path, text))
+    assert config.video.focus == (1.0, 0.0)
+    main, square = config.thumbnails
+    assert (main.at, main.size, main.focus) == (83.5, (1081, 1081), (0.25, 1.0))  # 奇数でもよい
+    assert square.at == 2.0
+
+
+@pytest.mark.parametrize(
+    ("extra", "location"),
+    [
+        ("focus = [1.5, 0.5]", "video.focus"),
+        ("focus = [-0.1, 0.5]", "video.focus"),
+        ("focus = [true, 0.5]", "video.focus"),
+        ("focus = [0.5]", "video.focus"),
+        ('focus = ["0.5", 0.5]', "video.focus"),
+    ],
+)
+def test_focus_is_validated(tmp_path: Path, extra: str, location: str) -> None:
+    with pytest.raises(ConfigError, match=location.replace(".", r"\.")):
+        load_project_config(_write(tmp_path, MINIMAL + extra + "\n"))
+
+
+@pytest.mark.parametrize(
+    ("thumbnail", "message"),
+    [
+        ('at = "83.5"', "M:SS"),
+        ("at = -1", "0 以上"),
+        ('name = "CON"', "予約語"),
+        ('name = "a/b"', "使えない文字"),
+        ('name = "main.partial"', "partial"),
+        ("focus = [2, 0]", r"thumbnails\.0\.focus"),
+        ("size = [0, 100]", r"thumbnails\.0\.size"),
+    ],
+)
+def test_thumbnail_values_are_validated(tmp_path: Path, thumbnail: str, message: str) -> None:
+    key = thumbnail.split(" ")[0]
+    lines = [line for line in THUMBNAILS.strip().splitlines() if not line.startswith(f"{key} ")]
+    with pytest.raises(ConfigError, match=message):
+        load_project_config(_write(tmp_path, MINIMAL + "\n".join([*lines, thumbnail]) + "\n"))
+
+
+def test_thumbnail_names_must_differ_ignoring_case(tmp_path: Path) -> None:
+    text = MINIMAL + THUMBNAILS + THUMBNAILS.replace('"main"', '"Main"')
+    with pytest.raises(ConfigError, match=r"重複.*Main"):
+        load_project_config(_write(tmp_path, text))
+
+
 def _fields(model: type[BaseModel], prefix: str = "") -> tuple[set[str], set[str]]:
     """(印の無い末端の項目, 印の付いた項目) をドット区切りで。"""
     unmarked: set[str] = set()
@@ -163,6 +237,7 @@ def test_settings_marked_as_not_rendered() -> None:
         "credits",
         "materials",
         "description",
+        "thumbnails",
         "uploads",
         "announce",
     }

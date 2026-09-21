@@ -1,11 +1,14 @@
-"""new / init の引数と既定値、検査のメッセージ。"""
+"""new / init の引数と既定値、サムネイルの検査、検査のメッセージ。"""
 
 from pathlib import Path
 
+import pytest
 from typer.testing import CliRunner
 
-from utavideo.cli import _font_missing_message, app
+from utavideo.cli import _font_missing_message, analyze_thumbnails, app
 from utavideo.config import load_project_config
+from utavideo.ffmpeg import FFmpegError
+from utavideo.project import Project
 
 runner = CliRunner()
 
@@ -68,6 +71,47 @@ def test_new_says_nothing_extra_for_a_dated_folder(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "ヒント" not in result.output
+
+
+def test_init_in_a_configured_folder_explains_how_to_add_a_thumbnail(tmp_path: Path) -> None:
+    root = tmp_path / "20260916-song"
+    assert runner.invoke(app, ["new", str(root)]).exit_code == 0
+    config = (root / "utavideo.toml").read_text(encoding="utf-8")
+    (root / "src/thumbnail.ass").unlink()
+
+    # [[thumbnails]] がある曲では、案内しない
+    result = runner.invoke(app, ["init", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "[[thumbnails]]" not in result.output
+    assert not (root / "src/thumbnail.ass").exists()
+
+    (root / "utavideo.toml").write_text(config.split("[[thumbnails]]")[0], encoding="utf-8")
+    result = runner.invoke(app, ["init", str(root)])
+    assert result.exit_code == 0, result.output
+    assert "[[thumbnails]]" in result.output
+    assert not (root / "src/thumbnail.ass").exists()
+
+
+def test_unreadable_background_becomes_an_issue_instead_of_stopping(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "utavideo.toml").write_text(
+        '[song]\ntitle = "曲"\n[audio]\nfile = "a.wav"\n[video]\nbackground = "bg.mp4"\n'
+        '[[thumbnails]]\nname = "main"\nfile = "t.ass"\nat = "0:01"\n',
+        encoding="utf-8",
+    )
+    (tmp_path / "bg.mp4").write_bytes(b"not a video")
+
+    def unreadable(path: Path) -> float:
+        raise FFmpegError(f"{path} を読めません")
+
+    monkeypatch.setattr("utavideo.cli.probe_duration", unreadable)
+    project = Project.load(tmp_path)
+    issues = analyze_thumbnails(project, project.config.thumbnails, bg_only=True).issues
+
+    # 背景の長さの警告を重ねず、読めないエラーを1件だけ出す
+    assert len(issues) == 1
+    assert issues[0].level == "error" and "を読めません" in issues[0].message
 
 
 def test_missing_font_message_points_at_the_font_name_for_a_file_name() -> None:
