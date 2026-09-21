@@ -8,8 +8,6 @@ cd utavideo
 uv tool install --editable .   # utavideo コマンドが手元のコードで動く
 ```
 
-Node.js を別に入れる必要はありません。`uv run pyright` が使う Node は、開発依存の `pyright[nodejs]` として PyPI から入ります。
-
 ## 確認
 
 commit の前に通してください。CI（`.github/workflows/ci.yml`）も同じ確認をします（format は `--check` で実行）。変わったのが `docs/`・`README.md`・`CONTRIBUTING.md`・`CLAUDE.md` だけなら、CI は `tests/test_docs.py` だけを実行します。
@@ -18,6 +16,7 @@ commit の前に通してください。CI（`.github/workflows/ci.yml`）も同
 uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
 ```
 
+- `uv run pyright` が使う Node.js は、開発依存の `pyright[nodejs]` として PyPI から入る（別に入れる必要はない。手元に Node.js があってもこちらを使うので、`.venv` が約 200 MiB 増える）
 - `tests/test_render.py` は ffmpeg で実際に書き出す（ffmpeg が無ければスキップ）
 - `tests/test_docs.py` は、コマンドのオプション・設定項目・環境変数がドキュメントに載っているか、文書内のリンクが切れていないかを確かめる
 
