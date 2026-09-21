@@ -4,9 +4,10 @@
 
 背景（画像・GIF・動画）＋ 歌詞 ＋ 曲名表示 ＋ 音声の動画を書き出す。
 
-- コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `thumbnail` / `description` / `release`
+- コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `thumbnail` / `description` / `release` / `announce`
 - `check`: 設定・素材・スタイル・フォントの検査、行の重なり・`\pos`・はみ出しの警告
 - 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定）
+- 告知文: 投稿した動画の URL（`[[uploads]]`）と曲の情報から SNS（X）の告知文を作り、URL の形・ハッシュタグ・X での長さを検査する
 
 - サムネイル: 背景のフレーム（`at`）にサムネイル用の .ass を描いた PNG。サイズ違いは `[[thumbnails]]` を並べる。背景の残す位置（`focus`）は動画にも効く
 - 縦型のショート（1段目）: `vertical-ass` で本編の .ass から縦用 .ass を作る（大きさ・座標の変換）。`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う .ass をエラーにする
@@ -17,7 +18,8 @@
 
 ### 概要欄の文章（続き）
 
-- 通し番号、前後の動画へのリンク、他サイト版へのリンク（他の曲フォルダの情報や投稿後に決まる URL が要る。手で書くと番号や URL を間違えやすい）
+- 通し番号、前後の動画へのリンク（他の曲フォルダの情報が要る。手で書くと番号や URL を間違えやすい）
+- 他サイト版へのリンク（告知文と同じ `[[uploads]]` の URL を使う）
 - よく使う素材をユーザー設定に登録し、名前で参照する
 
 ### アバターの合成

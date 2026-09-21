@@ -17,7 +17,7 @@ from typing import Any
 import pysubs2
 from fontTools.ttLib import TTCollection, TTFont
 
-from utavideo import subs
+from utavideo import fonts, subs
 
 _WRAP_TAG = re.compile(r"\\q([0-3])")
 # 幅に効く上書きタグ。\fs が \fscx・\fsp を先取りしないよう、長いものを前に置く
@@ -188,8 +188,8 @@ def overflows(script: pysubs2.SSAFile, lookup: Callable[[str], Sequence[Path]]) 
 
 
 def _has_name(font: TTFont, family: str) -> bool:
-    target = family.casefold()
+    target = fonts.match_key(family)
     return any(
-        record.nameID in _NAME_IDS and record.toUnicode(errors="ignore").strip().casefold() == target
+        record.nameID in _NAME_IDS and fonts.match_key(record.toUnicode(errors="ignore").strip()) == target
         for record in font["name"].names
     )

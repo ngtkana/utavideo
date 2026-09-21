@@ -4,8 +4,9 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`description`・`release`・`vertical-ass` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail` には ffmpeg と ffprobe が必要です
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`description`・`release`・`announce`・`vertical-ass` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
+- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
@@ -48,6 +49,38 @@ utavideo init [<フォルダ>] [--title <曲名>] [--artist <名前>] [--slug <�
 
 `src/`（`src/ref/` を除く）に音源と背景がちょうど1つずつあれば、`utavideo.toml` の `audio.file`・`video.background` に設定します。対象の拡張子は、音源が wav / flac / mp3 / m4a / aac / ogg / opus、背景が [config-reference.md](config-reference.md#video) の `background` と同じです。
 
+## sample
+
+```sh
+utavideo sample <パス> [--font <フォント名>] [--small]
+```
+
+動作確認用の見本の曲フォルダを作ります。素材をその場で合成するので、自分の曲を用意する前に一通りのコマンドを試せます。`new` が空の雛形（素材は自分で置く）なのに対して、`sample` は素材入りで、作った直後から書き出せます。
+
+| オプション | 既定値 | 内容 |
+|---|---|---|
+| `<パス>` | 必須 | 作る見本の曲フォルダのパス。既にあるとエラー（作り直すときはフォルダごと消す） |
+| `--font` | 合成フォント | 歌詞に使う実在のフォント名 |
+| `--small` | 無効 | 小さく速く作る（640x360・10fps・ultrafast）。テストと CI 用 |
+
+作るものは 1920x1080・30fps・36 秒で、合計 2MB 程度です。途中で失敗したときは、作りかけのフォルダを消してから終わるので、同じパスでやり直せます。
+
+| ファイル | 内容 |
+|---|---|
+| `utavideo.toml` | 架空の曲名・クレジット・素材。背景の変え方はコメントに書いてある |
+| `src/lyrics.ass` | 歌詞。警告の出る行がわざと入っている（下記） |
+| `src/mix/sample-v1.0.flac` | 4 秒ごとに 220Hz ずつ高くなる合成音（220Hz から 9 段）。同じ高さが出てこないので、どこを切り出したか、どこでフェードしたかが耳で分かる |
+| `src/bg/loop.mp4` | カラーバー ＋ 5 秒で画面を横断する白い箱。背景の繰り返しが目で分かる |
+| `src/bg/still.png` | 4:3 のカラーバー（静止画）。`video.fit` を `"cover"`（上下が切り取られる）と `"contain"`（左右に余白が出る）で見比べられる |
+| `src/bg/loop.gif` | `loop.mp4` と同じ絵の GIF（480x270・2 秒）。GIF の背景と、拡大の効き方を試す用 |
+| `src/fonts/UtavideoSample.ttf` | 合成フォント（`--font` を渡したときは作らない） |
+| `README.md` | 試すコマンドの一覧 |
+
+- 合成フォントを使うときは、見本の曲フォルダで `UTAVIDEO_FONT_DIRS=src/fonts utavideo check` のように、コマンドごとに場所を渡します（`UTAVIDEO_FONT_DIRS` は探す場所を置き換えるので、`export` すると同じシェルで自分の曲に戻ったときに自分のフォントが見つかりません）
+- 合成フォントはどの文字も四角で描くので、書体や仕上がりは確かめられません。見栄えを見るときは `--font` に手元のフォント名を渡します
+- 見本は `check` で**警告が 2 件**出ます。警告の出方も見せるためで、`\pos` / `\move` を使っている行が 2 行と、空白も `\N` も無い長い行が 1 行入っています。はみ出しの警告は行の幅の概算から出すので、`--font` に細いフォントを渡すと出なくなることがあります
+- 要らなくなったらフォルダごと消します
+
 ## check
 
 ```sh
@@ -75,6 +108,7 @@ utavideo overlay [-C <曲フォルダ>]
 - `preview-bg` は、歌詞の行についての検査を行いません
 - 動画の長さは音源の長さです
 - 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass`・`vertical-preview.ass` に書きます（自動のフェードと曲名表示が入ったもの）
+- `build` は、書き出しに成功した後、使った入力の記録を `build/.work/main-inputs.json` に書きます（[release](#release) が比べる）。書き出しを始める前に前の記録を消すので、途中で止まったときは記録が残りません
 
 `--vertical` は、Aegisub でショートの区間を置き、縦用 .ass を組むときに開く下敷きを、曲の頭から終わりまで書き出します。
 
@@ -169,7 +203,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | オプション | 既定値 | 内容 |
 |---|---|---|
 | `--version` | 音源のファイル名から（規則は [project-layout.md](project-layout.md#名前の付け方)） | 音源のバージョン。`v1.2` の形（小文字の `v`）。何本目かは指定できない |
-| `--allow-stale` | 無効 | 入力が `build/main.mp4` より新しくてもコピーする |
+| `--allow-stale` | 無効 | `build` の後に入力が変わっていてもコピーする |
 
 次のときは止まります。
 
@@ -177,7 +211,56 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 - 音源のバージョンが決まらない、または `vX.Y` の形でない
 - 同じ音源のバージョンで、`build/main.mp4` と中身が同じ動画を既に公開している
 - 同じ名前の `.mp4` が `release/` にある（上書きしない）
-- `utavideo.toml`・音源・背景・歌詞のどれかが `build/main.mp4` より新しい（`--allow-stale` で無視）。ファイルの更新時刻で比べるので、`build` の後に `utavideo.toml` の動画に効かない項目（`[[thumbnails]]`・`[description]`・`[[credits]]` など）だけを変えたときも止まります。このときは `--allow-stale` を付けます
+- `build` の後に、描画に効く入力が変わった（`--allow-stale` で無視）。変わった入力の名前を表示します
+
+描画に効く入力は、`build` が記録したときと次のように比べます。
+
+| 入力 | 比べるもの |
+|---|---|
+| 音源・背景・歌詞（`audio.file`・`video.background`・`lyrics.file`） | ファイルの中身 |
+| `utavideo.toml` | 読み込んだ値から、描画に効かない項目（`song.slug`・`song.original_urls`・`[[credits]]`・`[[materials]]`・`[description]`・`[[uploads]]`・`[announce]`）を除いたもの。コメント・並び順・書き方の違いは比べない。`song.title`・`song.artist`・`song.label` は曲名表示に使えるので比べる |
+| フォント | 使ったフォントファイルのパス・大きさ・更新時刻（中身は読まない） |
+
+- 保存し直しただけのときや、`build` の後に概要欄の項目だけを変えたときは止まりません
+- 記録が無いとき（記録を始める前の版の `build`）や、記録の後に `build/main.mp4` が差し替わっているときは、`utavideo.toml`・音源・背景・歌詞のどれかの更新時刻が `build/main.mp4` より新しいと止まります
+- フォントは、`build` で使ったファイルだけを見ます。同じ名前のフォントを別の場所に足して、使われるファイルが変わっても気付きません
+
+## announce
+
+```sh
+utavideo announce [-C <曲フォルダ>]
+```
+
+`utavideo.toml` の曲の情報・`[announce]`・`[[uploads]]` の URL から、SNS の告知文を `build/announce.txt` に書き出し、画面にも表示します。X の数え方での長さも表示します。書式はユーザー設定で決まります（[config-reference.md](config-reference.md#ユーザー設定の-announce)）。
+
+- 書き出す前に[告知文の検査](#検査項目)をします。エラーがあれば `build/announce.txt` を書かず、終了コード 1 で止まります（`description` と違い、誤った URL の告知文を投稿しないため）。警告だけなら書き出します
+- `[[uploads]]` が無いときは「リンクがありません」と警告し、リンクの無い下書きを書き出します（投稿前に文章だけ作れます）。`check` はこの警告を出しません
+- URL を開いて確かめることはしません（動画の公開と告知を同時に予約できるように）
+- ffmpeg は使いません
+
+### 受け付ける URL
+
+サイトは URL のホストで判定します。ホストは完全一致か、そのサブドメインで比べます（`youtube.com.example` は通しません）。`https://` で始まらない URL はエラーです。
+
+| サイト（`sites` のキー） | ホスト | 受け付ける形 |
+|---|---|---|
+| `youtube` | `youtube.com`・`*.youtube.com`・`youtu.be` | `/watch?v=ID`・`youtu.be/ID`。ID は `[A-Za-z0-9_-]` の 11 文字。`si` などの共有用のパラメータは無視する。`t`・`list`（`#t=30` のような fragment の `t` も）が付いていたら警告（動画の頭から再生されない）。`/shorts/`・`/live/` などはエラー |
+| `niconico` | `nicovideo.jp`・`*.nicovideo.jp`・`nico.ms` | `/watch/ID`・`nico.ms/ID`。ID は `sm`・`so`・`nm` と数字。`from` が付いていたら警告（動画の頭から再生されない）。ほかのパラメータは無視する |
+
+リンクは、ユーザー設定の `announce.sites` に書いた順に並べます。同じサイトの URL が2つあるとき、`sites` に無いサイトの URL があるときはエラーです（メッセージに `sites` に足す行の例を出します）。
+
+### ハッシュタグ
+
+X（twitter-text）でハッシュタグとしてつながる文字は、文字・結合文字・数字と、`_`・`・`・`〜`・`～`・`゛`・`゜`・`゠`・`〃`・`·` など一部の記号だけです。`[announce].hashtags` に `-`・`.`・`!`・`&`・`'`・`♪` などそれ以外の文字があるとき（そこでタグが切れる）と、文字を1つも含まない（数字や `_` だけの）ときはエラーです。
+
+### 長さの数え方
+
+[twitter-text の config/v3.json](https://github.com/twitter/twitter-text/blob/master/config/v3.json) の規則で数えます（[検証記録](verification/20260917-announce.md)）。
+
+- 書き出す全文から末尾の改行を除き、NFC に正規化してから数えます
+- 1文字（コードポイント）の重みは 2 です。U+0000–U+10FF・U+2000–U+200D・U+2010–U+201F・U+2032–U+2037 だけ 1 です（`»` と改行は 1、`【】『』・…` と全角空白は 2）
+- URL は長さによらず 23 です。`https://`・`http://` で始まるものと、`example.com` のようなスキームの無いドメインを URL とみなします。スキームの無いものは、TLD が twitter-text の一覧にあるときだけ URL とみなします（`Mr.Children`・`feat.Ado` は URL ではない）。`text` に手で書いた URL も数えます。URL の形の細かい判定（使える文字・パスの終わり）は twitter-text より簡易です
+- X は ZWJ でつないだ絵文字や肌の色の付いた絵文字を1つで 2 と数えますが、utavideo は部品ごとに数えるので多めになります（上限を超えない側に倒れます）
 
 ## 検査項目
 
@@ -185,7 +268,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 
 | 対象 | 内容 |
 |---|---|
-| 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある（`[[thumbnails]]` の `name` の文字・重複、`focus` の範囲、`at` の書式を含む）。ユーザー設定も同じ |
+| 設定 | `utavideo.toml` が無い、TOML の構文が不正、未知の項目や不正な値がある（`[[thumbnails]]` の `name` の文字・重複、`focus` の範囲、`at` の書式、ハッシュタグの重複、`announce.order` の `""` 以外の重複、`announce.sites` の知らないキーを含む）。ユーザー設定も同じ |
 | 素材 | `audio.file`・`lyrics.file`・`video.background`（`overlay` では不要）のファイルが無い、背景の形式に対応していない、音源に音声が入っていない |
 | 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって縦横比が PlayRes と違う（文字が潰れて描かれる。縦横比が同じで大きさだけ違うのは問題ない）、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
@@ -194,7 +277,8 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイルを使っている、フォントが見つからない |
 | 縦用 .ass・ショートの区間 | [ショートの検査](#ショートの検査) |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
-| 実行環境 | ffmpeg・ffprobe が無い |
+| 告知文（`announce`、`[announce]` がある曲の `check`） | ユーザー設定の `announce.work`・`announce.link` の書式が不正、`[[uploads]]` の URL が[受け付ける形](#受け付ける-url)でない・同じサイトが2つある・サイトが `announce.sites` に無い、`[announce].hashtags` に [X でタグが切れる文字](#ハッシュタグ)がある |
+| 実行環境 | ffmpeg で `subtitles` フィルタ（libass）が使えない（ffmpeg・ffprobe が無いときは検査を始める前に止まります） |
 
 ### 警告
 
@@ -206,6 +290,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | 縦用 .ass・ショートの区間 | [ショートの検査](#ショートの検査) |
 | `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空、本編の .ass にスタイル `Short` の行がある（区間は縦用 .ass に書く） |
 | 概要欄（`[description]` がある曲の `check`） | `video.background` がどの `materials.files` にも無い、`materials.files` のファイルが無い、タイトルの `{singers}` に入る人がいない、タイトルが 100 文字・概要欄が 5000 バイトを超える、`<` か `>` を含む（YouTube の上限） |
+| 告知文（`announce`、`[announce]` がある曲の `check`） | `[[uploads]]` が無い（`announce` だけ）、URL に動画の頭から再生されないパラメータが付いている（[受け付ける URL](#受け付ける-url)）、`work` の `{singers}` に入る人がいない、[長さ](#長さの数え方)が `announce.max_weight` を超える |
 
 はみ出しの概算で反映するタグは [customization.md](customization.md#utavideo-が読むタグ) を参照してください。
 
@@ -229,7 +314,8 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 - 区間の行は、スタイル `Short` の行で、本文の前後の空白を除いたものを `name` と大文字小文字も含めて比べます
 - 歌詞の行は、Dialogue 行のうち、スタイルが `Short` でも `Vertical` で始まるもの（`VerticalBand` など、縦だけの文字）でもない行です
 - 区間に入る行は、区間と時刻が重なる Dialogue 行（`Short` を除く）です。区間の外の行（本編から写したまま使わない行）は、行ごとの検査をしません
-- 区間の長さ・音源の長さを確かめられない区間（区間の行の誤り、音源が無いとき）では、区間の端と区間に入る行の検査をしません
+- 区間の行が無い・2つ以上ある・区間の終わりが始まり以前・区間の終わりが音源の長さを超える区間では、区間の端と区間に入る行の検査をしません（区間の行が Dialogue になっているだけなら、エラーを出したうえで検査します）
+- 音源の長さが分からないとき（音源が無い・読めない）は、音源の長さとの比較と、区間に入る行の検査をしません。区間の端の検査はします
 
 #### 本編との突き合わせ
 
