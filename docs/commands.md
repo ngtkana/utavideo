@@ -146,7 +146,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | 入力 | 比べるもの |
 |---|---|
 | 音源・背景・歌詞（`audio.file`・`video.background`・`lyrics.file`） | ファイルの中身 |
-| `utavideo.toml` | 読み込んだ値から、描画に効かない項目（`song.slug`・`song.original_urls`・`[[credits]]`・`[[materials]]`・`[description]`）を除いたもの。コメント・並び順・書き方の違いは比べない。`song.title`・`song.artist`・`song.label` は曲名表示に使えるので比べる |
+| `utavideo.toml` | 読み込んだ値から、描画に効かない項目（`song.slug`・`song.original_urls`・`[[credits]]`・`[[materials]]`・`[description]`・`[[uploads]]`・`[announce]`）を除いたもの。コメント・並び順・書き方の違いは比べない。`song.title`・`song.artist`・`song.label` は曲名表示に使えるので比べる |
 | フォント | 使ったフォントファイルのパス・大きさ・更新時刻（中身は読まない） |
 
 - 保存し直しただけのときや、`build` の後に概要欄の項目だけを変えたときは止まりません
