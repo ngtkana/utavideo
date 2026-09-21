@@ -74,8 +74,22 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | 探す場所（全曲） | ユーザー設定の `font_dirs`（書くと既定の場所は探さない） |
 | 探す場所（その場だけ） | 環境変数 `UTAVIDEO_FONT_DIRS`（`:` 区切り。`font_dirs` より優先） |
 | 曲フォルダのフォント | `UTAVIDEO_FONT_DIRS=./fonts utavideo build`（相対パスは実行した場所から） |
-| 名前の照合 | ファミリー名・フルネーム・PostScript 名・タイプグラフィック・ファミリー名と、大文字小文字を区別せずに照合。同じ名前のファイルはすべて libass に渡す |
+| 名前の照合 | ファミリー名・フルネーム・PostScript 名・タイプグラフィック・ファミリー名と、大文字小文字と Unicode の正規化（NFC / NFD）の違いを区別せずに照合。同じ名前のファイルはすべて libass に渡す |
+| 描画のときの名前 | libass は名前をそのまま比べるので、書き出しに使う .ass ではフォント名をフォントファイルが実際に持つ表記に揃える（一律 NFC にはしない。macOS で名前をコピーすると NFD になりやすいが、フォント側の表記に合わせるので正しく描ける。元の .ass は変えない） |
+| 使える名前を調べる | 下のコマンド（`.ass` に書くのはフォント名です。`.ttc` などのファイル名ではありません） |
 | 一覧を作り直す | `~/.cache/utavideo/` を消す |
+
+フォントのあるディレクトリ（最後の引数）から、指定できる名前を並べます。
+
+```sh
+uv run --with git+https://github.com/ngtkana/utavideo python -c '
+import sys
+from pathlib import Path
+from utavideo.fonts import iter_font_files, read_font_names
+for path in iter_font_files([Path(sys.argv[1])]):
+    print(path.name, "|", ", ".join(sorted(read_font_names(path))))
+' ~/Library/Fonts
+```
 
 Aegisub で同じ見た目にするには、Aegisub 側にもフォントをインストールします。
 
