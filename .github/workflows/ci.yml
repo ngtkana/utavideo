@@ -47,7 +47,10 @@ jobs:
         run: uv run ruff check
       - if: steps.scope.outputs.full != 'false'
         run: uv run pyright
+      # 幅の固定（tests/conftest.py）から漏れたコンソールが増えたら、この狭い幅で落ちる
       - if: steps.scope.outputs.full != 'false'
         run: uv run pytest
+        env:
+          COLUMNS: "40"
       - if: steps.scope.outputs.full == 'false'
         run: uv run pytest tests/test_docs.py
