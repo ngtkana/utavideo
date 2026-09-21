@@ -35,9 +35,14 @@ def _time(ms: int) -> str:
     return pysubs2.time.ms_to_str(ms, fractions=True)
 
 
+def _is_vertical_only(event: pysubs2.SSAEvent) -> bool:
+    """縦だけの文字（帯の曲名など）の行か。blur ではこの行だけを描く。"""
+    return event.style.startswith(VERTICAL_STYLE_PREFIX)
+
+
 def _is_lyric_line(event: pysubs2.SSAEvent) -> bool:
     """区間の行と縦だけの文字を除いた、歌詞の行か（Dialogue かどうかは問わない）。"""
-    return event.style != SHORT_STYLE and not event.style.startswith(VERTICAL_STYLE_PREFIX)
+    return event.style != SHORT_STYLE and not _is_vertical_only(event)
 
 
 def check_sections(
@@ -67,7 +72,6 @@ def check_sections(
         lines.setdefault(event.text.strip(), []).append(event)
 
     sections: list[Section] = []
-    lyric_lines = [e for e in subs.dialogues(script) if _is_lyric_line(e)]
     for name in names:
         found = lines.get(name, [])
         prefix = f"ショート {name}: "
@@ -90,7 +94,6 @@ def check_sections(
             issues.append(Issue("error", prefix + message))
         else:
             sections.append(section)
-            issues += subs.prefixed(_edge_issues(lyric_lines, section), prefix)
 
     unused = [e for name, found in lines.items() if name not in names for e in found]
     if unused and report_unused:
@@ -99,11 +102,19 @@ def check_sections(
     return SectionCheck(issues, sections)
 
 
-def _edge_issues(lyric_lines: list[pysubs2.SSAEvent], section: Section) -> list[Issue]:
-    """区間の頭・終わりが、歌詞の行の途中にかかっているときの警告。"""
+def lyric_lines(script: pysubs2.SSAFile) -> list[pysubs2.SSAEvent]:
+    """画面に出る歌詞の行（区間の行と縦だけの文字を除いた Dialogue 行）。"""
+    return [e for e in subs.dialogues(script) if _is_lyric_line(e)]
+
+
+def edge_issues(lines: list[pysubs2.SSAEvent], section: Section) -> list[Issue]:
+    """区間の頭・終わりが、歌詞の行の途中にかかっているときの警告。
+
+    lines は、その区間で画面に出る歌詞の行（reframe は縦用 .ass、blur は本編の .ass のもの）。
+    """
     issues: list[Issue] = []
     for label, at in (("頭", section.start_ms), ("終わり", section.end_ms)):
-        for event in lyric_lines:
+        for event in lines:
             if event.start < at < event.end:
                 message = (
                     f"区間の{label}（{_time(at)}）が歌詞の行の途中にかかっています: "
@@ -184,14 +195,21 @@ def _in_sections(event: pysubs2.SSAEvent, sections: Sequence[Section]) -> bool:
     return any(event.start < s.end_ms and event.end > s.start_ms for s in sections)
 
 
-def lines_in_sections(script: pysubs2.SSAFile, sections: Sequence[Section]) -> pysubs2.SSAFile:
-    """区間と時刻が重なる、描く行（区間の行を除く Dialogue 行）だけを残した複製。"""
+def draws(event: pysubs2.SSAEvent, sections: Sequence[Section], *, vertical_only: bool = False) -> bool:
+    """その区間で画面に描く行か（区間と時刻が重なり、区間の行ではない）。
+
+    vertical_only は blur のとき。歌詞は本編の映像に入っているので、縦だけの文字だけを描く。
+    """
+    drawn = _is_vertical_only(event) if vertical_only else event.style != SHORT_STYLE
+    return drawn and _in_sections(event, sections)
+
+
+def lines_in_sections(
+    script: pysubs2.SSAFile, sections: Sequence[Section], *, vertical_only: bool = False
+) -> pysubs2.SSAFile:
+    """区間で描く行（Dialogue 行）だけを残した複製。"""
     selected = subs.without_events(script)
-    selected.events = [
-        event
-        for event in subs.dialogues(script)
-        if event.style != SHORT_STYLE and _in_sections(event, sections)
-    ]
+    selected.events = [e for e in subs.dialogues(script) if draws(e, sections, vertical_only=vertical_only)]
     return selected
 
 

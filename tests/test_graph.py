@@ -3,7 +3,15 @@ from pathlib import Path
 
 import pytest
 
-from utavideo.graph import Clip, RenderSpec, StillSpec, build_args, build_still_args, escape_filter_arg
+from utavideo.graph import (
+    Clip,
+    Frame,
+    RenderSpec,
+    StillSpec,
+    build_args,
+    build_still_args,
+    escape_filter_arg,
+)
 
 SPEC = RenderSpec(
     mode="final",
@@ -38,9 +46,9 @@ def test_final_args() -> None:
     assert _contains(args, ["-loop", "1", "-framerate", "30", "-i", "/a/bg.png"])
     assert _contains(args, ["-i", "/a/mix v1.0.wav"])
     assert _filter(args) == (
-        "[0:v]scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,"
+        "[0:v]fps=30,scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,"
         "crop=1920:1080:(iw-ow)*0.5:(ih-oh)*0.5,"
-        "setsar=1,fps=30,format=rgb24,subtitles=filename=/w/final.ass:fontsdir=/c/fonts,"
+        "setsar=1,format=rgb24,subtitles=filename=/w/final.ass:fontsdir=/c/fonts,"
         "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[v]"
     )
     assert _contains(args, ["-c:v", "libx264", "-preset", "slow", "-crf", "18"])
@@ -150,3 +158,45 @@ def test_clip_without_fades_has_no_afade() -> None:
 def test_clip_is_rejected_in_overlay_mode() -> None:
     with pytest.raises(ValueError, match="overlay"):
         build_args(replace(CLIP_SPEC, mode="overlay"))
+
+
+BLUR_SPEC = replace(
+    SPEC,
+    size=(1080, 1920),
+    subtitles=Path("/w/vertical.ass"),
+    focus=(0.5, 1.0),
+    frame=Frame(size=(1920, 1080), focus=(0.5, 0.5), subtitles=Path("/w/main.ass"), frame_y=0.25),
+)
+
+
+def test_blur_puts_the_main_video_on_a_blurred_band() -> None:
+    parts = _filter(build_args(BLUR_SPEC)).split(";")
+    # コマを合わせるのは split の前で1回だけ
+    assert parts[0] == "[0:v]fps=30,split[band][frame]"
+    # 帯ははじめから 1/4 の大きさに合わせてぼかし、最後に戻す（focus は帯の切り取りに効く）
+    assert parts[1] == (
+        "[band]scale=270:480:force_original_aspect_ratio=increase:flags=area,"
+        "crop=270:480:(iw-ow)*0.5:(ih-oh)*1,setsar=1,format=rgb24,"
+        "gblur=sigma=10,scale=1080:1920:flags=bilinear[bg]"
+    )
+    # 真ん中は本編と同じ画面に本編の .ass を描いてから、幅いっぱいに縮める
+    assert parts[2] == (
+        "[frame]scale=1920:1080:force_original_aspect_ratio=increase:flags=lanczos,"
+        "crop=1920:1080:(iw-ow)*0.5:(ih-oh)*0.5,setsar=1,format=rgb24,"
+        "subtitles=filename=/w/main.ass:fontsdir=/c/fonts,scale=1080:608:flags=lanczos[fg]"
+    )
+    # 重ねてから縦用 .ass を描く。RGB のまま合成してから YUV にする
+    assert parts[3] == (
+        "[bg][fg]overlay=y=(H-h)*0.25:format=rgb,"
+        "subtitles=filename=/w/vertical.ass:fontsdir=/c/fonts,"
+        "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[v]"
+    )
+
+
+def test_blur_cuts_the_section_once_before_the_split() -> None:
+    parts = _filter(build_args(replace(BLUR_SPEC, clip=Clip(345, 820, (0, 0))))).split(";")
+    # 背景を1回だけ切り出してから、帯と本編に分ける
+    assert parts[0] == "[0:v]fps=30,trim=start_pts=345:end_pts=820,fps=30,split[band][frame]"
+    # 0 秒に戻すのも、重ねた後の1回だけ
+    assert parts[3].count("setpts=PTS-STARTPTS") == 1
+    assert "setpts=PTS-STARTPTS" not in parts[1] + parts[2]

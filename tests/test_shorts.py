@@ -97,10 +97,10 @@ def test_edges_inside_a_lyric_line_are_warned() -> None:
         _event(0, 10, "帯", "VerticalBand"),
         _event(1, 3, "消した行", comment=True),
     )
-    found = shorts.check_sections(script, ["chorus"], duration_ms=10_000)
-    warnings = _messages(found.issues, "warning")
+    issues = shorts.edge_issues(shorts.lyric_lines(script), Section("chorus", 2000, 6000))
+    warnings = _messages(issues, "warning")
     assert len(warnings) == 2
-    assert warnings[0].startswith("ショート chorus: 区間の頭（0:00:02.000）が歌詞の行の途中にかかっています")
+    assert warnings[0].startswith("区間の頭（0:00:02.000）が歌詞の行の途中にかかっています")
     assert "0:00:01.000「頭にかかる」（0:00:03.000 まで）" in warnings[0]
     assert "区間の終わり（0:00:06.000）" in warnings[1] and "終わりにかかる" in warnings[1]
 
@@ -120,6 +120,9 @@ def test_lines_in_sections_keeps_drawn_lines_that_overlap_a_section() -> None:
     selected = shorts.lines_in_sections(script, sections)
     assert [e.text for e in selected.events] == ["a にかかる", "帯", "b にかかる"]
     assert len(script.events) == 8  # 元のスクリプトは変えない
+    # blur では歌詞が本編の映像に入っているので、縦だけの文字だけを描く
+    blurred = shorts.lines_in_sections(script, sections, vertical_only=True)
+    assert [e.text for e in blurred.events] == ["帯"]
 
 
 def test_short_lines_in_the_main_lyrics_are_warned() -> None:

@@ -100,7 +100,7 @@ utavideo overlay [-C <曲フォルダ>]
 | コマンド | 出力 | 入るもの |
 |---|---|---|
 | `preview-bg` | `build/preview/bg.mp4` | 背景・曲名表示・音声（歌詞の行は入れない） |
-| `preview-bg --vertical` | `build/preview/vertical-bg.mp4` | 縦型のショートの下敷き。背景を `vertical.size` に合わせたもの・曲名表示・音声（縦用 .ass の行は入れない） |
+| `preview-bg --vertical` | `build/preview/vertical-bg.mp4` | 縦型のショートの下敷き。縦の画面（実際に使う `layout`）・曲名表示・音声（縦用 .ass の行は入れない） |
 | `build` | `build/main.mp4` | 背景・歌詞・曲名表示・音声 |
 | `overlay` | `build/overlay.mov` | 歌詞・曲名表示（背景は透明）・音声。背景のファイルは不要 |
 
@@ -112,10 +112,11 @@ utavideo overlay [-C <曲フォルダ>]
 
 `--vertical` は、Aegisub でショートの区間を置き、縦用 .ass を組むときに開く下敷きを、曲の頭から終わりまで書き出します。
 
-- 背景は `[video]` の `fit`・`scale_flags`・`pad_color` と `vertical.focus` で `vertical.size` に合わせます
-- 曲名表示は、縦用 .ass の `overlay_text.style` のスタイルとフォントで描きます。縦用 .ass が要るので、`vertical-ass` の後に実行します
+- 画面は、実際に使う作り方（[shorts](#shorts) の表）で、曲の頭から終わりまで作ります。`[[shorts]]` に `blur` が1本でもあれば `blur`、無ければ `reframe`（`[[shorts]]` がまだ無ければ `vertical.layout`）です
+- `reframe` では、背景を `[video]` の `fit`・`scale_flags`・`pad_color` と `vertical.focus` で `vertical.size` に合わせ、曲名表示を縦用 .ass の `overlay_text.style` のスタイルとフォントで描きます
+- `blur` では、本編の映像（本編の .ass の歌詞と曲名表示入り）を帯の上に置いた、完成図と同じ画面にします。本編の合成とぼかしの分だけ、`preview-bg` より時間がかかります。描画に使った本編の .ass は `build/.work/vertical-preview-frame.ass` に書きます
+- 縦用 .ass が要るので、`vertical-ass` の後に実行します
 - `[[shorts]]` は無くてもかまいません（区間を置く前に使うため）。検査は[ショートの検査](#ショートの検査)の表の `preview-bg --vertical` の列のとおりです
-- 縦型のショートの画面の作り方のうち、背景を縦に切り取る形だけに対応しています（本編をぼかした帯に置く形は [roadmap.md](roadmap.md)）
 - 曲名表示は `vertical.overlay_text = false` で消せます（`shorts` と同じ）
 
 ## thumbnail
@@ -161,19 +162,28 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 
 | 出力 | 画面 | 使う .ass |
 |---|---|---|
-| `build/shorts/<name>.mp4` | 背景を `vertical.size` に切り取り（`[video]` の `fit`・`scale_flags`・`pad_color` と `shorts[].focus`）、縦用 .ass の行と曲名表示を重ねる | 縦用 .ass の、区間に入る行 |
+| `build/shorts/<name>.mp4`（`layout = "reframe"`） | 背景を `vertical.size` に切り取り（`[video]` の `fit`・`scale_flags`・`pad_color` と `shorts[].focus`）、縦用 .ass の行と曲名表示を重ねる | 縦用 .ass の、区間に入る行 |
+| `build/shorts/<name>.mp4`（`layout = "blur"`） | 本編の映像を `vertical.size` の幅いっぱいに縮めて `vertical.frame_y` の高さに置き、上下の帯を背景だけをぼかして埋め、縦用 .ass の縦だけの文字を重ねる | 真ん中は本編の .ass、帯の上は縦用 .ass の、区間に入る `Vertical` で始まるスタイルの行 |
 | `build/shorts/wide/<name>.mp4`（`wide = true`） | `build/main.mp4` と同じ画面（`video.size`・`video.focus`） | 本編の .ass |
+
+`blur` の画面（`layout` は `vertical.layout`、`shorts[].layout` でショートごとに変えられます）:
+
+- 本編の映像は `build/main.mp4` と同じ画面（`video.size`・`video.focus`・`video.fit`）に本編の .ass を描いてから、縦の幅に縮めます。高さが奇数にならないよう、偶数に丸めます（1080x1920 では 607.5 → 608）
+- 上下の帯は**背景だけ**をぼかしたものです。本編の歌詞と曲名表示は帯に写りません
+- 帯は背景を `cover` で `vertical.size` の 1/4 の大きさに切り取り（`shorts[].focus`）、`gblur`（縦の幅 1080 で `sigma=40` 相当）を掛けてから、元の大きさに戻したものです。ぼかしの強さは設定で変えられません（[検証記録](verification/20260919-blur-band.md)）
+- 歌詞は本編の映像に入っているので、縦用 .ass の歌詞の行は描きません。帯に出す文字は、スタイル名を `Vertical` で始めます（`utavideo vertical-ass` が作る `VerticalBand` など）
+- 曲名表示は真ん中の本編の映像に入ります。`vertical.overlay_text = false` なら、そこからも消します
+- 描画に使った本編の .ass は `build/.work/shorts/frame/<name>.ass` に書きます
 
 - 区間の頭と終わりは、`round(時刻 × fps) / fps` でフレームに丸めます（Aegisub の時刻はセンチ秒なので、丸めないと映像が音声より最大1フレーム先に進みます）。映像・音声・.ass に同じ値を使います
 - 背景は本編と同じコマを使います。`wide` の版のフレームは `build/main.mp4` の同じ区間と一致します（[検証記録](verification/20260918-shorts.md)）
 - .ass の時刻はずらしません。区間の頭をまたぐ行の `\move`・`\fad`・`\k` が、本編と同じ状態で描かれます
 - 音声は区間の端で `vertical.audio_fade_ms` のフェードをかけます。映像はフェードしません
-- 曲名表示は `[overlay_text]` の書式を、縦用 .ass の `overlay_text.style` のスタイルで描きます。`vertical.overlay_text = false` なら縦には出しません（`wide` には出します）
+- 曲名表示は `[overlay_text]` の書式を、`reframe` では縦用 .ass の `overlay_text.style` のスタイルで、`blur` では真ん中の本編の映像に描きます。`vertical.overlay_text = false` なら縦には出しません（`wide` には出します）
 - 自動のフェード（`lyrics.fade_ms`）は、`Vertical` で始まるスタイルの行には入れません（区間いっぱいに置く帯の文字が、繰り返し再生のつなぎ目で点滅しないため）
 - fps・crf・preset・`video.fit` は `[video]` と同じです。出力の形式は `build/main.mp4` と同じです
 - 描画に使った .ass を `build/.work/shorts/<name>.ass`（`wide` は `build/.work/shorts/wide/<name>.ass`）に書きます
 - 書き出す前に[検査](#ショートの検査)し、エラーがあれば1本も書き出しません。`--name` を渡すと、そのショートだけを検査します（ほかのショートのエラーでは止まりません）
-- 縦型のショートの画面の作り方のうち、背景を縦に切り取る形だけに対応しています（本編をぼかした帯に置く形は [roadmap.md](roadmap.md)）
 
 次のときは止まります。
 
@@ -191,7 +201,7 @@ utavideo vertical-ass [-C <曲フォルダ>]
 
 作るもの:
 
-- 本編の .ass の行を、コメント行も含めてすべて写す
+- 本編の .ass の行を、コメント行も含めてすべて写す（使う `layout` が `blur` だけなら写さない。歌詞は本編の映像に入るので、写すと Aegisub で二重に見え、完成図と違ってしまう。`reframe` が1本でもあれば写す）
 - `[Script Info]` の `PlayResX`・`PlayResY` を `vertical.size` にする。`LayoutResX`・`LayoutResY` が2つともあれば、それぞれ x・y の比を掛けた値に書き直す（本編で PlayRes と同じなら `vertical.size` になる。片方だけなら `vertical.size`、無ければ足さない。理由は [検証記録](verification/20260917-vertical-ass.md)）
 - `[Aegisub Project Garbage]` の `Video File:` を、縦用 .ass から見た `build/preview/vertical-bg.mp4` の相対パスにする。`Audio File:` が本編の下敷きと同じなら、それも同じパスにする。そうでない `Audio File:` と `Keyframes File:`・`Timecodes File:` の相対パスは、本編の .ass と縦用 .ass のフォルダが違っても開けるよう、縦用 .ass から見たパスに付け替える（絶対パスと、`?video` などのパスでない値はそのまま）。`Video AR Mode`・`Video AR Value`・`Video Zoom Percent` は消す
 - スタイル `Short`・`VerticalBand` を足す（既にあれば足さない）。どちらも変換後の `Lyrics` の写しで、`VerticalBand` は上中央揃え。`Lyrics` が無ければ最初のスタイルを写す
@@ -338,6 +348,7 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 | 本編の .ass（`lyrics.file`）の `LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う | エラー | ○（[歌詞](#エラー書き出さない)の検査） | ○ | ○ | ○（本編の .ass があるとき） |
 | 縦用 .ass が無い（`utavideo vertical-ass` で作れる、と表示）・読めない | エラー | ○ | ○ | ○ | ○ |
 | 縦用 .ass の `PlayResX`・`PlayResY` が無い・`vertical.size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイル、曲名表示を出すのに `overlay_text.style` のスタイルが無い、フォント（曲名表示を含む）が見つからない | エラー | ○ | ○ | ○ | ○ |
+| `blur` で、縦の幅に縮めた本編の映像が `vertical.size` の高さを超える（`video.size` が縦より縦長） | エラー | ○ | ○ | X が `blur` のとき | ○（`blur` のとき） |
 | `[[shorts]]` の `name` に対応する区間の行が無い・2つ以上ある | エラー | ○ | ○ | X だけ | － |
 | スタイル `Short` の行が、コメント行でなく Dialogue になっている（画面に出てしまう） | エラー | ○ | ○ | ○ | － |
 | 区間の終わりが始まり以前、区間の終わりが音源の長さを超える（フレームに丸めた終わりでも見る） | エラー | ○ | ○ | X だけ | － |
@@ -354,7 +365,13 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 - 区間に入る行は、区間と時刻が重なる Dialogue 行（`Short` を除く）です。区間の外の行（本編から写したまま使わない行）は、行ごとの検査をしません
 - 区間の行が無い・2つ以上ある・区間の終わりが始まり以前・区間の終わりが音源の長さを超える区間では、区間の端と区間に入る行の検査をしません（区間の行が Dialogue になっているだけなら、エラーを出したうえで検査します）
 - 音源の長さが分からないとき（音源が無い・読めない）は、音源の長さとの比較と、区間に入る行の検査をしません。区間の端の検査はします
-- `wide = true` のショートを書き出すときは、本編の .ass とフォントも `build` と同じ条件で検査します（同じ画面を描くため）
+- `blur` の区間では、歌詞を本編の .ass で見るので、次のように変わります
+    - 区間の端がかかる歌詞の行は、縦用 .ass ではなく**本編の .ass**の行で見ます
+    - 本編との突き合わせはしません（縦用 .ass に歌詞を置かないため）。はみ出しは、描く行（帯の文字）について見ます
+    - 区間に入る行の警告は、描く行（`Vertical` で始まるスタイル）だけを見ます
+    - 曲名表示を縦用 .ass に描かないので、`overlay_text.style` のスタイルは要りません（`reframe` が1本でもあれば要ります）
+- 本編の映像を描くとき（`wide = true` か `layout = "blur"` のショート、`blur` の `preview-bg --vertical`）は、本編の .ass とフォントも `build` と同じ条件で検査します（同じ画面を描くため）
+- `layout` で変わる検査（曲名表示のスタイル、`blur` の大きさ）は、`check`・`shorts` では対象のショートの `layout`、`preview-bg --vertical` では `[[shorts]]` で使う `layout`（無ければ `vertical.layout`）で決まります。どのコマンドでも同じ結果になります
 - 本編の .ass にスタイル `Short` の行があるときの警告は `check` だけです
 
 #### 本編との突き合わせ

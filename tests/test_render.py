@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
-from utavideo import cli
+from utavideo import cli, graph
 from utavideo.cli import app
 from utavideo.ffmpeg import subtitles_filter_error
 from utavideo.project import scaffold
@@ -553,9 +553,10 @@ def _with_section(
     *,
     shorts: str,
     line: str = "Comment: 0,0:00:00.53,0:00:01.77,Short,,0,0,0,,chorus",
+    extra: str = "",
     background: str = "bg.png",
 ) -> None:
-    _with_shorts(project, shorts=shorts, background=background)
+    _with_shorts(project, shorts=shorts, extra=extra, background=background)
     invoke("vertical-ass", "-C", str(project))
     _add_vertical_lines(project, line)
 
@@ -646,3 +647,172 @@ def test_shorts_needs_a_name_that_exists(project: Path) -> None:
     invoke("shorts", "-C", str(project), "--name", "chorus")
     assert (project / "build/shorts/chorus.mp4").is_file()
     assert not (project / "build/shorts/intro.mp4").exists()
+
+
+# 本編の画面いっぱいに不透明な緑を描く行。帯に本編が写っていないかを、この色で見る
+GREEN_SCREEN = (
+    "Dialogue: 1,0:00:00.00,0:00:02.00,Lyrics,,0,0,0,,"
+    r"{\an7\pos(0,0)\c&H00FF00&\bord0\shad0\p1}m 0 0 l 320 0 320 180 0 180{\p0}"
+)
+# 本編（320x180）を縦の幅（180）に縮めた高さ（偶数に丸めて 102）。実際の画素と突き合わせる
+FRAME_HEIGHT = graph.frame_height((320, 180), 180)
+
+
+def _greens_per_row(path: Path, size: tuple[int, int]) -> list[int]:
+    """1フレーム目の、行ごとの緑（本編の映像に描いた色）の画素の数。"""
+    width, height = size
+    raw = _pixels(path)
+    counts = []
+    for y in range(height):
+        row = raw[y * width * 3 : (y + 1) * width * 3]
+        green = (row[x] < 16 and row[x + 1] > 240 and row[x + 2] < 16 for x in range(0, width * 3, 3))
+        counts.append(sum(green))
+    return counts
+
+
+def test_shorts_blur_places_the_main_video_by_frame_y_and_keeps_it_out_of_the_bands(
+    project: Path,
+) -> None:
+    lyrics = project / "src/lyrics.ass"
+    lyrics.write_text(lyrics.read_text(encoding="utf-8") + GREEN_SCREEN + "\n", encoding="utf-8")
+    # 帯に緑が無いことを見るので、背景は緑を含まない1色にする（testsrc には緑の帯がある）
+    _ffmpeg(
+        "-f", "lavfi", "-i", "color=c=gray:size=640x360", "-frames:v", "1", str(project / "src/bg/bg.png")
+    )
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"\nframe_y = 0')
+    invoke("shorts", "-C", str(project))
+    output = project / "build/shorts/chorus.mp4"
+    video = _stream(_probe(output), "video")
+    assert (video["width"], video["height"]) == (180, 320)
+    assert (project / "build/.work/shorts/frame/chorus.ass").is_file()
+
+    # frame_y = 0 なら本編の上端は画面の上端。帯には本編の緑が1画素も写らない（背景だけをぼかす）
+    counts = _greens_per_row(output, (180, 320))
+    assert counts[0] == 180
+    assert sum(counts[FRAME_HEIGHT:]) == 0
+    # 本編と帯の境目の数行は、縮小で混ざるので全部は緑にならない
+    assert sum(1 for n in counts[:FRAME_HEIGHT] if n == 180) > FRAME_HEIGHT - 5
+
+    config = project / "utavideo.toml"
+    config.write_text(config.read_text(encoding="utf-8").replace("frame_y = 0", "frame_y = 1"), "utf-8")
+    invoke("shorts", "-C", str(project))
+    # frame_y = 1 なら本編の上端は (320 - 102) * 1 で、上が帯になる
+    counts = _greens_per_row(output, (180, 320))
+    assert counts[-1] == 180
+    assert sum(counts[: 320 - FRAME_HEIGHT]) == 0
+
+
+def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_main_video(
+    project: Path,
+) -> None:
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    config = project / "utavideo.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("enabled = false", "enabled = true"), encoding="utf-8"
+    )
+    vertical = project / "src/vertical.ass"
+    # blur では曲名表示を縦用 .ass に描かないので、Title のスタイルは要らない
+    text = "\n".join(
+        line for line in vertical.read_text(encoding="utf-8").splitlines() if "Style: Title," not in line
+    )
+    vertical.write_text(
+        text + "\nStyle: VerticalBand,Test Sans,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
+        "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1\n",
+        encoding="utf-8",
+    )
+    _add_vertical_lines(
+        project,
+        "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,,AA",
+        # blur では歌詞を縦用 .ass に置いても描かない（本編の映像に入っているため）
+        "Dialogue: 0,0:00:00.60,0:00:01.00,Lyrics,,0,0,0,,AAAA",
+    )
+    invoke("shorts", "-C", str(project))
+
+    work = (project / "build/.work/shorts/chorus.ass").read_text(encoding="utf-8")
+    assert work.count("Dialogue:") == 1
+    assert "VerticalBand,,0,0,0,,AA" in work
+    assert "テスト / テスター" not in work
+    frame = (project / "build/.work/shorts/frame/chorus.ass").read_text(encoding="utf-8")
+    assert "テスト / テスター" in frame and "AAAA" in frame
+
+    # vertical.overlay_text = false は、真ん中の本編の映像からも曲名表示を消す
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("[vertical]", "[vertical]\noverlay_text = false"),
+        encoding="utf-8",
+    )
+    invoke("shorts", "-C", str(project))
+    assert "テスト / テスター" not in (project / "build/.work/shorts/frame/chorus.ass").read_text("utf-8")
+
+
+def test_check_for_a_blur_section_uses_the_main_lyrics(project: Path) -> None:
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    _add_vertical_lines(
+        project,
+        "Style: VerticalBand,Test Sans,40,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
+        "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1",
+        "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,," + "A" * 20,
+    )
+    output = invoke("check", "-C", str(project)).output
+    # 縦用 .ass に歌詞が無くても、区間の端は本編の .ass（0.20〜1.50 秒の行）で見る
+    assert "区間の頭（0:00:00.530）が歌詞の行の途中にかかっています" in output
+    # 歌詞は本編の画面で見るので、突き合わせはしない
+    assert "本編との突き合わせ" not in output
+    # 帯に描く文字は、縦の画面に収まるか見る（blur で唯一、縦用 .ass から描く行のため）
+    assert "「" + "A" * 20 + "」 が画面からはみ出しそうです" in output
+
+
+def test_check_does_not_repeat_a_warning_for_mixed_layouts(project: Path) -> None:
+    """blur と reframe の両方の区間に入る行の警告は、1回だけ出す。"""
+    _with_section(
+        project,
+        shorts='[[shorts]]\nname = "chorus"\n\n[[shorts]]\nname = "intro"\nlayout = "reframe"\n',
+        extra='layout = "blur"',
+    )
+    _add_vertical_lines(
+        project,
+        "Comment: 0,0:00:00.53,0:00:01.77,Short,,0,0,0,,intro",
+        "Style: VerticalBand,Test Sans,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
+        "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1",
+        "Dialogue: 0,0:00:00.60,0:00:01.00,VerticalBand,,0,0,0,,{\\pos(90,40)}BAND",
+    )
+    output = invoke("check", "-C", str(project)).output
+    assert output.count("\\pos / \\move を使っています") == 1
+
+
+def test_check_rejects_a_video_size_taller_than_the_vertical_size(project: Path) -> None:
+    """blur では、縦の幅に縮めた本編が縦の画面に収まらない設定を止める（黙って切らない）。"""
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    config = project / "utavideo.toml"
+    # video.size = [320, 180] を [180, 640] にすると、縦（180x320）より縦長になる
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("size = [320, 180]", "size = [180, 640]"),
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "blur の画面を作れません" in result.output
+    assert "180x640" in result.output and "180x320" in result.output
+
+
+def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> None:
+    _with_shorts(project, shorts="", extra='layout = "blur"\nframe_y = 0')
+    invoke("vertical-ass", "-C", str(project))
+    invoke("preview-bg", "--vertical", "-C", str(project))
+
+    output = project / "build/preview/vertical-bg.mp4"
+    video = _stream(_probe(output), "video")
+    assert (video["width"], video["height"]) == (180, 320)
+    # 下敷きにも本編の歌詞を焼き込む（完成図と同じ画面で、帯の文字を組めるようにする）
+    frame = (project / "build/.work/vertical-preview-frame.ass").read_text(encoding="utf-8")
+    assert "AAAA" in frame
+    # 縦用 .ass の行は下敷きに焼き込まない（Aegisub で組むのはこちら）
+    assert "AAAA" not in (project / "build/.work/vertical-preview.ass").read_text(encoding="utf-8")
+
+
+def test_preview_bg_vertical_follows_the_layouts_the_shorts_use(project: Path) -> None:
+    """vertical.layout = "reframe" でも、blur のショートがあれば下敷きを blur の画面にする。"""
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nlayout = "blur"\n')
+    invoke("preview-bg", "--vertical", "-C", str(project))
+    # 完成図と同じく、真ん中に本編の映像（歌詞入り）を置く
+    frame = (project / "build/.work/vertical-preview-frame.ass").read_text(encoding="utf-8")
+    assert "AAAA" in frame
