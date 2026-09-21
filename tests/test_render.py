@@ -430,7 +430,7 @@ def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Pat
 
     lyrics = project / "src/lyrics.ass"
     lyrics.write_text(lyrics.read_text(encoding="utf-8").replace(",AAAA", ",AAAB"), encoding="utf-8")
-    output = _invoke("check", "-C", str(project)).output
+    output = invoke("check", "-C", str(project)).output
     assert "本編との突き合わせ: 本編と文字が違います（0:00:00.200）: 本編「AAAB」" in output
 
     vertical = project / "src/vertical.ass"
