@@ -603,7 +603,9 @@ def analyze_vertical(project: Project, search: _FontSearch) -> list[subs.Issue]:
     config = project.config
     issues = subs.lint_vertical(script, size=config.vertical.size, overlay=config.overlay_text)
     # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
-    font_issues, _ = _check_fonts(_compose(project, script, 0, "final"), search, overflows=False)
+    font_issues, _ = _check_fonts(
+        _compose(project, script, 0, "final", search.index), search, overflows=False
+    )
     return [subs.Issue(i.level, f"縦用 .ass: {i.message}") for i in issues + font_issues]
 
 

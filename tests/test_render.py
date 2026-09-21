@@ -398,10 +398,10 @@ def test_check_warns_about_thumbnail_lines_not_drawn(project: Path) -> None:
 
 
 def test_check_inspects_the_vertical_ass_only_when_it_exists(project: Path) -> None:
-    assert "縦用 .ass" not in _invoke("check", "-C", str(project)).output
+    assert "縦用 .ass" not in invoke("check", "-C", str(project)).output
 
-    _invoke("vertical-ass", "-C", str(project))
-    output = _invoke("check", "-C", str(project)).output
+    invoke("vertical-ass", "-C", str(project))
+    output = invoke("check", "-C", str(project)).output
     assert "縦用 .ass: src/vertical.ass（1080x1920）" in output
     assert "問題ありません" in output
 
@@ -415,7 +415,7 @@ def test_check_inspects_the_vertical_ass_only_when_it_exists(project: Path) -> N
     assert "縦用 .ass: PlayRes 1080x1080" in result.output
     assert "縦用 .ass: フォント 'Nope Sans'" in result.output
     # 縦用 .ass の誤りで、本編の書き出しは止めない
-    _invoke("build", "-C", str(project))
+    invoke("build", "-C", str(project))
 
 
 def test_layout_res_that_squashes_the_lyrics_stops_the_build(project: Path) -> None:
