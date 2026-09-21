@@ -17,6 +17,7 @@ from pydantic import (
     ValidationError,
     field_validator,
 )
+from pydantic_core import to_jsonable_python
 
 from utavideo.errors import UtavideoError
 from utavideo.graph import Fit, Preset, ScaleFlags
@@ -43,12 +44,40 @@ class _Model(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
+class _NotRendered:
+    """動画の描画に効かない項目の印。Annotated[型, NOT_RENDERED] と書く。
+
+    release は、印の無い項目がすべて描画に効くとみなして build のときの値と比べる。
+    印を付け忘れても release が余計に止まるだけで、確かめていない動画は公開されない。
+    """
+
+    def __repr__(self) -> str:
+        return "NOT_RENDERED"
+
+
+NOT_RENDERED = _NotRendered()
+
+
+def rendered_values(value: object) -> object:
+    """設定の値から NOT_RENDERED の項目を除き、JSON にできる形にする。"""
+    if isinstance(value, BaseModel):
+        return {
+            name: rendered_values(getattr(value, name))
+            for name, info in type(value).model_fields.items()
+            if NOT_RENDERED not in info.metadata
+        }
+    if isinstance(value, tuple):
+        return [rendered_values(item) for item in value]
+    return to_jsonable_python(value)
+
+
 class Song(_Model):
     title: str
-    slug: str = ""  # 空なら title から作る（この項目より前に作った曲フォルダとの互換）
+    # 空なら title から作る（この項目より前に作った曲フォルダとの互換）
+    slug: Annotated[str, NOT_RENDERED] = ""
     artist: str = ""
     label: str = ""
-    original_urls: tuple[str, ...] = ()
+    original_urls: Annotated[tuple[str, ...], NOT_RENDERED] = ()
 
     @field_validator("slug")
     @classmethod
@@ -140,11 +169,11 @@ class ProjectConfig(_Model):
     video: Video
     lyrics: Lyrics = Field(default_factory=Lyrics)
     overlay_text: OverlayText = Field(default_factory=OverlayText)
-    credits: tuple[Credit, ...] = ()
-    materials: tuple[Material, ...] = ()
-    description: Description | None = None
-    uploads: tuple[Upload, ...] = ()
-    announce: Announce | None = None
+    credits: Annotated[tuple[Credit, ...], NOT_RENDERED] = ()
+    materials: Annotated[tuple[Material, ...], NOT_RENDERED] = ()
+    description: Annotated[Description | None, NOT_RENDERED] = None
+    uploads: Annotated[tuple[Upload, ...], NOT_RENDERED] = ()
+    announce: Annotated[Announce | None, NOT_RENDERED] = None
 
 
 def _xdg(var: str, fallback: str) -> Path:

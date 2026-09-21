@@ -99,7 +99,7 @@ utavideo release                # release/song-vX.Y.N.mp4（vX.Y は音源のフ
 utavideo release --version v1.0 # 音源のバージョンを指定する
 ```
 
-同じ内容の動画を既に公開しているときや、`build/main.mp4` より新しい入力があるとき（書き出し忘れ）は止まります（[commands.md](commands.md#release)）。
+同じ内容の動画を既に公開しているときや、`build` の後に動画に効く入力（歌詞・素材・曲名など）を変えたとき（書き出し忘れ）は止まります。7 の概要欄の項目だけを変えたときは止まりません（比べ方は [commands.md](commands.md#release)）。
 
 ## 9. 投稿して告知文を作る
 

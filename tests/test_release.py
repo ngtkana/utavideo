@@ -1,12 +1,14 @@
-"""release の採番。動画の中身は問わないので ffmpeg は要らない。"""
+"""release の採番と入力の比較。動画の中身は問わないので ffmpeg は要らない。"""
 
+import os
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from utavideo import inputs
 from utavideo.cli import app
-from utavideo.project import scaffold
+from utavideo.project import Project, scaffold
 
 runner = CliRunner()
 
@@ -107,3 +109,95 @@ def test_writes_only_the_video_and_ignores_texts_in_release(project: Path) -> No
     assert result.exit_code == 0, result.output
     assert _released(project) == ["曲-v1.2.0.mp4", "曲-v1.2.0.txt", "曲-v1.2.5.txt"]
     assert (project / "release/曲-v1.2.0.txt").read_text(encoding="utf-8") == "前の動画の概要欄"
+
+
+def _record_build(project: Path, font_files: tuple[Path, ...] = ()) -> None:
+    """build が書き出し終えたときの記録を、ffmpeg を使わずに作る。"""
+    loaded = Project.load(project)
+    record = inputs.record_text(loaded, inputs.with_fonts(inputs.snapshot(loaded), font_files))
+    loaded.inputs_record.parent.mkdir(parents=True, exist_ok=True)
+    loaded.inputs_record.write_text(record, encoding="utf-8")
+
+
+def _edit_later(project: Path, rel: str, text: str) -> None:
+    """build/main.mp4 より新しい更新時刻で書く。"""
+    path = project / rel
+    path.write_text(text, encoding="utf-8")
+    later = (project / "build/main.mp4").stat().st_mtime + 10
+    os.utime(path, (later, later))
+
+
+REORDERED = """
+# コメントと並び順、書き方の違いは比べない
+[video]
+background = 'src/bg/bg.png'
+[audio]
+file = "src/mix/曲 v1.2.wav"
+[song]
+title = "曲"
+slug = "kyoku"
+original_urls = ["https://example.com/"]
+[[credits]]
+roles = ["Vocal"]
+name = "名前"
+[[materials]]
+section = "イラスト"
+"""
+
+
+def test_changes_that_do_not_affect_the_video_do_not_stop(project: Path) -> None:
+    _record_build(project)
+    _edit_later(project, "utavideo.toml", REORDERED + DESCRIPTION)
+    lyrics = (project / "src/lyrics.ass").read_text(encoding="utf-8")
+    _edit_later(project, "src/lyrics.ass", lyrics)  # 保存し直しただけ
+
+    result = _release(project)
+    assert result.exit_code == 0, result.output
+
+
+@pytest.mark.parametrize(
+    ("before", "after"),
+    [('title = "曲"', 'title = "曲名"'), ("[video]", '[overlay_text]\ntext = "{title}"\n[video]')],
+)
+def test_stops_when_a_rendered_setting_changes(project: Path, before: str, after: str) -> None:
+    _record_build(project)
+    _edit_later(project, "utavideo.toml", TOML.replace(before, after))
+
+    result = _release(project)
+    assert result.exit_code == 1
+    assert "変わった入力があります（utavideo.toml）" in result.output
+    assert _release(project, "--allow-stale").exit_code == 0
+
+
+def test_stops_when_lyrics_content_changes(project: Path) -> None:
+    _record_build(project)
+    lyrics = project / "src/lyrics.ass"
+    lyrics.write_text(lyrics.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+
+    result = _release(project)
+    assert result.exit_code == 1
+    assert "（lyrics.file）" in result.output
+
+
+def test_stops_when_a_used_font_file_changes(project: Path, tmp_path: Path) -> None:
+    font = tmp_path / "fonts/font.ttf"
+    font.parent.mkdir()
+    font.write_bytes(b"font")
+    _record_build(project, (font,))
+    assert _release(project).exit_code == 0
+
+    font.write_bytes(b"other font")
+    result = _release(project, "--version", "v2.0")
+    assert result.exit_code == 1
+    assert "（フォント）" in result.output
+
+
+def test_record_of_another_video_falls_back_to_modification_times(project: Path) -> None:
+    # 記録の後に build/main.mp4 が差し替わっていたら、記録は使わない
+    _record_build(project)
+    (project / "build/main.mp4").write_bytes(b"replaced")
+    _edit_later(project, "utavideo.toml", TOML + DESCRIPTION)
+
+    result = _release(project)
+    assert result.exit_code == 1
+    assert "build/main.mp4 より新しい入力があります（utavideo.toml）" in result.output

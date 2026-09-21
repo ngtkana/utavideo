@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from utavideo import announce, description, fonts, graph, layout, sample, subs
+from utavideo import announce, description, fonts, graph, inputs, layout, sample, subs
 from utavideo.config import PROJECT_CONFIG_NAME, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import (
@@ -193,6 +193,8 @@ def _compose(
 def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     require_tools()
     project = _load_project(project_dir)
+    # analyze が素材を読む前に取る（理由は inputs.snapshot）
+    built_inputs = inputs.snapshot(project) if mode == "final" else None
     analysis = analyze(project, mode)
     _print_issues(analysis.issues)
     if not analysis.ok:
@@ -225,6 +227,11 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
         "preview": project.preview_bg_output,
         "overlay": project.overlay_output,
     }[mode]
+    if built_inputs is not None:
+        # フォントは ffmpeg が書き出し中に読むので、その前に stat を取る
+        built_inputs = inputs.with_fonts(built_inputs, analysis.font_files)
+        # 書き出しが途中で終わったとき、前の記録が新しい動画のものに見えないように先に消す
+        project.inputs_record.unlink(missing_ok=True)
 
     with Progress(
         TextColumn("{task.description}"),
@@ -240,6 +247,8 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
             total_s=analysis.duration_s,
             on_progress=lambda fraction: progress.update(task, completed=fraction),
         )
+    if built_inputs is not None:
+        _write_text(project.inputs_record, inputs.record_text(project, built_inputs))
     console.print(f"書き出しました: {output}", markup=False)
     if windows_path := to_windows_path(output):
         console.print(f"  Windows: {windows_path}", markup=False)
@@ -485,7 +494,7 @@ def release(
         typer.Option("--version", help="音源のバージョン。例: v1.0。省略時は audio.file のファイル名から"),
     ] = None,
     allow_stale: Annotated[
-        bool, typer.Option(help="build/main.mp4 より新しい入力があってもコピーする")
+        bool, typer.Option(help="build/main.mp4 を書き出した後に入力が変わっていてもコピーする")
     ] = False,
 ) -> None:
     """build/main.mp4 を release/<slug>-<音源のバージョン>.<何本目か>.mp4 にコピーする。"""
@@ -501,15 +510,8 @@ def release(
         _fail(f"音源のバージョンは v1.0 のような vX.Y の形で指定してください: {version}")
     version = version.lower()
 
-    inputs = [project.config_path, project.audio_path, project.background_path, project.lyrics_path]
-    built_at = source.stat().st_mtime
-    stale = [p for p in inputs if p.is_file() and p.stat().st_mtime > built_at]
-    if stale and not allow_stale:
-        names = ", ".join(p.name for p in stale)
-        _fail(
-            f"build/main.mp4 より新しい入力があります（{names}）。"
-            "build し直すか --allow-stale を付けてください"
-        )
+    if not allow_stale and (stale := inputs.stale_inputs(project)):
+        _fail(f"{stale}。build し直すか --allow-stale を付けてください")
 
     # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
     # （同じ入力からの build はバイト単位で一致する。docs/verification/20260916-release-revision.md）
