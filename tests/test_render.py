@@ -2,18 +2,18 @@
 
 import json
 import os
-import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import MakeFont, invoke
+from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
 from utavideo.cli import app
+from utavideo.ffmpeg import subtitles_filter_error
 from utavideo.project import scaffold
 
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+pytestmark = pytest.mark.skipif(subtitles_filter_error() is not None, reason="libass 付きの ffmpeg が必要")
 
 runner = CliRunner()
 
@@ -131,6 +131,19 @@ def test_check_reports_audio_without_sound(project: Path) -> None:
     result = runner.invoke(app, ["check", "-C", str(project)])
     assert result.exit_code == 1
     assert "音声" in result.output
+
+
+def test_check_lists_the_other_results_when_ffmpeg_has_no_libass(
+    project: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # 書き出せないことは伝えつつ、1回の check で直すべきことが全部分かるように、エラーの一覧に並べる
+    use_fake_ffmpeg(tmp_path, monkeypatch, reply="Unknown filter 'subtitles'.")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+
+    assert result.exit_code == 1
+    assert "libass" in result.output
+    assert "曲名" in result.output and "歌詞" in result.output and "フォント" in result.output
 
 
 def test_check_reports_missing_font(project: Path) -> None:

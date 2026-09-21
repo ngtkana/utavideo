@@ -14,6 +14,8 @@
   - WSL2 では Windows にインストールしたフォントも自動で探します
   - Windows ネイティブ・macOS は未検証です
 - libass 付きの ffmpeg / ffprobe（Ubuntu なら `sudo apt install ffmpeg`）
+  - libass 無しの ffmpeg では歌詞を描画できません。`preview-bg`・`build`・`overlay` は始めに調べて、書き出す前に止まります（`check` はエラーとして他の検査結果と一緒に出します）
+  - macOS は未検証ですが、Homebrew の `ffmpeg` は libass 無しなので、使うなら `brew install ffmpeg-full` が要ります
 - 雛形の字幕スタイルが使うフォント [Zen Maru Gothic](https://fonts.google.com/specimen/Zen+Maru+Gothic)（無料）
   - 別のフォントを使う場合は、.ass のスタイルで指定します
 - [uv](https://docs.astral.sh/uv/)
