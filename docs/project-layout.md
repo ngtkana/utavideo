@@ -9,6 +9,7 @@
 ├── src/                 # 動画の材料（自分で用意するもの）
 │   ├── lyrics.ass       # 歌詞・コメント（Aegisub で編集）
 │   ├── thumbnail.ass    # サムネイルの文字（Aegisub で編集。サイズ違いは thumbnail-square.ass など）
+│   ├── vertical.ass     # 縦型のショートの歌詞（utavideo vertical-ass で作り、Aegisub で編集）
 │   ├── mix/             # 音源
 │   ├── bg/              # 背景の画像 / GIF / 動画
 │   ├── avatar/          # アバターなどの動画素材

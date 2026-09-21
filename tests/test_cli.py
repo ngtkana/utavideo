@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from utavideo import subs
 from utavideo.cli import _font_missing_message, analyze_thumbnails, app
 from utavideo.config import load_project_config
 from utavideo.ffmpeg import FFmpegError
@@ -112,6 +113,54 @@ def test_unreadable_background_becomes_an_issue_instead_of_stopping(
     # 背景の長さの警告を重ねず、読めないエラーを1件だけ出す
     assert len(issues) == 1
     assert issues[0].level == "error" and "を読めません" in issues[0].message
+
+
+def test_vertical_ass_creates_the_file_once_and_keeps_the_source(tmp_path: Path) -> None:
+    root = tmp_path / "20260916-song"
+    assert runner.invoke(app, ["new", str(root)]).exit_code == 0
+    lyrics = (root / "src/lyrics.ass").read_bytes()
+
+    result = runner.invoke(app, ["vertical-ass", "-C", str(root)])
+    assert result.exit_code == 0, result.output
+    script = subs.load(root / "src/vertical.ass")
+    assert subs.play_res(script) == (1080, 1920)
+    # .ass から見た下敷きの位置（Aegisub で開いたときに読み込まれる）
+    assert script.aegisub_project["Video File"] == "../build/preview/vertical-bg.mp4"
+    assert (root / "src/lyrics.ass").read_bytes() == lyrics
+
+    # 利用者が直した縦用 .ass を作り直さない
+    (root / "src/vertical.ass").write_text("編集済み", encoding="utf-8")
+    again = runner.invoke(app, ["vertical-ass", "-C", str(root)])
+    assert again.exit_code == 1
+    assert "既にあります" in again.output
+    assert (root / "src/vertical.ass").read_text(encoding="utf-8") == "編集済み"
+
+
+def test_vertical_ass_needs_the_lyrics(tmp_path: Path) -> None:
+    root = tmp_path / "20260916-song"
+    assert runner.invoke(app, ["new", str(root)]).exit_code == 0
+    (root / "src/lyrics.ass").unlink()
+
+    result = runner.invoke(app, ["vertical-ass", "-C", str(root)])
+    assert result.exit_code == 1
+    assert "lyrics.file" in result.output
+    assert not (root / "src/vertical.ass").exists()
+
+
+def test_vertical_ass_in_another_folder_rebases_the_aegisub_paths(tmp_path: Path) -> None:
+    root = tmp_path / "20260916-song"
+    assert runner.invoke(app, ["new", str(root)]).exit_code == 0
+    with (root / "utavideo.toml").open("a", encoding="utf-8") as toml:
+        toml.write('\n[vertical]\nlyrics = "src/shorts/vertical.ass"\n')
+    lyrics = root / "src/lyrics.ass"
+    text = lyrics.read_text(encoding="utf-8")
+    lyrics.write_text(text + "\n[Aegisub Project Garbage]\nAudio File: ../audio.wav\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["vertical-ass", "-C", str(root)])
+    assert result.exit_code == 0, result.output
+    project = subs.load(root / "src/shorts/vertical.ass").aegisub_project
+    assert project["Audio File"] == "../../audio.wav"
+    assert project["Video File"] == "../../build/preview/vertical-bg.mp4"
 
 
 def test_missing_font_message_points_at_the_font_name_for_a_file_name() -> None:

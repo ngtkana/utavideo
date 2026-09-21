@@ -332,3 +332,46 @@ def test_fades_in_at_zero(text: str, expected: bool) -> None:
 )
 def test_escape_text(text: str, expected: str) -> None:
     assert subs.escape_text(text) == expected
+
+
+@pytest.mark.parametrize(
+    ("layout_res", "errors"),
+    [
+        ("", 0),
+        ("LayoutResX: 1920\nLayoutResY: 1080\n", 0),
+        # 縦横比が同じなら文字は潰れない（4K の下敷きで Aegisub が書いたときなど）
+        ("LayoutResX: 3840\nLayoutResY: 2160\n", 0),
+        # libass は片方だけの LayoutRes を使わない（docs/verification/20260917-vertical-ass.md）
+        ("LayoutResX: 1080\n", 0),
+        ("LayoutResX: 1080\nLayoutResY: 1920\n", 1),
+    ],
+)
+def test_layout_res_with_another_aspect_ratio_is_an_error(layout_res: str, errors: int) -> None:
+    script = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
+    for line in layout_res.splitlines():
+        key, value = line.split(": ")
+        script.info[key] = value
+    for issues in (
+        subs.lint(script, size=(1920, 1080), duration_ms=10_000, overlay=OVERLAY),
+        subs.lint_still(script, size=(1920, 1080)),
+    ):
+        assert len([m for m in _messages(issues, "error") if "LayoutRes" in m]) == errors
+
+
+def test_lint_vertical_checks_the_whole_file_but_not_each_line() -> None:
+    script = _make(
+        [
+            _line("0:00:01.00", "0:00:05.00", r"{\pos(10,10)}行ごとの検査は区間に入る行だけで行う"),
+            _line("0:00:02.00", "0:00:03.00", "重なる行"),
+            _line("0:00:02.00", "0:00:03.00", "未定義", style="Nope"),
+        ],
+        styles=[_style("Lyrics")],
+    )
+    script.info["LayoutResX"], script.info["LayoutResY"] = "1920", "1080"
+    issues = subs.lint_vertical(script, size=(1080, 1920), overlay=OVERLAY)
+    assert _messages(issues, "warning") == []
+    errors = _messages(issues, "error")
+    assert len(errors) == 3
+    assert "PlayRes 1920x1080 が縦の解像度（vertical.size） 1080x1920" in errors[0]
+    assert "overlay_text.style" in errors[1]
+    assert "'Nope'" in errors[2]

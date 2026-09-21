@@ -143,6 +143,22 @@ utavideo thumbnail              # build/thumbnail/main.png
 - 正方形などのサイズ違いは、`[[thumbnails]]` を足します（[customization.md](customization.md#サムネイル)）
 - 投稿先には容量の上限があります。書き出したときに表示されるバイト数で確かめてください
 
+## 10. ショートの縦用 .ass を作る
+
+縦型のショート（YouTube Shorts など）に使う、縦に組み直した歌詞を用意します。本編の歌詞を入れ終えてから作ります。
+
+```sh
+utavideo vertical-ass           # src/vertical.ass（本編の src/lyrics.ass は変わらない）
+```
+
+1. Aegisub で `src/vertical.ass` を開く。縦の下敷きはまだ書き出せないので、ビデオ → ダミービデオを使う（Use Dummy Video）で、`vertical.size`（既定は 1080x1920）の映像を開く
+2. 文字は本編と同じ割合で小さくなっているので、まずスタイル `Lyrics` の大きさを上げる
+3. 画面からはみ出す行を `\N` で改行する。位置や大きさを直すのは、縦用 .ass だけです
+4. .ass 形式のまま保存し、`utavideo check` で検査する（[commands.md](commands.md#検査項目)）
+
+- `vertical-ass` は、縦用 .ass が既にあると止まります。直した縦用 .ass を上書きしないためです
+- 変換される大きさと座標、変換されない図形は [commands.md](commands.md#vertical-ass) を参照してください
+
 ## 動画編集ソフトと組み合わせる
 
 utavideo で合成できない演出（アバターのクロマキー合成など）が必要な場合は、歌詞だけを透過動画にして動画編集ソフトで重ねます。
