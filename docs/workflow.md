@@ -1,6 +1,6 @@
 # 制作の流れ
 
-1本の動画を作る手順です。やりたいこと別の設定方法は [customization.md](customization.md)、設定とコマンドの詳細は [config-reference.md](config-reference.md)・[commands.md](commands.md)、フォルダの構成は [project-layout.md](project-layout.md) を参照してください。
+1本の動画を作る手順です。素材を用意する前に動かしてみたいときは、`utavideo sample <パス>` で見本の曲フォルダを作れます（[commands.md](commands.md#sample)）。やりたいこと別の設定方法は [customization.md](customization.md)、設定とコマンドの詳細は [config-reference.md](config-reference.md)・[commands.md](commands.md)、フォルダの構成は [project-layout.md](project-layout.md) を参照してください。
 
 ## 0. 準備（最初に一度だけ）
 
