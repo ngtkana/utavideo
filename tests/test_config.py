@@ -100,6 +100,22 @@ def test_font_dir_candidates_cover_fontconfig_defaults(
         assert expected in candidates
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="~ の展開が Windows では HOME を見ない")
+def test_font_dir_candidates_on_macos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(sys, "platform", "darwin")
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
+    assert _font_dir_candidates() == [
+        Path("/System/Library/Fonts"),
+        Path("/Library/Fonts"),
+        tmp_path / "Library/Fonts",
+        Path("/usr/share/fonts"),
+        Path("/usr/local/share/fonts"),
+        tmp_path / "xdg/fonts",
+        tmp_path / ".fonts",
+    ]
+
+
 def test_hashtags_are_written_without_hash(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match=r"description\.hashtags"):
         load_project_config(_write(tmp_path, MINIMAL + '[description]\nhashtags = ["#歌ってみた"]\n'))

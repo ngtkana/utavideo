@@ -89,10 +89,13 @@
 |---|---|---|---|
 | `font_dirs` | パスの配列 | 下記 | フォントを探すディレクトリ（サブディレクトリも探す） |
 
-`font_dirs` の既定値:
+`font_dirs` の既定値（存在するディレクトリだけを使います）:
 
-- Linux / WSL2: `/mnt/c/Windows/Fonts`、`/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts` と、fontconfig が既定で見る `/usr/share/fonts`、`/usr/local/share/fonts`、`$XDG_DATA_HOME/fonts`（既定は `~/.local/share/fonts`）、`~/.fonts`（存在するものだけ）
+- Linux / WSL2: `/mnt/c/Windows/Fonts`、`/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts` と、fontconfig が既定で見る `/usr/share/fonts`、`/usr/local/share/fonts`、`$XDG_DATA_HOME/fonts`（既定は `~/.local/share/fonts`）、`~/.fonts`
+- macOS: `/System/Library/Fonts`（`Supplemental` はこの下なので一緒に探します）、`/Library/Fonts`、`~/Library/Fonts`に加え、fontconfig が既定で見る `/usr/share/fonts`、`/usr/local/share/fonts`、`$XDG_DATA_HOME/fonts`（既定は `~/.local/share/fonts`）、`~/.fonts`（Homebrew や、Linux から dotfiles ごと持ってきた環境でフォントを置いていることがあるため）。`/Network/Library/Fonts` は、マウントされていないと遅くなるため含みません。必要なら `font_dirs` に書き足してください
 - Windows: `%WINDIR%\Fonts`、`%LOCALAPPDATA%\Microsoft\Windows\Fonts`
+
+読むのは `.ttf`・`.otf`・`.ttc`・`.otc` です。それ以外（macOS の dfont など）は黙って飛ばすので、そのフォントを使いたい場合は `.ttf` や `.otf` のものを入れてください。
 
 `~` から始まるパスはホームディレクトリに展開されます。
 

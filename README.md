@@ -11,8 +11,8 @@
 ## 動作環境
 
 - Linux または WSL2（動作確認: WSL2 上の Ubuntu 24.04、ffmpeg 6.1）
-  - WSL2 では Windows にインストールしたフォントも自動で探します
-  - Windows ネイティブ・macOS は未検証です
+  - インストール済みのフォントは自動で探します（WSL2 では Windows 側のものも）
+  - Windows ネイティブ・macOS は、フォントの場所は探しますが未検証です
 - libass 付きの ffmpeg / ffprobe（Ubuntu なら `sudo apt install ffmpeg`）
   - libass 無しの ffmpeg では歌詞を描画できません。`preview-bg`・`build`・`overlay` は始めに調べて、書き出す前に止まります（`check` はエラーとして他の検査結果と一緒に出します）
   - macOS は未検証ですが、Homebrew の `ffmpeg` は libass 無しなので、使うなら `brew install ffmpeg-full` が要ります
