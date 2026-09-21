@@ -10,14 +10,14 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Annotated, NoReturn
+from typing import Annotated, Any, NoReturn
 
 import pysubs2
 import typer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from utavideo import description, fonts, graph, layout, shorts, subs, vertical
+from utavideo import announce, description, fonts, graph, inputs, layout, sample, shorts, subs, vertical
 from utavideo.config import PROJECT_CONFIG_NAME, Short, Thumbnail, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import (
@@ -29,6 +29,7 @@ from utavideo.ffmpeg import (
     replace_partial,
     require_tools,
     run,
+    subtitles_filter_error,
 )
 from utavideo.names import has_date_prefix, slug_error, slug_from_dir_name
 from utavideo.project import (
@@ -112,6 +113,7 @@ class Analysis:
     duration_s: float | None
     lyrics: pysubs2.SSAFile | None
     font_files: tuple[Path, ...]
+    font_index: fonts.FontIndex | None = None
 
     @property
     def ok(self) -> bool:
@@ -135,9 +137,10 @@ def analyze(project: Project, mode: graph.Mode, search: "_FontSearch | None" = N
     target = lyrics if mode != "preview" else subs.without_events(lyrics)
     issues += subs.lint(target, size=config.video.size, duration_ms=duration_ms, overlay=config.overlay_text)
 
-    script = _compose(project, lyrics, duration_ms, mode)
-    font_issues, font_files = _check_fonts(script, search or _FontSearch.load())
-    return Analysis(issues + font_issues, duration_s, lyrics, font_files)
+    search = search or _FontSearch.load()
+    script = _compose(project, lyrics, duration_ms, mode, search.index)
+    font_issues, font_files = _check_fonts(script, search)
+    return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index)
 
 
 def _audio_issues(project: Project) -> tuple[list[subs.Issue], float | None]:
@@ -182,11 +185,26 @@ def _check_fonts(
     resolution = fonts.resolve(search.index, subs.used_fonts(script))
     issues: list[subs.Issue] = []
     for name in resolution.missing:
-        searched = ", ".join(map(str, search.dirs)) or "（なし）"
-        issues.append(subs.Issue("error", f"フォント {name!r} が見つかりません（探した場所: {searched}）"))
+        issues.append(subs.Issue("error", _font_missing_message(name, search.dirs)))
     if overflows:
         issues += layout.overflows(script, search.index.lookup)
     return issues, resolution.files
+
+
+def _font_missing_message(name: str, font_dirs: list[Path]) -> str:
+    """見つからない理由として多いもの（ファイル名を書いた・探す場所が無い）を添える。"""
+    searched = ", ".join(map(str, font_dirs)) or "（なし）"
+    path = Path(name)
+    if path.suffix.lower() in fonts.FONT_EXTS:
+        hint = f"。ファイル名ではなくフォント名を指定してください（例: {path.stem}）"
+    elif not font_dirs:
+        hint = (
+            "。環境変数 UTAVIDEO_FONT_DIRS か、"
+            "ユーザー設定の font_dirs でフォントのあるディレクトリを指定してください"
+        )
+    else:
+        hint = ""
+    return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
 def _compose(
@@ -194,6 +212,7 @@ def _compose(
     lyrics: pysubs2.SSAFile,
     duration_ms: int,
     mode: graph.Mode,
+    font_index: fonts.FontIndex,
     *,
     for_vertical: bool = False,
 ) -> pysubs2.SSAFile:
@@ -211,6 +230,7 @@ def _compose(
         fade_ms=config.lyrics.fade_ms,
         duration_ms=duration_ms,
         include_lyrics=mode != "preview",
+        font_index=font_index,
         no_fade_style_prefix=vertical.VERTICAL_STYLE_PREFIX if for_vertical else None,
     )
 
@@ -218,13 +238,15 @@ def _compose(
 def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     require_tools()
     project = _load_project(project_dir)
+    # analyze が素材を読む前に取る（理由は inputs.snapshot）
+    built_inputs = inputs.snapshot(project) if mode == "final" else None
     analysis = analyze(project, mode)
     _print_issues(analysis.issues)
     if not analysis.ok:
         raise typer.Exit(1)
-    assert analysis.lyrics is not None and analysis.duration_s is not None
+    assert analysis.lyrics is not None and analysis.duration_s is not None and analysis.font_index is not None
 
-    script = _compose(project, analysis.lyrics, round(analysis.duration_s * 1000), mode)
+    script = _compose(project, analysis.lyrics, round(analysis.duration_s * 1000), mode, analysis.font_index)
     output = {
         "final": project.main_output,
         "preview": project.preview_bg_output,
@@ -232,7 +254,7 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     }[mode]
     video = project.config.video
     target = _VideoTarget(mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label)
-    return _write_video(project, script, target, analysis.duration_s, analysis.font_files)
+    return _write_video(project, script, target, analysis.duration_s, analysis.font_files, built_inputs)
 
 
 @dataclass(frozen=True)
@@ -254,6 +276,7 @@ def _write_video(
     target: _VideoTarget,
     duration_s: float,
     font_files: tuple[Path, ...],
+    built_inputs: dict[str, Any] | None,
 ) -> Path:
     """合成したスクリプトを target.subtitles_path に書き、動画を target.output に書き出す。"""
     subtitles_path, output = target.subtitles_path, target.output
@@ -278,6 +301,11 @@ def _write_video(
         preset=video.preset,
         clip=target.clip,
     )
+    if built_inputs is not None:
+        # フォントは ffmpeg が書き出し中に読むので、その前に stat を取る
+        built_inputs = inputs.with_fonts(built_inputs, font_files)
+        # 書き出しが途中で終わったとき、前の記録が新しい動画のものに見えないように先に消す
+        project.inputs_record.unlink(missing_ok=True)
 
     with Progress(
         TextColumn("{task.description}"),
@@ -293,6 +321,8 @@ def _write_video(
             total_s=duration_s,
             on_progress=lambda fraction: progress.update(task, completed=fraction),
         )
+    if built_inputs is not None:
+        _write_text(project.inputs_record, inputs.record_text(project, built_inputs))
     console.print(f"書き出しました: {output}", markup=False)
     if windows_path := to_windows_path(output):
         console.print(f"  Windows: {windows_path}", markup=False)
@@ -406,11 +436,42 @@ def _interactive() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
 
 
+@app.command("sample")
+@_handle_errors
+def sample_command(
+    path: Annotated[Path, typer.Argument(help="作る見本の曲フォルダのパス（まだ無いパス）")],
+    font: Annotated[
+        str | None,
+        typer.Option("--font", help="歌詞に使う実在のフォント名。省略時はフォントも合成する"),
+    ] = None,
+    small: Annotated[bool, typer.Option("--small", help="小さく速く作る（640x360・10fps）")] = False,
+) -> None:
+    """動作確認用の見本の曲フォルダを、合成した素材から作る。"""
+    if path.exists():
+        _fail(f"既にあります: {path}（作り直すときはフォルダごと消してください）")
+    require_tools(subtitles=False)  # 素材を合成するだけで、歌詞は描かない
+    try:
+        result = sample.create(path, font=font, small=small)
+    # path は「まだ無いパス」に自分で作ったもの。途中で失敗したら消して、同じパスでやり直せるようにする
+    except BaseException:
+        shutil.rmtree(path, ignore_errors=True)
+        raise
+    console.print(f"作成しました: {path}", markup=False)
+    _print_scaffold(result, path)
+    prefix = sample.command_prefix(font)
+    console.print(f"次にやること:\n  cd {path}", markup=False)
+    console.print(
+        f"  {prefix}utavideo check → {prefix}utavideo build（他のコマンドは README.md）", markup=False
+    )
+
+
 @app.command()
 @_handle_errors
 def check(project_dir: ProjectOption = None) -> None:
     """設定・素材・歌詞・フォントを検査する。"""
-    require_tools()
+    # 検査自体は ffprobe で音源を読むので要るが、libass は要らない。
+    # 無いことは Issue にして、1回の check で直すべきことが全部並ぶようにする
+    require_tools(subtitles=False)
     project = _load_project(project_dir)
     # フォントの一覧は、歌詞とサムネイルの検査で1回だけ読む
     search = _FontSearch.load()
@@ -426,6 +487,8 @@ def check(project_dir: ProjectOption = None) -> None:
     for file in analysis.font_files:
         console.print(f"  フォント: {file}", markup=False)
     issues = list(analysis.issues)
+    if (error := subtitles_filter_error()) is not None:
+        issues.append(subs.Issue("error", error))
     if version := project.version:
         dest = project.release_path(version, next_revision(project.released(version)))
         console.print(f"  release 先: {dest}", markup=False)
@@ -437,8 +500,15 @@ def check(project_dir: ProjectOption = None) -> None:
     if not project.slug.isascii():
         message = f"song.slug に ASCII 以外の文字が入っています（{project.slug}）"
         issues.append(subs.Issue("warning", message))
-    if config.description is not None:
-        issues += description.lint(project, load_user_config().description)
+    if config.description is not None or config.announce is not None:
+        user_config = load_user_config()
+        if config.description is not None:
+            issues += description.lint(project, user_config.description)
+        if config.announce is not None:
+            # 投稿するまでは毎回出てしまうので、uploads が無いことは announce でだけ警告する
+            issues += announce.lint(
+                config, user_config.announce, user_config.description, warn_no_uploads=False
+            )
     for thumb in config.thumbnails:
         size = project.thumbnail_size(thumb)
         console.print(f"  サムネイル: {thumb.name}（{size[0]}x{size[1]}、{thumb.file}）", markup=False)
@@ -502,14 +572,17 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
     require_tools()
     project = _load_project(project_dir)
     issues, duration_s, _ = _vertical_inputs(project)
-    checked = analyze_vertical(project, _FontSearch.load())
+    search = _FontSearch.load()
+    checked = analyze_vertical(project, search)
     issues += checked.issues
     _print_issues(issues)
     if any(issue.level == "error" for issue in issues):
         raise typer.Exit(1)
     assert checked.script is not None and duration_s is not None
 
-    script = _compose(project, checked.script, round(duration_s * 1000), "preview", for_vertical=True)
+    script = _compose(
+        project, checked.script, round(duration_s * 1000), "preview", search.index, for_vertical=True
+    )
     target = _VideoTarget(
         "preview",
         project.config.vertical.size,
@@ -518,7 +591,7 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
         project.vertical_preview_bg_output,
         "preview-bg --vertical",
     )
-    _write_video(project, script, target, duration_s, checked.font_files)
+    _write_video(project, script, target, duration_s, checked.font_files, None)
 
 
 @app.command()
@@ -554,6 +627,25 @@ def description_command(project_dir: ProjectOption = None) -> None:
         console.print(f"書き出しました: {path}", markup=False)
 
 
+@app.command("announce")
+@_handle_errors
+def announce_command(project_dir: ProjectOption = None) -> None:
+    """投稿した動画の URL と曲の情報から、SNS の告知文を build/announce.txt に書き出す。"""
+    project = _load_project(project_dir)
+    user_config = load_user_config()
+    fmt = user_config.announce
+    issues = announce.lint(project.config, fmt, user_config.description, warn_no_uploads=True)
+    _print_issues(issues)
+    # 誤った URL の告知文を投稿しないよう、description と違ってエラーがあれば書き出さない
+    if any(issue.level == "error" for issue in issues):
+        _fail("告知文を書き出しませんでした")
+    text = announce.render(project.config, fmt, user_config.description)
+    _write_text(project.announce_output, text)
+    console.print(text, markup=False, end="")
+    console.print(f"長さ: {announce.weight(text)} / {fmt.max_weight}（X の数え方）", markup=False)
+    console.print(f"書き出しました: {project.announce_output}", markup=False)
+
+
 @app.command()
 @_handle_errors
 def release(
@@ -563,7 +655,7 @@ def release(
         typer.Option("--version", help="音源のバージョン。例: v1.0。省略時は audio.file のファイル名から"),
     ] = None,
     allow_stale: Annotated[
-        bool, typer.Option(help="build/main.mp4 より新しい入力があってもコピーする")
+        bool, typer.Option(help="build/main.mp4 を書き出した後に入力が変わっていてもコピーする")
     ] = False,
 ) -> None:
     """build/main.mp4 を release/<slug>-<音源のバージョン>.<何本目か>.mp4 にコピーする。"""
@@ -579,15 +671,8 @@ def release(
         _fail(f"音源のバージョンは v1.0 のような vX.Y の形で指定してください: {version}")
     version = version.lower()
 
-    inputs = [project.config_path, project.audio_path, project.background_path, project.lyrics_path]
-    built_at = source.stat().st_mtime
-    stale = [p for p in inputs if p.is_file() and p.stat().st_mtime > built_at]
-    if stale and not allow_stale:
-        names = ", ".join(p.name for p in stale)
-        _fail(
-            f"build/main.mp4 より新しい入力があります（{names}）。"
-            "build し直すか --allow-stale を付けてください"
-        )
+    if not allow_stale and (stale := inputs.stale_inputs(project)):
+        _fail(f"{stale}。build し直すか --allow-stale を付けてください")
 
     # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
     # （同じ入力からの build はバイト単位で一致する。docs/verification/20260916-release-revision.md）
@@ -631,7 +716,7 @@ def analyze_vertical(project: Project, search: _FontSearch) -> VerticalAnalysis:
     config = project.config
     issues = subs.lint_vertical(script, size=config.vertical.size, overlay=project.vertical_overlay_text)
     # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
-    composed = _compose(project, script, 0, "final", for_vertical=True)
+    composed = _compose(project, script, 0, "final", search.index, for_vertical=True)
     font_issues, font_files = _check_fonts(composed, search, overflows=False)
     return VerticalAnalysis(subs.prefixed(issues + font_issues, "縦用 .ass: "), script, font_files)
 
@@ -725,14 +810,14 @@ def shorts_command(
     wide_script = None
     if main is not None:
         assert lyrics is not None
-        wide_script = _compose(project, lyrics, duration_ms, "final")
+        wide_script = _compose(project, lyrics, duration_ms, "final", search.index)
     for short in selected:
         section = analysis.sections[short.name]
         clip = graph.Clip(*shorts.clip_frames(section, fps), config.vertical.audio_fade_ms)
         length_s = clip.duration_s(fps)
         # .ass の時刻はずらさない。区間の頭をまたぐ行の \\move・\\fad を本編と同じ状態で描くため
         in_section = shorts.lines_in_sections(analysis.script, [section])
-        script = _compose(project, in_section, duration_ms, "final", for_vertical=True)
+        script = _compose(project, in_section, duration_ms, "final", search.index, for_vertical=True)
         target = _VideoTarget(
             "final",
             config.vertical.size,
@@ -742,7 +827,7 @@ def shorts_command(
             f"shorts {short.name}",
             clip,
         )
-        _write_video(project, script, target, length_s, analysis.font_files)
+        _write_video(project, script, target, length_s, analysis.font_files, None)
         if not short.wide:
             continue
         assert main is not None and wide_script is not None
@@ -756,7 +841,7 @@ def shorts_command(
             clip,
         )
         # 本編と同じ .ass・同じ大きさで描くので、区間のコマは build/main.mp4 と一致する
-        _write_video(project, wide_script, wide_target, length_s, main.font_files)
+        _write_video(project, wide_script, wide_target, length_s, main.font_files, None)
 
 
 @app.command("vertical-ass")

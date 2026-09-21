@@ -13,5 +13,6 @@ utavideo の曲フォルダ。制作の流れ: https://github.com/ngtkana/utavid
 - [ ] `utavideo thumbnail --bg-only` → Aegisub で `src/thumbnail.ass` を開いて文字を組む → `utavideo thumbnail`
 - [ ] `utavideo description` → `build/title.txt`・`build/description.txt` を投稿画面に貼る
 - [ ] 縦型のショートを作るなら、`utavideo vertical-ass` → `utavideo preview-bg --vertical` → Aegisub で `src/vertical.ass` を組み、区間を置く → `utavideo.toml` に `[[shorts]]` → `utavideo shorts`
+- [ ] 投稿したら `utavideo.toml` の `[[uploads]]` に動画の URL を書く → `utavideo announce` → `build/announce.txt` で SNS に告知する
 
 ## メモ

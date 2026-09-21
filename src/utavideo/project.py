@@ -85,6 +85,11 @@ class Project:
         return self.build_dir / "main.mp4"
 
     @property
+    def inputs_record(self) -> Path:
+        """build/main.mp4 を書き出したときの入力の記録（release が比べる）。"""
+        return self.work_dir / "main-inputs.json"
+
+    @property
     def overlay_output(self) -> Path:
         return self.build_dir / "overlay.mov"
 
@@ -152,6 +157,10 @@ class Project:
     @property
     def description_output(self) -> Path:
         return self.build_dir / "description.txt"
+
+    @property
+    def announce_output(self) -> Path:
+        return self.build_dir / "announce.txt"
 
     @property
     def version(self) -> str | None:
@@ -256,7 +265,7 @@ def scaffold(
     # 既にある utavideo.toml は書き換えないので、[[thumbnails]] から参照されない .ass を残さないよう作らない
     config_exists = (root / PROJECT_CONFIG_NAME).exists()
     files = {
-        PROJECT_CONFIG_NAME: _render_template(
+        PROJECT_CONFIG_NAME: render_template(
             "utavideo.toml",
             title=_toml_string(title),
             slug=_toml_string(slug),
@@ -264,13 +273,14 @@ def scaffold(
             audio=_toml_string(audio),
             background=_toml_string(background),
             hashtags=_toml_array(defaults.hashtags),
+            announce_hashtags=_toml_array(defaults.announce_hashtags),
             credits=_toml_credits(defaults.credits),
         ),
-        "src/lyrics.ass": _render_template("lyrics.ass"),
-        "README.md": _render_template("README.md"),
+        "src/lyrics.ass": render_template("lyrics.ass"),
+        "README.md": render_template("README.md"),
     }
     if not config_exists:
-        files[THUMBNAIL_TEMPLATE_PATH] = _render_template(
+        files[THUMBNAIL_TEMPLATE_PATH] = render_template(
             "thumbnail.ass", title=escape_text(title), artist=escape_text(artist)
         )
     for rel, content in files.items():
@@ -298,7 +308,8 @@ def _detect_single(src: Path, exts: frozenset[str]) -> str | None:
     return candidates[0].relative_to(src.parent).as_posix()
 
 
-def _render_template(name: str, **values: str) -> str:
+def render_template(name: str, **values: str) -> str:
+    """templates/ のファイルの $名前 を置き換える。"""
     text = resources.files("utavideo").joinpath("templates", name).read_text(encoding="utf-8")
     return string.Template(text).substitute(values)
 
