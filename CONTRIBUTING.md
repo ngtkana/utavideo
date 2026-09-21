@@ -16,6 +16,7 @@ commit の前に通してください。CI（`.github/workflows/ci.yml`）も同
 uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
 ```
 
+- `uv run pyright` が使う Node.js は、開発依存の `pyright[nodejs]` として PyPI から入る（別に入れる必要はない。手元に Node.js があってもこちらを使うので、`.venv` が約 200 MiB 増える）
 - `tests/test_render.py` は ffmpeg で実際に書き出す（ffmpeg が無ければスキップ）
 - `tests/test_sample.py` は `utavideo sample` で見本の曲フォルダを作り、小さい寸法（`--small`）で各コマンドを動かす（同じくスキップあり）
 - `tests/test_docs.py` は、コマンドのオプション・設定項目・環境変数がドキュメントに載っているか、文書内のリンクが切れていないかを確かめる
