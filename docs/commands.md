@@ -5,7 +5,7 @@
 ## 共通
 
 - `check`・`preview-bg`・`build`・`overlay`・`description`・`release` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `check`・`preview-bg`・`build`・`overlay` には ffmpeg と ffprobe が必要です
+- `check`・`preview-bg`・`build`・`overlay` には libass 付きの ffmpeg と ffprobe が必要です（[動作環境](../README.md#動作環境)）。始めに調べ、足りなければ何を入れればよいかを表示して、書き出す前に止まります
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
@@ -119,7 +119,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
-| 実行環境 | ffmpeg・ffprobe が無い |
+| 実行環境 | ffmpeg・ffprobe が無い、ffmpeg で `subtitles` フィルタ（libass）が使えない |
 
 ### 警告
 

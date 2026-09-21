@@ -25,6 +25,21 @@ def require_tools() -> None:
     missing = [tool for tool in ("ffmpeg", "ffprobe") if shutil.which(tool) is None]
     if missing:
         raise FFmpegError(f"{', '.join(missing)} が見つかりません（例: sudo apt install ffmpeg）")
+    if not has_subtitles_filter():
+        raise FFmpegError(
+            "ffmpeg が subtitles フィルタ（libass）に対応していないので、歌詞を描画できません。"
+            "libass 付きの ffmpeg を入れてください"
+            "（Ubuntu: sudo apt install ffmpeg、macOS の Homebrew: brew install ffmpeg-full）"
+        )
+
+
+def has_subtitles_filter() -> bool:
+    """ffmpeg で subtitles フィルタ（libass）が使えるか。"""
+    # フィルタが無くても終了コードは 0 で "Unknown filter" と出るだけなので、見出しの有無で判定する。
+    # 一覧の -filters（40KB ほど）でも同じことはできるが、どちらも 20ms なので出力の小さい方にした
+    cmd = ["ffmpeg", "-hide_banner", "-h", "filter=subtitles"]
+    out = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    return "Filter subtitles" in out.stdout
 
 
 def probe_audio(path: Path) -> AudioInfo:

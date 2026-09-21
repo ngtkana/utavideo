@@ -11,9 +11,13 @@ from typer.testing import CliRunner
 
 from tests.conftest import MakeFont
 from utavideo.cli import app
+from utavideo.ffmpeg import has_subtitles_filter
 from utavideo.project import scaffold
 
-pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+pytestmark = pytest.mark.skipif(
+    shutil.which("ffmpeg") is None or not has_subtitles_filter(),
+    reason="libass 付きの ffmpeg が必要",
+)
 
 runner = CliRunner()
 
