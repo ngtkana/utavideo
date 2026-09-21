@@ -61,7 +61,7 @@ def test_broken_font_is_ignored(tmp_path: Path) -> None:
     (tmp_path / "fonts").mkdir()
     (tmp_path / "fonts" / "broken.ttf").write_bytes(b"not a font")
     index = fonts.load_index([tmp_path / "fonts"], tmp_path / "cache.json")
-    assert index.files_by_name == {}
+    assert index.matches == {}
 
 
 def test_resolve_and_prepare_fontsdir(tmp_path: Path, make_font: MakeFont) -> None:

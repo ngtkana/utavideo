@@ -105,6 +105,7 @@ class Analysis:
     duration_s: float | None
     lyrics: pysubs2.SSAFile | None
     font_files: tuple[Path, ...]
+    font_index: fonts.FontIndex | None = None
 
     @property
     def ok(self) -> bool:
@@ -141,17 +142,17 @@ def analyze(project: Project, mode: graph.Mode) -> Analysis:
     target = lyrics if mode != "preview" else subs.without_events(lyrics)
     issues += subs.lint(target, size=config.video.size, duration_ms=duration_ms, overlay=config.overlay_text)
 
-    script = _compose(project, lyrics, duration_ms, mode)
     font_dirs = load_user_config().font_dirs
     cache_file = cache_dir() / "fonts.json"
     if not cache_file.exists():
         console.print("フォント一覧を作成しています（初回のみ時間がかかります）…")
     index = fonts.load_index(font_dirs, cache_file)
+    script = _compose(project, lyrics, duration_ms, mode, index)
     resolution = fonts.resolve(index, subs.used_fonts(script))
     for name in resolution.missing:
         issues.append(subs.Issue("error", _font_missing_message(name, font_dirs)))
     issues += layout.overflows(script, index.lookup)
-    return Analysis(issues, duration_s, lyrics, resolution.files)
+    return Analysis(issues, duration_s, lyrics, resolution.files, index)
 
 
 def _font_missing_message(name: str, font_dirs: list[Path]) -> str:
@@ -170,7 +171,13 @@ def _font_missing_message(name: str, font_dirs: list[Path]) -> str:
     return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
-def _compose(project: Project, lyrics: pysubs2.SSAFile, duration_ms: int, mode: graph.Mode):
+def _compose(
+    project: Project,
+    lyrics: pysubs2.SSAFile,
+    duration_ms: int,
+    mode: graph.Mode,
+    font_index: fonts.FontIndex,
+):
     config = project.config
     return subs.compose(
         lyrics,
@@ -179,6 +186,7 @@ def _compose(project: Project, lyrics: pysubs2.SSAFile, duration_ms: int, mode: 
         fade_ms=config.lyrics.fade_ms,
         duration_ms=duration_ms,
         include_lyrics=mode != "preview",
+        font_index=font_index,
     )
 
 
@@ -189,10 +197,10 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     _print_issues(analysis.issues)
     if not analysis.ok:
         raise typer.Exit(1)
-    assert analysis.lyrics is not None and analysis.duration_s is not None
+    assert analysis.lyrics is not None and analysis.duration_s is not None and analysis.font_index is not None
 
     config = project.config
-    script = _compose(project, analysis.lyrics, round(analysis.duration_s * 1000), mode)
+    script = _compose(project, analysis.lyrics, round(analysis.duration_s * 1000), mode, analysis.font_index)
     project.work_dir.mkdir(parents=True, exist_ok=True)
     subtitles_path = project.work_dir / f"{mode}.ass"
     script.save(str(subtitles_path), encoding="utf-8", format_="ass")

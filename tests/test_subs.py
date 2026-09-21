@@ -1,13 +1,22 @@
 import unicodedata
+from pathlib import Path
 
 import pysubs2
 import pytest
 
-from utavideo import subs
+from utavideo import fonts, subs
 from utavideo.config import ConfigError, OverlayText, Song
 
 SONG = Song(title="曲", artist="歌手", label="ラベル")
 OVERLAY = OverlayText()
+EMPTY_INDEX = fonts.FontIndex({})
+
+
+def _index_with(*names: str) -> fonts.FontIndex:
+    """names のそれぞれを、その表記のまま実際に持つ索引（テスト用）。"""
+    return fonts.FontIndex(
+        {fonts.match_key(name): fonts.FontMatch((Path(f"/fonts/{name}"),), name) for name in names}
+    )
 
 
 def _style(name: str, font: str = "Noto Sans JP") -> str:
@@ -68,7 +77,13 @@ def test_add_fades_only_where_missing() -> None:
 def test_compose_keeps_source_and_appends_overlay() -> None:
     lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
     script = subs.compose(
-        lyrics, song=SONG, overlay=OVERLAY, fade_ms=(100, 100), duration_ms=5000, include_lyrics=True
+        lyrics,
+        song=SONG,
+        overlay=OVERLAY,
+        fade_ms=(100, 100),
+        duration_ms=5000,
+        include_lyrics=True,
+        font_index=EMPTY_INDEX,
     )
 
     assert lyrics.events[0].text == "あ"
@@ -79,8 +94,9 @@ def test_compose_keeps_source_and_appends_overlay() -> None:
     assert overlay.text == "曲 / 歌手"
 
 
-def test_compose_normalizes_font_names_to_nfc() -> None:
-    # libass は .ass の名前とフォント内の名前をそのまま比べる。macOS では NFD の名前が入りやすい
+def test_compose_normalizes_font_names_to_the_index_display_name() -> None:
+    # libass は .ass の名前とフォント内の名前をそのまま比べる。macOS では NFD の名前が入りやすい。
+    # 索引にあるフォントが実際に持つ表記へ揃える（一律 NFC にはしない）
     nfc = unicodedata.normalize("NFC", "テストゴシック")
     nfd = unicodedata.normalize("NFD", nfc)
     lyrics = _make(
@@ -88,13 +104,96 @@ def test_compose_normalizes_font_names_to_nfc() -> None:
         styles=[_style("Lyrics", nfd), _style("Title", nfd)],
     )
     script = subs.compose(
-        lyrics, song=SONG, overlay=OVERLAY, fade_ms=(0, 0), duration_ms=5000, include_lyrics=True
+        lyrics,
+        song=SONG,
+        overlay=OVERLAY,
+        fade_ms=(0, 0),
+        duration_ms=5000,
+        include_lyrics=True,
+        font_index=_index_with(nfc),
     )
 
     assert script.styles["Lyrics"].fontname == nfc
     assert script.events[0].text == rf"あ{{\fn{nfc}}}い"
     assert subs.used_fonts(script) == {nfc}
     assert lyrics.styles["Lyrics"].fontname == nfd  # 元の .ass は変えない
+
+
+def test_compose_matches_the_font_files_own_normalization_even_if_it_is_nfd() -> None:
+    # フォントファイルの name テーブルが NFD のとき、.ass 側を一律 NFC にすると
+    # 逆に不一致になる（索引にある NFD の表記へ揃えるのが正しい）
+    nfc = unicodedata.normalize("NFC", "テストゴシック")
+    nfd = unicodedata.normalize("NFD", nfc)
+    lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")], styles=[_style("Lyrics", nfc)])
+    script = subs.compose(
+        lyrics,
+        song=SONG,
+        overlay=OVERLAY,
+        fade_ms=(0, 0),
+        duration_ms=5000,
+        include_lyrics=True,
+        font_index=_index_with(nfd),
+    )
+
+    assert script.styles["Lyrics"].fontname == nfd
+
+
+def test_compose_normalizes_vertical_font_names_too() -> None:
+    # 先頭の @ は縦書き指定で、フォント名そのものではない（used_fonts と同じ扱い）。
+    # @ を残したまま、索引にある表記へ揃える
+    nfc = unicodedata.normalize("NFC", "テストゴシック")
+    nfd = unicodedata.normalize("NFD", nfc)
+    lyrics = _make(
+        [_line("0:00:01.00", "0:00:02.00", rf"あ{{\fn@{nfd}}}い")],
+        styles=[_style("Lyrics", "@" + nfd), _style("Title")],
+    )
+    script = subs.compose(
+        lyrics,
+        song=SONG,
+        overlay=OVERLAY,
+        fade_ms=(0, 0),
+        duration_ms=5000,
+        include_lyrics=True,
+        font_index=_index_with(nfc),
+    )
+
+    assert script.styles["Lyrics"].fontname == "@" + nfc
+    assert script.events[0].text == rf"あ{{\fn@{nfc}}}い"
+
+
+def test_compose_leaves_unknown_font_names_untouched() -> None:
+    lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")], styles=[_style("Lyrics", "無い書体")])
+    script = subs.compose(
+        lyrics,
+        song=SONG,
+        overlay=OVERLAY,
+        fade_ms=(0, 0),
+        duration_ms=5000,
+        include_lyrics=True,
+        font_index=EMPTY_INDEX,
+    )
+
+    assert script.styles["Lyrics"].fontname == "無い書体"
+
+
+def test_compose_normalizes_the_overlay_text_font_tag_too() -> None:
+    # 正規化は overlay のイベントを足した後に行う（曲名表示にも \fn タグを使える）
+    nfc = unicodedata.normalize("NFC", "テストゴシック")
+    nfd = unicodedata.normalize("NFD", nfc)
+    lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
+    # overlay_text.text は str.format を通るので、リテラルの {} は {{ }} で書く
+    overlay = OverlayText(text="{{\\fn" + nfd + "}}{title}")
+    script = subs.compose(
+        lyrics,
+        song=SONG,
+        overlay=overlay,
+        fade_ms=(0, 0),
+        duration_ms=5000,
+        include_lyrics=True,
+        font_index=_index_with(nfc),
+    )
+
+    assert script.events[-1].text == rf"{{\fn{nfc}}}曲"
 
 
 def test_overlay_text_can_put_label_on_its_own_line() -> None:
@@ -104,7 +203,13 @@ def test_overlay_text_can_put_label_on_its_own_line() -> None:
 def test_compose_preview_has_only_overlay() -> None:
     lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
     script = subs.compose(
-        lyrics, song=SONG, overlay=OVERLAY, fade_ms=(100, 100), duration_ms=5000, include_lyrics=False
+        lyrics,
+        song=SONG,
+        overlay=OVERLAY,
+        fade_ms=(100, 100),
+        duration_ms=5000,
+        include_lyrics=False,
+        font_index=EMPTY_INDEX,
     )
     assert [e.style for e in script.events] == ["Title"]
     assert set(script.styles) == {"Lyrics", "Title"}

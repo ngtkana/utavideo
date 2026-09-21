@@ -84,9 +84,7 @@ def test_font_dirs_expand_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
     assert load_user_config().font_dirs == [home / "other"]
 
 
-@pytest.mark.skipif(
-    sys.platform in ("win32", "darwin"), reason="fontconfig の既定値は Linux（WSL2 含む）のもの"
-)
+@pytest.mark.skipif(sys.platform == "win32", reason="fontconfig の既定値は POSIX のもの")
 def test_font_dir_candidates_cover_fontconfig_defaults(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -106,10 +104,15 @@ def test_font_dir_candidates_cover_fontconfig_defaults(
 def test_font_dir_candidates_on_macos(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
     assert _font_dir_candidates() == [
         Path("/System/Library/Fonts"),
         Path("/Library/Fonts"),
         tmp_path / "Library/Fonts",
+        Path("/usr/share/fonts"),
+        Path("/usr/local/share/fonts"),
+        tmp_path / "xdg/fonts",
+        tmp_path / ".fonts",
     ]
 
 

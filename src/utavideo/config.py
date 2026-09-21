@@ -145,15 +145,17 @@ def _font_dir_candidates() -> list[Path]:
         return dirs
     if sys.platform == "darwin":
         # /Network/Library/Fonts は、マウントされていないと存在を調べるだけで待たされるので入れない。
-        # Supplemental などのサブディレクトリは、探すときに再帰的にたどる
-        return [
+        # Supplemental などのサブディレクトリは、探すときに再帰的にたどる。
+        dirs = [
             Path("/System/Library/Fonts"),
             Path("/Library/Fonts"),
             Path.home() / "Library/Fonts",
         ]
-    dirs = [Path("/mnt/c/Windows/Fonts")]
-    dirs += sorted(map(Path, glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts")))
-    # fontconfig（/etc/fonts/fonts.conf）が既定で見る 4 か所
+    else:
+        dirs = [Path("/mnt/c/Windows/Fonts")]
+        dirs += sorted(map(Path, glob.glob("/mnt/c/Users/*/AppData/Local/Microsoft/Windows/Fonts")))
+    # fontconfig（/etc/fonts/fonts.conf）が既定で見る 4 か所。POSIX（macOS を含む）で共通に見る。
+    # Homebrew や、Linux から dotfiles ごと持ってきた macOS 利用者のためにも残す
     dirs += [
         Path("/usr/share/fonts"),
         Path("/usr/local/share/fonts"),

@@ -34,11 +34,30 @@ def match_key(name: str) -> str:
 
 
 @dataclass(frozen=True)
+class FontMatch:
+    """1つの照合キーに対応する、実際にインストールされているフォントの情報。"""
+
+    files: tuple[Path, ...]
+    # フォントファイルが実際に持っている名前（正規化前）。同じ照合キーで表記が食い違う
+    # ファイルが複数あるときは、最初に見つかったものを使う。
+    display_name: str
+
+
+@dataclass(frozen=True)
 class FontIndex:
-    files_by_name: dict[str, tuple[Path, ...]]
+    matches: dict[str, FontMatch]
 
     def lookup(self, name: str) -> tuple[Path, ...]:
-        return self.files_by_name.get(match_key(name), ())
+        match = self.matches.get(match_key(name))
+        return match.files if match else ()
+
+    def display_name(self, name: str) -> str:
+        """索引にあれば、フォントファイルが実際に持つ表記。無ければ元の名前のまま。
+        大文字小文字や Unicode 正規化の違いを libass はそのまま比べるので、.ass 側を
+        この名前に揃える（fonts.to_nfc で一律 NFC にすると、フォント側が NFD のとき
+        代わりに不一致になる）。"""
+        match = self.matches.get(match_key(name))
+        return match.display_name if match else name
 
 
 @dataclass(frozen=True)
@@ -106,11 +125,16 @@ def load_index(dirs: Iterable[Path], cache_file: Path) -> FontIndex:
         _write_cache(cache_file, merged)
 
     # 対応表は今回見つかったファイルだけから作る
-    files_by_name: dict[str, list[Path]] = {}
+    files_by_key: dict[str, list[Path]] = {}
+    display_name_by_key: dict[str, str] = {}
     for key, entry in entries.items():
         for name in entry["names"]:
-            files_by_name.setdefault(match_key(name), []).append(Path(key))
-    return FontIndex({name: tuple(files) for name, files in files_by_name.items()})
+            k = match_key(name)
+            files_by_key.setdefault(k, []).append(Path(key))
+            display_name_by_key.setdefault(k, name)
+    return FontIndex(
+        {k: FontMatch(tuple(files), display_name_by_key[k]) for k, files in files_by_key.items()}
+    )
 
 
 def resolve(index: FontIndex, names: Iterable[str]) -> FontResolution:
