@@ -182,7 +182,8 @@ class _FontSearch:
         dirs = load_user_config().font_dirs
         cache_file = cache_dir() / "fonts.json"
         if not cache_file.exists():
-            console.print("フォント一覧を作成しています（初回のみ時間がかかります）…")
+            # 進捗であって出力ではないので、fonts <名前> をスクリプトから使えるよう stderr に出す
+            err_console.print("フォント一覧を作成しています（初回のみ時間がかかります）…")
         return cls(dirs, fonts.load_index(dirs, cache_file))
 
 
@@ -507,6 +508,36 @@ def sample_command(
     console.print(
         f"  {prefix}utavideo check → {prefix}utavideo build（他のコマンドは README.md）", markup=False
     )
+
+
+@app.command("fonts")
+@_handle_errors
+def fonts_command(
+    name: Annotated[str | None, typer.Argument(help="調べるフォント名。省略時は使える名前を一覧する")] = None,
+) -> None:
+    """.ass に書けるフォント名（check が照合する名前）を探す。"""
+    search = _FontSearch.load()
+    if name is not None:
+        files = search.index.lookup(name)
+        if not files:
+            _fail(_font_missing_message(name, search.dirs))
+        for file in sorted(set(files)):
+            console.print(str(file), markup=False)
+        return
+    if not search.dirs:
+        console.print("探した場所: （なし）", markup=False)
+        console.print(
+            "環境変数 UTAVIDEO_FONT_DIRS か、ユーザー設定の font_dirs でフォントのある"
+            "ディレクトリを指定してください",
+            markup=False,
+        )
+        return
+    console.print("探した場所: " + ", ".join(map(str, search.dirs)), markup=False)
+    entries = sorted(
+        {(match.display_name, file) for match in search.index.matches.values() for file in match.files}
+    )
+    for display_name, file in entries:
+        console.print(f"{file} | {display_name}", markup=False)
 
 
 @app.command()

@@ -1,10 +1,12 @@
 """new / init の引数と既定値、サムネイルの検査、検査のメッセージ。"""
 
+import unicodedata
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import MakeFont
 from utavideo import subs
 from utavideo.cli import _font_missing_message, analyze_thumbnails, app
 from utavideo.config import load_project_config
@@ -205,3 +207,59 @@ def test_missing_font_message_tells_how_to_add_a_place_when_there_is_none() -> N
 def test_missing_font_message_only_lists_the_places_when_the_name_is_plain() -> None:
     message = _font_missing_message("BIZ UDGothic", [Path("/Library/Fonts")])
     assert message == "フォント 'BIZ UDGothic' が見つかりません（探した場所: /Library/Fonts）"
+
+
+def test_fonts_lists_files_and_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
+) -> None:
+    font = make_font(tmp_path / "fonts" / "Test.ttf", "テストゴシック")
+    monkeypatch.setenv("UTAVIDEO_FONT_DIRS", str(tmp_path / "fonts"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+    result = runner.invoke(app, ["fonts"])
+
+    assert result.exit_code == 0, result.output
+    assert str(tmp_path / "fonts") in result.output
+    assert f"{font} | テストゴシック" in result.output
+
+
+def test_fonts_with_a_name_prints_only_the_matching_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
+) -> None:
+    font = make_font(tmp_path / "fonts" / "Test.ttf", "テストゴシック")
+    monkeypatch.setenv("UTAVIDEO_FONT_DIRS", str(tmp_path / "fonts"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+    result = runner.invoke(app, ["fonts", "テストゴシック"])
+
+    assert result.exit_code == 0, result.output
+    # 進捗は stderr に出すので、stdout（スクリプトが受け取る側）にはパスだけが並ぶ
+    assert result.stdout == f"{font}\n"
+
+
+def test_fonts_with_a_name_lists_each_file_only_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
+) -> None:
+    # フォントの name テーブルに同じ名前の NFC・NFD 表記が両方入っていても、
+    # 同じファイルを重ねて出さない（match_key が同じになるため）
+    nfc = unicodedata.normalize("NFC", "テストゴシック")
+    nfd = unicodedata.normalize("NFD", nfc)
+    font = make_font(tmp_path / "fonts" / "Test.ttf", nfc)
+    monkeypatch.setattr("utavideo.fonts.read_font_names", lambda path: {nfc, nfd} if path == font else set())
+    monkeypatch.setenv("UTAVIDEO_FONT_DIRS", str(tmp_path / "fonts"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+    result = runner.invoke(app, ["fonts", nfc])
+
+    assert result.exit_code == 0, result.output
+    assert result.stdout == f"{font}\n"
+
+
+def test_fonts_with_an_unknown_name_fails(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("UTAVIDEO_FONT_DIRS", str(tmp_path / "fonts"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+
+    result = runner.invoke(app, ["fonts", "無い書体"])
+
+    assert result.exit_code == 1
+    assert "見つかりません" in result.output

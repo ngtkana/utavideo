@@ -48,6 +48,7 @@ utavideo announce     # SNS の告知文 → build/announce.txt
 | `new` | 雛形から曲フォルダを作る |
 | `init` | 既存のフォルダに utavideo のファイルを追加する（既存のファイルは変更しない） |
 | `sample` | 動作確認用の見本の曲フォルダを作る（素材も合成するので、そのまま書き出せる） |
+| `fonts` | `.ass` に書けるフォント名を探す |
 | `preview-bg` | 歌詞以外（背景・曲名表示・音声）を合成した軽いプレビュー動画を書き出す |
 | `check` | 設定・素材・歌詞・フォントを検査する |
 | `build` | 動画を書き出す（H.264 / AAC） |
@@ -58,7 +59,7 @@ utavideo announce     # SNS の告知文 → build/announce.txt
 | `release` | 書き出した動画を、バージョン付きの名前で `release/` にコピーする |
 | `announce` | 投稿した動画の URL と曲の情報から、SNS の告知文を書き出す |
 
-`new`・`init`・`sample` 以外は曲フォルダの中で実行します（`-C <曲フォルダ>` でも指定できます）。
+`new`・`init`・`sample`・`fonts` 以外は曲フォルダの中で実行します（`-C <曲フォルダ>` でも指定できます）。
 
 自分の曲を用意する前に動かしてみたいときは、`utavideo sample <パス>` で合成した素材入りの見本を作れます（[commands.md](docs/commands.md#sample)）。
 

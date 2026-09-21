@@ -4,7 +4,7 @@
 
 背景（画像・GIF・動画）＋ 歌詞 ＋ 曲名表示 ＋ 音声の動画を書き出す。
 
-- コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `thumbnail` / `description` / `release` / `announce`
+- コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `thumbnail` / `description` / `release` / `announce` / `fonts`
 - `check`: 設定・素材・スタイル・フォントの検査、行の重なり・`\pos`・はみ出しの警告
 - 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定）
 - 告知文: 投稿した動画の URL（`[[uploads]]`）と曲の情報から SNS（X）の告知文を作り、URL の形・ハッシュタグ・X での長さを検査する
