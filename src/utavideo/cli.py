@@ -16,7 +16,7 @@ import typer
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from utavideo import description, fonts, graph, layout, subs
+from utavideo import description, fonts, graph, layout, sample, subs
 from utavideo.config import PROJECT_CONFIG_NAME, cache_dir, load_user_config
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import partial_path, probe_audio, replace_partial, require_tools, run
@@ -303,6 +303,35 @@ def _ask(label: str, default: str) -> str:
 
 def _interactive() -> bool:
     return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+@app.command("sample")
+@_handle_errors
+def sample_command(
+    path: Annotated[Path, typer.Argument(help="作る見本の曲フォルダのパス（まだ無いパス）")],
+    font: Annotated[
+        str | None,
+        typer.Option("--font", help="歌詞に使う実在のフォント名。省略時はフォントも合成する"),
+    ] = None,
+    small: Annotated[bool, typer.Option("--small", help="小さく速く作る（640x360・10fps）")] = False,
+) -> None:
+    """動作確認用の見本の曲フォルダを、合成した素材から作る。"""
+    if path.exists():
+        _fail(f"既にあります: {path}（作り直すときはフォルダごと消してください）")
+    require_tools()
+    try:
+        result = sample.create(path, font=font, small=small)
+    # path は「まだ無いパス」に自分で作ったもの。途中で失敗したら消して、同じパスでやり直せるようにする
+    except BaseException:
+        shutil.rmtree(path, ignore_errors=True)
+        raise
+    console.print(f"作成しました: {path}", markup=False)
+    _print_scaffold(result, path)
+    prefix = sample.command_prefix(font)
+    console.print(f"次にやること:\n  cd {path}", markup=False)
+    console.print(
+        f"  {prefix}utavideo check → {prefix}utavideo build（他のコマンドは README.md）", markup=False
+    )
 
 
 @app.command()
