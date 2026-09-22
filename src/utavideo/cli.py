@@ -117,7 +117,7 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     built_inputs = inputs.snapshot(project) if mode == "final" else None
     analysis = analyze(project, mode)
     _print_issues(analysis.issues)
-    if not analysis.ok:
+    if not subs.ok(analysis.issues):
         raise typer.Exit(1)
     assert analysis.lyrics is not None and analysis.duration_s is not None and analysis.font_index is not None
 
@@ -363,7 +363,7 @@ def check(project_dir: ProjectOption = None) -> None:
         issues += found.issues
 
     _print_issues(issues)
-    if any(issue.level == "error" for issue in issues):
+    if not subs.ok(issues):
         raise typer.Exit(1)
     warnings = sum(issue.level == "warning" for issue in issues)
     if warnings:
@@ -404,7 +404,7 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
     checked = analyze_vertical(project, search, layouts=layouts)
     issues += checked.issues
     _print_issues(issues)
-    if any(issue.level == "error" for issue in issues):
+    if not subs.ok(issues):
         raise typer.Exit(1)
     assert checked.script is not None and duration_s is not None
 
@@ -476,7 +476,7 @@ def announce_command(project_dir: ProjectOption = None) -> None:
     issues = announce.lint(project.config, fmt, user_config.description, warn_no_uploads=True)
     _print_issues(issues)
     # 誤った URL の告知文を投稿しないよう、description と違ってエラーがあれば書き出さない
-    if any(issue.level == "error" for issue in issues):
+    if not subs.ok(issues):
         _fail("告知文を書き出しませんでした")
     text = announce.render(project.config, fmt, user_config.description)
     write_text(project.announce_output, text)
@@ -551,7 +551,7 @@ def shorts_command(
     analysis = analyze_shorts(project, search, duration_s, lyrics, selected, report_unused=name is None)
     issues += analysis.issues
     _print_issues(issues)
-    if any(issue.level == "error" for issue in issues):
+    if not subs.ok(issues):
         raise typer.Exit(1)
     assert analysis.script is not None and duration_s is not None
 
@@ -698,7 +698,7 @@ def thumbnail_command(
     analysis = analyze_thumbnails(project, thumbnails, bg_only=bg_only)
     issues += analysis.issues
     _print_issues(issues)
-    if any(issue.level == "error" for issue in issues):
+    if not subs.ok(issues):
         raise typer.Exit(1)
 
     video = project.config.video
