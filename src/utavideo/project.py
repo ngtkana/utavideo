@@ -14,7 +14,6 @@ from utavideo.config import (
     Credit,
     Defaults,
     ProjectConfig,
-    Thumbnail,
     load_project_config,
 )
 from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
@@ -94,26 +93,6 @@ class Project:
     @property
     def preview_bg_output(self) -> Path:
         return self.build_dir / "preview" / "bg.mp4"
-
-    @property
-    def thumbnail_dir(self) -> Path:
-        return self.build_dir / "thumbnail"
-
-    def thumbnail_output(self, thumbnail: Thumbnail) -> Path:
-        return self.thumbnail_dir / f"{thumbnail.name}.png"
-
-    def thumbnail_bg_output(self, thumbnail: Thumbnail) -> Path:
-        # 別のフォルダに置く。<name>-bg.png だと、name = "main-bg" のサムネイルとぶつかる
-        return self.thumbnail_dir / "bg" / f"{thumbnail.name}.png"
-
-    def thumbnail_file(self, thumbnail: Thumbnail) -> Path:
-        return self.resolve(thumbnail.file)
-
-    def thumbnail_size(self, thumbnail: Thumbnail) -> tuple[int, int]:
-        return thumbnail.size or self.config.video.size
-
-    def thumbnail_focus(self, thumbnail: Thumbnail) -> tuple[float, float]:
-        return thumbnail.focus or self.config.video.focus
 
     @property
     def title_output(self) -> Path:

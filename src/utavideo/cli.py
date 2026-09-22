@@ -13,7 +13,7 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from utavideo import announce, description, fonts, graph, inputs, sample, shorts, subs, vertical
+from utavideo import announce, description, fonts, graph, inputs, sample, shorts, subs, thumbnail, vertical
 from utavideo.analyze import (
     FontSearch,
     analyze,
@@ -344,8 +344,10 @@ def check(project_dir: ProjectOption = None) -> None:
                 config, user_config.announce, user_config.description, warn_no_uploads=False
             )
     for thumb in config.thumbnails:
-        size = project.thumbnail_size(thumb)
-        console.print(f"  サムネイル: {thumb.name}（{size[0]}x{size[1]}、{thumb.file}）", markup=False)
+        thumb_size = thumbnail.size(thumb, config.video.size)
+        console.print(
+            f"  サムネイル: {thumb.name}（{thumb_size[0]}x{thumb_size[1]}、{thumb.file}）", markup=False
+        )
     # 背景のファイル自体の検査は analyze で済んでいる
     issues += analyze_thumbnails(project, config.thumbnails, bg_only=False, search=search).issues
     if analysis.lyrics is not None:
@@ -674,9 +676,9 @@ def _select_named[T: Thumbnail | Short](
     return found
 
 
-@app.command()
+@app.command("thumbnail")
 @_handle_errors
-def thumbnail(
+def thumbnail_command(
     project_dir: ProjectOption = None,
     name: Annotated[str | None, typer.Option("--name", help="[[thumbnails]] の name。省略時はすべて")] = None,
     bg_only: Annotated[
@@ -703,20 +705,20 @@ def thumbnail(
     for thumb in thumbnails:
         if bg_only:
             subtitles = fontsdir = None
-            output = project.thumbnail_bg_output(thumb)
+            output = thumbnail.bg_output_path(project.build_dir, thumb)
         else:
             # .ass は加工せずにそのまま描く（自動のフェードと曲名表示は入れない）
-            subtitles = project.thumbnail_file(thumb).absolute()
+            subtitles = thumbnail.file_path(project.root, thumb).absolute()
             fontsdir = fonts.prepare_fontsdir(analysis.font_files[thumb.name], cache_dir() / "fontsets")
-            output = project.thumbnail_output(thumb)
+            output = thumbnail.output_path(project.build_dir, thumb)
         spec = graph.StillSpec(
-            size=project.thumbnail_size(thumb),
+            size=thumbnail.size(thumb, video.size),
             background=project.background_path.absolute(),
             at=thumb.at,
             subtitles=subtitles,
             fontsdir=fontsdir,
             fit=video.fit,
-            focus=project.thumbnail_focus(thumb),
+            focus=thumbnail.focus(thumb, video.focus),
             scale_flags=video.scale_flags,
             pad_color=video.pad_color,
         )

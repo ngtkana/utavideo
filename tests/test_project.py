@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from utavideo import subs
+from utavideo import thumbnail as thumbnail_module
 from utavideo.config import ConfigError, Credit, Defaults, load_project_config
 from utavideo.project import (
     SCAFFOLD_DIRS,
@@ -194,8 +195,15 @@ def test_thumbnail_paths_and_inherited_values(tmp_path: Path) -> None:
     )
     project = Project.load(root)
     main, square = project.config.thumbnails
-    assert project.thumbnail_output(main) == root / "build/thumbnail/main.png"
-    assert project.thumbnail_bg_output(main) == root / "build/thumbnail/bg/main.png"
-    assert project.thumbnail_file(main) == root / "t.ass"
-    assert (project.thumbnail_size(main), project.thumbnail_focus(main)) == ((1920, 1080), (0.0, 1.0))
-    assert (project.thumbnail_size(square), project.thumbnail_focus(square)) == ((1080, 1080), (1.0, 0.0))
+    assert thumbnail_module.output_path(project.build_dir, main) == root / "build/thumbnail/main.png"
+    assert thumbnail_module.bg_output_path(project.build_dir, main) == root / "build/thumbnail/bg/main.png"
+    assert thumbnail_module.file_path(project.root, main) == root / "t.ass"
+    video_size, video_focus = project.config.video.size, project.config.video.focus
+    assert (
+        thumbnail_module.size(main, video_size),
+        thumbnail_module.focus(main, video_focus),
+    ) == ((1920, 1080), (0.0, 1.0))
+    assert (
+        thumbnail_module.size(square, video_size),
+        thumbnail_module.focus(square, video_focus),
+    ) == ((1080, 1080), (1.0, 0.0))
