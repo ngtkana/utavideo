@@ -1,17 +1,56 @@
 import os
 import shlex
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 import pytest
+from fontTools.fontBuilder import FontBuilder
+from fontTools.pens.ttGlyphPen import TTGlyphPen
 from typer.testing import CliRunner
 
 from utavideo import cli
 from utavideo.cli import app
-from utavideo.sample import build_box_font
 
 type MakeFont = Callable[[Path, str], Path]
+
+
+def build_box_font(
+    path: Path, family: str, *, chars: Iterable[str], advance: int = 1000, space_advance: int = 500
+) -> Path:
+    """どの文字も塗りつぶしの四角になる TrueType フォントを作る（テスト用の共通部品）。
+
+    字形を持たない文字は別のフォントで代替されて環境ごとに絵が変わるので、使う文字はすべて
+    cmap に入れる。送り幅は全部同じなので、はみ出しの概算は文字数に比例する。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    codes = sorted({ord(ch) for ch in chars} - {0x20})
+    names = {code: f"c{code:04X}" for code in codes}
+    box = _box(advance)
+    fb = FontBuilder(unitsPerEm=1000, isTTF=True)
+    fb.setupGlyphOrder([".notdef", "space", *names.values()])
+    fb.setupCharacterMap({0x20: "space", **names})
+    fb.setupGlyf({".notdef": box, "space": TTGlyphPen(None).glyph(), **{n: box for n in names.values()}})
+    fb.setupHorizontalMetrics(
+        {".notdef": (advance, 0), "space": (space_advance, 0), **{n: (advance, 0) for n in names.values()}}
+    )
+    fb.setupHorizontalHeader(ascent=800, descent=-200)
+    fb.setupNameTable({"familyName": family, "styleName": "Regular"})
+    fb.setupOS2(sTypoAscender=800, sTypoDescender=-200, usWinAscent=800, usWinDescent=200)
+    fb.setupPost()
+    fb.save(str(path))
+    return path
+
+
+def _box(advance: int):
+    left, right = round(advance * 0.1), round(advance * 0.9)
+    pen = TTGlyphPen(None)
+    pen.moveTo((left, 0))
+    pen.lineTo((left, 700))
+    pen.lineTo((right, 700))
+    pen.lineTo((right, 0))
+    pen.closePath()
+    return pen.glyph()
 
 
 # 出力を確かめるテストが、端末の幅による折り返しで落ちないようにする。折り返しはパスや語の途中にも
