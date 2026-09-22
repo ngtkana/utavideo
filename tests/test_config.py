@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from utavideo import shorts as shorts_module
 from utavideo import vertical as vertical_module
 from utavideo.config import (
     NOT_RENDERED,
@@ -253,8 +254,12 @@ def test_layout_and_frame_y(tmp_path: Path) -> None:
     assert project.config.vertical.frame_y == 0.0
     chorus, intro = project.config.shorts
     # shorts[].layout は vertical.layout を上書きする
-    assert (project.short_layout(chorus), project.short_layout(intro)) == ("blur", "reframe")
-    assert project.short_work_ass(chorus, "frame").parent.name == "frame"
+    default_layout = project.config.vertical.layout
+    assert (
+        shorts_module.resolve_layout(chorus, default_layout),
+        shorts_module.resolve_layout(intro, default_layout),
+    ) == ("blur", "reframe")
+    assert shorts_module.work_ass_path(project.work_dir, chorus, "frame").parent.name == "frame"
 
 
 @pytest.mark.parametrize(
@@ -271,12 +276,11 @@ def test_shorts_focus_and_wide(tmp_path: Path) -> None:
     project = Project(tmp_path, load_project_config(_write(tmp_path, text)))
     chorus, intro = project.config.shorts
     assert (chorus.focus, chorus.wide) == (None, False)
-    assert project.short_focus(chorus) == vertical_module.focus(
-        project.config.vertical, project.config.video.focus
-    )
-    assert (project.short_focus(intro), intro.wide) == ((0.0, 1.0), True)
-    assert project.short_output(intro).name == "intro.mp4"
-    assert project.short_output(intro, wide=True).parent.name == "wide"
+    default_focus = vertical_module.focus(project.config.vertical, project.config.video.focus)
+    assert shorts_module.resolve_focus(chorus, default_focus) == default_focus
+    assert (shorts_module.resolve_focus(intro, default_focus), intro.wide) == ((0.0, 1.0), True)
+    assert shorts_module.output_path(project.build_dir, intro).name == "intro.mp4"
+    assert shorts_module.output_path(project.build_dir, intro, wide=True).parent.name == "wide"
 
 
 def test_shorts_names(tmp_path: Path) -> None:

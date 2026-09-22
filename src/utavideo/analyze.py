@@ -213,11 +213,13 @@ def analyze_shorts(
     lyrics は本編の .ass（読めなければ None で、本編との突き合わせをしない）。
     report_unused は、どの name にも合わない区間の行を警告するか。
     """
-    checked = analyze_vertical(project, search, layouts=[project.short_layout(s) for s in targets])
+    config = project.config
+    checked = analyze_vertical(
+        project, search, layouts=[shorts.resolve_layout(s, config.vertical.layout) for s in targets]
+    )
     if checked.script is None:
         return ShortsAnalysis(checked.issues, None, {}, checked.font_files)
     script = checked.script
-    config = project.config
     duration_ms = None if duration_s is None else round(duration_s * 1000)
     found = shorts.check_sections(
         script, [s.name for s in targets], duration_ms=duration_ms, report_unused=report_unused
@@ -233,7 +235,7 @@ def analyze_shorts(
     for short in targets:
         if (section := sections.get(short.name)) is None:
             continue
-        layout_ = project.short_layout(short)
+        layout_ = shorts.resolve_layout(short, config.vertical.layout)
         by_layout.setdefault(layout_, []).append(section)
         found_issues = shorts.edge_issues(edge_lines[layout_], section)
         # 書き出しの前に必ず通す検査。区間が音源より後ろだと、ffmpeg は音声の無い動画を書いてしまう

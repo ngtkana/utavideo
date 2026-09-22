@@ -392,7 +392,7 @@ def preview_bg(
 def _render_vertical_preview(project_dir: Path | None) -> None:
     require_tools()
     project = _load_project(project_dir)
-    layouts = project.vertical_layouts
+    layouts = shorts.layouts(project.config.shorts, project.config.vertical.layout)
     # 下敷きは、実際に使う画面に合わせる。blur が1本でもあれば、真ん中に本編の映像を置く
     layout_: Layout = "blur" if "blur" in layouts else "reframe"
     search = FontSearch.load()
@@ -537,9 +537,10 @@ def shorts_command(
     """縦型の切り抜きショートを build/shorts/<name>.mp4 に書き出す。"""
     require_tools()
     project = _load_project(project_dir)
-    selected = _select_named(project.config.shorts, name, table="[[shorts]]", example=SHORTS_EXAMPLE)
+    config = project.config
+    selected = _select_named(config.shorts, name, table="[[shorts]]", example=SHORTS_EXAMPLE)
     search = FontSearch.load()
-    layouts: list[Layout] = [project.short_layout(short) for short in selected]
+    layouts: list[Layout] = [shorts.resolve_layout(short, config.vertical.layout) for short in selected]
     any_blur, any_wide = "blur" in layouts, any(s.wide for s in selected)
     # wide は本編と同じ画面、blur は真ん中に本編の映像を置くので、どちらも本編の .ass を描く
     draws_main = any_blur or any_wide
@@ -552,7 +553,6 @@ def shorts_command(
         raise typer.Exit(1)
     assert analysis.script is not None and duration_s is not None
 
-    config = project.config
     fps = config.video.fps
     duration_ms = round(duration_s * 1000)
     # 本編の .ass はどのショートでも同じなので、合成は1回だけ（曲名表示の設定が wide と blur で違う）
@@ -565,6 +565,7 @@ def shorts_command(
             frame_ass = frame_script(project, lyrics, duration_ms, search.index)
     # blur では本編の .ass も描くので、そのフォントも渡す（どのショートでも同じ）
     blur_font_files = analysis.font_files + inputs.font_files
+    default_focus = vertical.focus(config.vertical, config.video.focus)
     for short, layout_ in zip(selected, layouts, strict=True):
         section = analysis.sections[short.name]
         blur = layout_ == "blur"
@@ -581,14 +582,14 @@ def shorts_command(
         frame, font_files = None, analysis.font_files
         if blur:
             assert frame_ass is not None
-            frame = Frame(frame_ass, project.short_work_ass(short, "frame"))
+            frame = Frame(frame_ass, shorts.work_ass_path(project.work_dir, short, "frame"))
             font_files = blur_font_files
         target = VideoTarget(
             "final",
             config.vertical.size,
-            project.short_focus(short),
-            project.short_work_ass(short),
-            project.short_output(short),
+            shorts.resolve_focus(short, default_focus),
+            shorts.work_ass_path(project.work_dir, short),
+            shorts.output_path(project.build_dir, short),
             f"shorts {short.name}",
             clip,
             frame,
@@ -601,8 +602,8 @@ def shorts_command(
             "final",
             config.video.size,
             config.video.focus,
-            project.short_work_ass(short, "wide"),
-            project.short_output(short, wide=True),
+            shorts.work_ass_path(project.work_dir, short, "wide"),
+            shorts.output_path(project.build_dir, short, wide=True),
             f"shorts {short.name}（wide）",
             clip,
         )
@@ -625,7 +626,7 @@ def vertical_ass(project_dir: ProjectOption = None) -> None:
     size = config.vertical.size
     # blur では歌詞が本編の映像に入るので、縦用 .ass には写さない（Aegisub で二重に見えないように）。
     # reframe のショートが1本でもあれば、その区間では縦用 .ass の歌詞を描くので写す
-    include_lyrics = vertical.draws_lyrics(project.vertical_layouts)
+    include_lyrics = vertical.draws_lyrics(shorts.layouts(config.shorts, config.vertical.layout))
     conversion = vertical.convert(
         subs.load(source),
         size=size,
