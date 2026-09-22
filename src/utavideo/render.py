@@ -74,6 +74,7 @@ class VideoTarget:
     label: str
     clip: graph.Clip | None = None  # 切り出す区間（None なら曲全体）
     frame: Frame | None = None  # None なら背景を size に合わせる画面（reframe）
+    pitch: float | None = None  # inst のキー変更（rubberband に渡す音程の比）。None なら音声はそのまま
 
 
 def write_video(
@@ -116,6 +117,7 @@ def write_video(
         preset=video.preset,
         clip=target.clip,
         frame=frame,
+        pitch=target.pitch,
     )
     if built_inputs is not None:
         # フォントは ffmpeg が書き出し中に読むので、その前に stat を取る

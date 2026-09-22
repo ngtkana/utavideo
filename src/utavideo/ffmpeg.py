@@ -25,12 +25,17 @@ class AudioInfo:
     has_sound: bool
 
 
-def require_tools(*, subtitles: bool = True) -> None:
-    """使えなければ止める。歌詞を描かない用途は subtitles=False で libass を要求しない。"""
+def require_tools(*, subtitles: bool = True, rubberband: bool = False) -> None:
+    """使えなければ止める。歌詞を描かない用途は subtitles=False で libass を要求しない。
+
+    キー変更を使う用途（inst）は rubberband=True で librubberband を要求する。
+    """
     missing = [tool for tool in ("ffmpeg", "ffprobe") if shutil.which(tool) is None]
     if missing:
         raise FFmpegError(f"{', '.join(missing)} が見つかりません（例: sudo apt install ffmpeg）")
     if subtitles and (error := subtitles_filter_error()) is not None:
+        raise FFmpegError(error)
+    if rubberband and (error := rubberband_filter_error()) is not None:
         raise FFmpegError(error)
 
 
@@ -55,6 +60,27 @@ def subtitles_filter_error() -> str | None:
         f"{ffmpeg} が subtitles フィルタ（libass）に対応していないので、歌詞を描画できません。"
         "libass 付きの ffmpeg を入れてください"
         "（Ubuntu: sudo apt install ffmpeg、macOS の Homebrew: brew install ffmpeg-full）"
+    )
+
+
+def rubberband_filter_error() -> str | None:
+    """ffmpeg で rubberband フィルタ（librubberband）を使えない理由と直し方。使えるなら None。"""
+    ffmpeg = shutil.which("ffmpeg") or "ffmpeg"
+    cmd = [ffmpeg, "-hide_banner", "-h", "filter=rubberband"]
+    try:
+        out = subprocess.run(cmd, capture_output=True, text=True, errors="replace")
+    except OSError as e:
+        return f"{ffmpeg} を実行できません: {e}"
+    if out.returncode != 0:
+        detail = (out.stderr.strip() or out.stdout.strip())[-500:]
+        return f"{ffmpeg} を実行できません（終了コード {out.returncode}）: {detail}"
+    if "Filter rubberband" in out.stdout + out.stderr:
+        return None
+    return (
+        f"{ffmpeg} が rubberband フィルタ（librubberband）に対応していないので、キーを変えられません。"
+        "librubberband 付きの ffmpeg を入れてください"
+        "（Ubuntu: 既定の ffmpeg パッケージには含まれないことが多いのでソースビルドか PPA を検討、"
+        "macOS の Homebrew: brew install ffmpeg-full）"
     )
 
 

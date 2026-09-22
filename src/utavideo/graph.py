@@ -85,6 +85,7 @@ class RenderSpec:
     clip: Clip | None = None  # None なら曲全体
     # None なら背景を size に合わせる画面（reframe）。あれば blur の画面で、size は縦の解像度
     frame: Frame | None = None
+    pitch: float | None = None  # rubberband に渡す音程の比（1.0 が変化なし）。None なら音声はそのまま
 
 
 def escape_filter_arg(value: str) -> str:
@@ -159,6 +160,8 @@ def build_args(spec: RenderSpec) -> list[str]:
     if spec.mode == "overlay":
         if clip is not None:
             raise ValueError("mode=overlay では区間を切り出せません")
+        if spec.pitch is not None:
+            raise ValueError("mode=overlay ではキーを変えられません")
         inputs = ["-f", "lavfi", "-i", f"color=c=black@0:s={w}x{h}:r={spec.fps},format=rgba"]
         subtitles = subtitles_filter(spec.subtitles, spec.fontsdir, alpha=True)
         video = f"[0:v]{subtitles},{_TO_BT709},format=yuva444p10le[v]"
@@ -187,14 +190,23 @@ def build_args(spec: RenderSpec) -> list[str]:
             codec = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-g", str(PREVIEW_GOP)]
             codec += ["-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "160k"]
 
+    if clip is not None and spec.pitch is not None:
+        raise ValueError("clip と pitch は同時に指定できません")
+    if clip:
+        audio_filter = _clip_audio(clip, spec.fps)
+    elif spec.pitch is not None:
+        audio_filter = _pitch_audio(spec.pitch)
+    else:
+        audio_filter = None
+
     return [
         "ffmpeg",
         *_COMMON,
         *inputs,
         "-i", str(spec.audio),
-        "-filter_complex", video + (f";{_clip_audio(clip, spec.fps)}" if clip else ""),
+        "-filter_complex", video + (f";{audio_filter}" if audio_filter else ""),
         "-map", "[v]",
-        "-map", "[a]" if clip else "1:a:0",
+        "-map", "[a]" if audio_filter else "1:a:0",
         *codec,
         *_BT709,
         "-ar", "48000",
@@ -296,6 +308,11 @@ def _clip_audio(clip: Clip, fps: int) -> str:
     if fade_out > 0:
         audio += f",afade=t=out:st={_seconds(end - start - fade_out)}:d={_seconds(fade_out)}"
     return audio + "[a]"
+
+
+def _pitch_audio(pitch: float) -> str:
+    """音程だけ変える filtergraph（[1:a]...[a]）。pitch は rubberband に渡す周波数の比。"""
+    return f"[1:a]rubberband=pitch={_ratio(pitch)}[a]"
 
 
 @dataclass(frozen=True)
