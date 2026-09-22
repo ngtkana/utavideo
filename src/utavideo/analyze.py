@@ -129,7 +129,7 @@ def vertical_inputs(project: Project, search: FontSearch, *, draws_main: bool) -
     return Analysis(issues, duration_s, lyrics, ())
 
 
-def analyze_inst(project: Project, keys: list[int], search: "FontSearch | None" = None) -> Analysis:
+def analyze_inst(project: Project, keys: list[int], search: FontSearch | None = None) -> Analysis:
     """歌唱練習用の動画（inst）に要るものの検査。歌詞の中身は問わず、曲名表示のスタイルだけ見る。"""
     config = project.config
     issues, duration_s = audio_issues(project)
