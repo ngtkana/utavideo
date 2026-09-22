@@ -50,15 +50,16 @@ def use_fake_ffmpeg(
     reply: str,
     to_stderr: bool = False,
     returncode: int = 0,
+    filter: str = "subtitles",
 ) -> Path:
-    """`-h filter=subtitles` にだけ決まった答えを返す ffmpeg を PATH の先頭に置き、その ffmpeg を返す。
+    """`-h filter=<filter>` にだけ決まった答えを返す ffmpeg を PATH の先頭に置き、その ffmpeg を返す。
 
-    他の引数は本物に渡すので、libass を調べるコマンドを変えたときにテストが気付く。
+    他の引数は本物に渡すので、libass・rubberband を調べるコマンドを変えたときにテストが気付く。
     PATH は置き換えずに前に足すので、ここより先へ進むテストでも他のコマンドは見つかる。
     """
     answer = (
         'for a in "$@"; do\n'
-        '  if [ "$a" = "filter=subtitles" ]; then\n'
+        f'  if [ "$a" = "filter={filter}" ]; then\n'
         f"    printf '%s\\n' {shlex.quote(reply)}{' >&2' if to_stderr else ''}\n"
         f"    exit {returncode}\n"
         "  fi\n"

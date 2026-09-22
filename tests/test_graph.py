@@ -160,6 +160,28 @@ def test_clip_is_rejected_in_overlay_mode() -> None:
         build_args(replace(CLIP_SPEC, mode="overlay"))
 
 
+def test_pitch_none_keeps_audio_untouched() -> None:
+    # pitch を渡さないとき（既存の build/preview-bg/overlay）は、今まで通り音声を直結する
+    assert "rubberband" not in _filter(build_args(SPEC))
+    assert _contains(build_args(SPEC), ["-map", "1:a:0"])
+
+
+def test_pitch_shifts_the_audio() -> None:
+    audio = _filter(build_args(replace(SPEC, pitch=1.122462))).split(";")[1]
+    assert audio == "[1:a]rubberband=pitch=1.122462[a]"
+    assert _contains(build_args(replace(SPEC, pitch=1.122462)), ["-map", "[a]"])
+
+
+def test_pitch_is_rejected_in_overlay_mode() -> None:
+    with pytest.raises(ValueError, match="overlay"):
+        build_args(replace(SPEC, mode="overlay", pitch=1.122462))
+
+
+def test_pitch_and_clip_are_rejected_together() -> None:
+    with pytest.raises(ValueError, match="pitch"):
+        build_args(replace(CLIP_SPEC, pitch=1.122462))
+
+
 BLUR_SPEC = replace(
     SPEC,
     size=(1080, 1920),

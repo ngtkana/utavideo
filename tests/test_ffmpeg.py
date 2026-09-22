@@ -14,6 +14,8 @@ runner = CliRunner()
 # 本物の ffmpeg 6.1 の出力（フィルタがあれば見出し、無ければこの1行で、どちらも終了コードは 0）
 HELP = "Filter subtitles\n  Render text subtitles onto input video using the libass library."
 UNKNOWN = "Unknown filter 'subtitles'."
+RUBBERBAND_HELP = "Filter rubberband\n  Apply time-stretching and pitch-shifting."
+RUBBERBAND_UNKNOWN = "Unknown filter 'rubberband'."
 
 
 def test_require_tools_says_what_to_install_when_ffmpeg_has_no_libass(
@@ -64,6 +66,34 @@ def test_require_tools_skips_the_libass_check_when_subtitles_are_not_drawn(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use_fake_ffmpeg(tmp_path, monkeypatch, reply=UNKNOWN)
+
+    require_tools(subtitles=False)
+
+
+def test_require_tools_says_what_to_install_when_ffmpeg_has_no_rubberband(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_fake_ffmpeg(tmp_path, monkeypatch, reply=RUBBERBAND_UNKNOWN, filter="rubberband")
+
+    with pytest.raises(FFmpegError) as e:
+        require_tools(subtitles=False, rubberband=True)
+
+    assert "librubberband" in str(e.value)
+    assert "ffmpeg-full" in str(e.value)
+
+
+def test_require_tools_passes_when_the_rubberband_filter_is_available(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_fake_ffmpeg(tmp_path, monkeypatch, reply=RUBBERBAND_HELP, filter="rubberband")
+
+    require_tools(subtitles=False, rubberband=True)
+
+
+def test_require_tools_skips_the_rubberband_check_by_default(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    use_fake_ffmpeg(tmp_path, monkeypatch, reply=RUBBERBAND_UNKNOWN, filter="rubberband")
 
     require_tools(subtitles=False)
 

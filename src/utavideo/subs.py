@@ -102,10 +102,11 @@ def add_fades(
             event.text = "{" + tag + "}" + event.text
 
 
-def format_overlay_text(template: str, song: Song) -> str:
-    return format_setting(
-        template, "overlay_text.text", title=song.title, artist=song.artist, label=song.label
-    )
+def format_overlay_text(template: str, song: Song, *, key: str | None = None) -> str:
+    values = {"title": song.title, "artist": song.artist, "label": song.label}
+    if key is not None:
+        values["key"] = key
+    return format_setting(template, "overlay_text.text", **values)
 
 
 def compose(
@@ -118,10 +119,12 @@ def compose(
     include_lyrics: bool,
     font_index: fonts.FontIndex,
     no_fade_style_prefix: str | None = None,
+    key: str | None = None,
 ) -> pysubs2.SSAFile:
     """書き出しに使うスクリプトを作る。元の lyrics は変更しない。
 
     スタイル名が no_fade_style_prefix で始まる行には、自動のフェードを入れない。
+    key は inst（歌唱練習用の動画）のキー変更の表示にだけ使う。渡さなければ {key} は使えない。
     """
     script = copy.deepcopy(lyrics) if include_lyrics else without_events(lyrics)
     add_fades(script, fade_ms, no_fade_style_prefix=no_fade_style_prefix)
@@ -132,7 +135,7 @@ def compose(
                 end=duration_ms,
                 style=overlay.style,
                 layer=OVERLAY_LAYER,
-                text=format_overlay_text(overlay.text, song),
+                text=format_overlay_text(overlay.text, song, key=key),
             )
         )
     _normalize_font_names(script, font_index)
@@ -362,6 +365,17 @@ def lint_vertical(subs: pysubs2.SSAFile, *, size: tuple[int, int], overlay: Over
         + _overlay_style_issues(subs, overlay)
         + _undefined_style_issues(subs)
     )
+
+
+def lint_inst(subs: pysubs2.SSAFile, *, size: tuple[int, int], overlay: OverlayText) -> list[Issue]:
+    """歌唱練習用の動画に使う .ass の検査。
+
+    inst の書き出しは without_events（include_lyrics=False）で歌詞の行を取り除き、描画にも
+    使わないので、行ごとの検査（lint_lines）も、歌詞の行が使うスタイルの検査
+    （_undefined_style_issues）も行わない。実際に描くのは overlay の1行だけなので、
+    そのスタイルがあるかだけを確かめる。
+    """
+    return _play_res_issues(subs, size, "動画サイズ") + _overlay_style_issues(subs, overlay)
 
 
 # 曲名などを .ass の行に埋めるとき、{ } はタグとして読まれる。libass は \{ \} を括弧そのものとして描く。

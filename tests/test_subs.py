@@ -233,6 +233,30 @@ def test_overlay_text_rejects_unknown_placeholder() -> None:
         subs.format_overlay_text("{composer}", SONG)
 
 
+def test_overlay_text_can_use_the_key_placeholder() -> None:
+    assert subs.format_overlay_text("{title}（Key: {key}）", SONG, key="-1") == "曲（Key: -1）"
+    # key を渡さない既存の呼び出し（build/preview-bg/overlay/shorts）では、
+    # {key} は今まで通り使えないプレースホルダーのまま（inst だけが渡す）
+    with pytest.raises(ConfigError, match="title, artist, label"):
+        subs.format_overlay_text("{key}", SONG)
+
+
+def test_compose_passes_the_key_to_the_overlay_text() -> None:
+    lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
+    overlay = OverlayText(text="{title}（Key: {key}）")
+    script = subs.compose(
+        lyrics,
+        song=SONG,
+        overlay=overlay,
+        fade_ms=(0, 0),
+        duration_ms=5000,
+        include_lyrics=False,
+        font_index=EMPTY_INDEX,
+        key="+2",
+    )
+    assert script.events[-1].text == "曲（Key: +2）"
+
+
 def test_used_fonts_from_used_styles_and_fn_tags() -> None:
     script = _make(
         [_line("0:00:01.00", "0:00:02.00", r"{\fn@縦書き}あ{\fnYu Gothic}い")],
@@ -388,3 +412,20 @@ def test_lint_vertical_checks_the_whole_file_but_not_each_line() -> None:
     assert "PlayRes 1920x1080 が縦の解像度（vertical.size） 1080x1920" in errors[0]
     assert "overlay_text.style" in errors[1]
     assert "'Nope'" in errors[2]
+
+
+def test_lint_inst_checks_play_res_and_overlay_style_but_not_lines() -> None:
+    script = _make(
+        [
+            _line("0:00:01.00", "0:00:05.00", r"{\pos(10,10)}\pos も重なりも見ない"),
+            # 歌詞の行は compose_inst が without_events で取り除くので、未定義のスタイルでもよい
+            _line("0:00:02.00", "0:00:03.00", "描かれない行", style="Nope"),
+        ],
+        styles=[_style("Lyrics")],
+    )
+    issues = subs.lint_inst(script, size=(1080, 1920), overlay=OVERLAY)
+    assert _messages(issues, "warning") == []
+    errors = _messages(issues, "error")
+    assert len(errors) == 2
+    assert "PlayRes 1920x1080 が動画サイズ 1080x1920" in errors[0]
+    assert "overlay_text.style" in errors[1]
