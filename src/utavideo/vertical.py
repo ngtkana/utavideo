@@ -9,11 +9,14 @@ import copy
 import math
 import posixpath
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
+from pathlib import Path
 
 import pysubs2
 
 from utavideo import subs
+from utavideo.config import Focus, Layout, OverlayText, Vertical
 
 SHORT_STYLE = "Short"
 # このスタイル名で始まる行は、縦だけの文字（帯の曲名など）。歌詞として扱わない
@@ -177,3 +180,36 @@ def _convert_coords(match: re.Match[str], rx: float, ry: float, skipped: dict[st
 def _format(value: float) -> str:
     text = f"{value:.2f}".rstrip("0").rstrip(".")
     return "0" if text == "-0" else text
+
+
+def preview_bg_output(build_dir: Path) -> Path:
+    return build_dir / "preview" / "vertical-bg.mp4"
+
+
+def lyrics_path(root: Path, config: Vertical) -> Path:
+    lyrics = config.lyrics
+    return lyrics if lyrics.is_absolute() else root / lyrics
+
+
+def focus(config: Vertical, video_focus: Focus) -> Focus:
+    return config.focus or video_focus
+
+
+def overlay_text(overlay: OverlayText, config: Vertical) -> OverlayText:
+    """縦で使う曲名表示の設定。vertical.overlay_text = false なら出さない。"""
+    return overlay.model_copy(update={"enabled": overlay.enabled and config.overlay_text})
+
+
+def draws_lyrics(layouts: Collection[Layout]) -> bool:
+    """縦用 .ass に歌詞と曲名表示を持たせるか。
+
+    blur ではどちらも本編の映像に入るので持たせない。reframe が1つでもあれば持たせる。
+    """
+    return "reframe" in layouts
+
+
+def script_overlay_text(overlay: OverlayText, layouts: Collection[Layout]) -> OverlayText:
+    """縦用 .ass に描く曲名表示。blur では本編の映像に入るので、縦用 .ass には入れない。"""
+    if draws_lyrics(layouts):
+        return overlay
+    return overlay.model_copy(update={"enabled": False})

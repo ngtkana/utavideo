@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pysubs2
 
-from utavideo import fonts, graph, layout, shorts, subs
+from utavideo import fonts, graph, layout, shorts, subs, vertical
 from utavideo.config import Layout, Short, Thumbnail, cache_dir, load_user_config
 from utavideo.console import err_console
 from utavideo.ffmpeg import FFmpegError, probe_audio, probe_duration
@@ -149,7 +149,8 @@ def analyze_vertical(
     区間の外の行は書き出しに使わないので、行ごとの検査（はみ出しを含む）はここでは行わない。
     """
     sizing = _blur_frame_issues(project) if "blur" in layouts else []
-    path = project.vertical_lyrics_path
+    config = project.config
+    path = vertical.lyrics_path(project.root, config.vertical)
     if not path.is_file():
         message = (
             f"縦用 .ass（vertical.lyrics）のファイルがありません: {path}（utavideo vertical-ass で作れます）"
@@ -159,8 +160,9 @@ def analyze_vertical(
         script = subs.load(path)
     except subs.SubtitleError as e:
         return VerticalAnalysis([*sizing, subs.Issue("error", f"縦用 .ass: {e}")], None, ())
-    config = project.config
-    overlay = project.vertical_script_overlay_text(layouts)
+    overlay = vertical.script_overlay_text(
+        vertical.overlay_text(config.overlay_text, config.vertical), layouts
+    )
     issues = subs.lint_vertical(script, size=config.vertical.size, overlay=overlay)
     # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
     composed = compose(project, script, 0, "final", search.index, no_vertical_fade=True, overlay=overlay)

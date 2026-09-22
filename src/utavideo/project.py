@@ -3,19 +3,19 @@
 import json
 import re
 import string
-from collections.abc import Collection, Iterable
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
 from typing import Literal
 
+from utavideo import vertical
 from utavideo.config import (
     PROJECT_CONFIG_NAME,
     ConfigError,
     Credit,
     Defaults,
     Layout,
-    OverlayText,
     ProjectConfig,
     Short,
     Thumbnail,
@@ -100,39 +100,6 @@ class Project:
         return self.build_dir / "preview" / "bg.mp4"
 
     @property
-    def vertical_preview_bg_output(self) -> Path:
-        return self.build_dir / "preview" / "vertical-bg.mp4"
-
-    @property
-    def vertical_lyrics_path(self) -> Path:
-        return self.resolve(self.config.vertical.lyrics)
-
-    @property
-    def vertical_focus(self) -> tuple[float, float]:
-        return self.config.vertical.focus or self.config.video.focus
-
-    @property
-    def vertical_overlay_text(self) -> OverlayText:
-        """縦で使う曲名表示の設定。vertical.overlay_text = false なら出さない。"""
-        overlay = self.config.overlay_text
-        return overlay.model_copy(update={"enabled": overlay.enabled and self.config.vertical.overlay_text})
-
-    @staticmethod
-    def draws_vertical_lyrics(layouts: Collection[Layout]) -> bool:
-        """縦用 .ass に歌詞と曲名表示を持たせるか。
-
-        blur ではどちらも本編の映像に入るので持たせない。reframe が1つでもあれば持たせる。
-        """
-        return "reframe" in layouts
-
-    def vertical_script_overlay_text(self, layouts: Collection[Layout]) -> OverlayText:
-        """縦用 .ass に描く曲名表示。blur では本編の映像に入るので、縦用 .ass には入れない。"""
-        overlay = self.vertical_overlay_text
-        if self.draws_vertical_lyrics(layouts):
-            return overlay
-        return overlay.model_copy(update={"enabled": False})
-
-    @property
     def vertical_layouts(self) -> tuple[Layout, ...]:
         """縦用 .ass から実際に描く画面の作り方（[[shorts]] で使うもの）。
 
@@ -143,7 +110,7 @@ class Project:
         return tuple(dict.fromkeys(self.short_layout(s) for s in self.config.shorts))
 
     def short_focus(self, short: Short) -> tuple[float, float]:
-        return short.focus or self.vertical_focus
+        return short.focus or vertical.focus(self.config.vertical, self.config.video.focus)
 
     def short_layout(self, short: Short) -> Layout:
         return short.layout or self.config.vertical.layout

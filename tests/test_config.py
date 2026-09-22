@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 from pydantic import BaseModel
 
+from utavideo import vertical as vertical_module
 from utavideo.config import (
     NOT_RENDERED,
     ConfigError,
@@ -214,9 +215,11 @@ def test_odd_vertical_size_is_rejected(tmp_path: Path) -> None:
 
 def test_vertical_focus_defaults_to_video_focus(tmp_path: Path) -> None:
     text = MINIMAL + "focus = [0.2, 0.5]\n"
-    assert Project(tmp_path, load_project_config(_write(tmp_path, text))).vertical_focus == (0.2, 0.5)
+    config = load_project_config(_write(tmp_path, text))
+    assert vertical_module.focus(config.vertical, config.video.focus) == (0.2, 0.5)
     text += "[vertical]\nfocus = [1, 0]\n"
-    assert Project(tmp_path, load_project_config(_write(tmp_path, text))).vertical_focus == (1.0, 0.0)
+    config = load_project_config(_write(tmp_path, text))
+    assert vertical_module.focus(config.vertical, config.video.focus) == (1.0, 0.0)
 
 
 def test_vertical_focus_is_validated(tmp_path: Path) -> None:
@@ -227,13 +230,13 @@ def test_vertical_focus_is_validated(tmp_path: Path) -> None:
 def test_vertical_overlay_text_and_audio_fade(tmp_path: Path) -> None:
     config = load_project_config(_write(tmp_path, MINIMAL))
     assert (config.vertical.overlay_text, config.vertical.audio_fade_ms) == (True, (300, 1000))
-    assert Project(tmp_path, config).vertical_overlay_text.enabled
+    assert vertical_module.overlay_text(config.overlay_text, config.vertical).enabled
     text = MINIMAL + "[vertical]\noverlay_text = false\naudio_fade_ms = [0, 500]\n"
     config = load_project_config(_write(tmp_path, text))
     assert config.vertical.audio_fade_ms == (0, 500)
     # 曲名表示は本編では出したまま、縦だけ消せる
     assert config.overlay_text.enabled
-    assert not Project(tmp_path, config).vertical_overlay_text.enabled
+    assert not vertical_module.overlay_text(config.overlay_text, config.vertical).enabled
 
 
 def test_negative_audio_fade_is_rejected(tmp_path: Path) -> None:
@@ -268,7 +271,9 @@ def test_shorts_focus_and_wide(tmp_path: Path) -> None:
     project = Project(tmp_path, load_project_config(_write(tmp_path, text)))
     chorus, intro = project.config.shorts
     assert (chorus.focus, chorus.wide) == (None, False)
-    assert project.short_focus(chorus) == project.vertical_focus
+    assert project.short_focus(chorus) == vertical_module.focus(
+        project.config.vertical, project.config.video.focus
+    )
     assert (project.short_focus(intro), intro.wide) == ((0.0, 1.0), True)
     assert project.short_output(intro).name == "intro.mp4"
     assert project.short_output(intro, wide=True).parent.name == "wide"

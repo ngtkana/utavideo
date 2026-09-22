@@ -50,7 +50,8 @@ def frame_script(
 
     build/main.mp4 と同じ画面にする。曲名表示だけ vertical.overlay_text で決まる。
     """
-    return compose(project, lyrics, duration_ms, "final", font_index, overlay=project.vertical_overlay_text)
+    overlay = vertical.overlay_text(project.config.overlay_text, project.config.vertical)
+    return compose(project, lyrics, duration_ms, "final", font_index, overlay=overlay)
 
 
 @dataclass(frozen=True)
