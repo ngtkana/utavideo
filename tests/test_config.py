@@ -209,6 +209,13 @@ def test_vertical_defaults_and_values(tmp_path: Path) -> None:
     assert (vertical.size, vertical.lyrics) == ((720, 1280), Path("src/short.ass"))
 
 
+def test_inst_defaults_and_values(tmp_path: Path) -> None:
+    default = load_project_config(_write(tmp_path, MINIMAL)).inst
+    assert default.text == "{title} / {artist}（Key: {key}）"
+    text = MINIMAL + '[inst]\ntext = "{title} Key:{key}"\n'
+    assert load_project_config(_write(tmp_path, text)).inst.text == "{title} Key:{key}"
+
+
 def test_odd_vertical_size_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ConfigError, match="偶数"):
         load_project_config(_write(tmp_path, MINIMAL + "[vertical]\nsize = [1081, 1920]\n"))
@@ -347,6 +354,7 @@ def test_settings_marked_as_not_rendered() -> None:
         "shorts",
         "uploads",
         "announce",
+        "inst",
     }
 
 

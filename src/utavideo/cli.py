@@ -13,10 +13,23 @@ from typing import Annotated, NoReturn
 
 import typer
 
-from utavideo import announce, description, fonts, graph, inputs, sample, shorts, subs, thumbnail, vertical
+from utavideo import (
+    announce,
+    description,
+    fonts,
+    graph,
+    inputs,
+    inst,
+    sample,
+    shorts,
+    subs,
+    thumbnail,
+    vertical,
+)
 from utavideo.analyze import (
     FontSearch,
     analyze,
+    analyze_inst,
     analyze_shorts,
     analyze_thumbnails,
     analyze_vertical,
@@ -57,7 +70,7 @@ from utavideo.project import (
     scaffold,
     to_windows_path,
 )
-from utavideo.render import Frame, VideoTarget, compose, frame_script, write_video
+from utavideo.render import Frame, VideoTarget, compose, compose_inst, frame_script, write_video
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -611,6 +624,42 @@ def shorts_command(
         )
         # 本編と同じ .ass・同じ大きさで描くので、区間のコマは build/main.mp4 と一致する
         write_video(project, wide_script, wide_target, length_s, inputs.font_files, None)
+
+
+@app.command("inst")
+@_handle_errors
+def inst_command(
+    project_dir: ProjectOption = None,
+    keys: Annotated[
+        str, typer.Option("--keys", help="半音単位のキー。カンマ区切りで複数指定できる（例: -1,-2,-3）")
+    ] = "0",
+) -> None:
+    """歌唱練習用に、キーを変えた伴奏の動画を build/inst/key<N>.mp4 に書き出す。歌詞は描かない。"""
+    require_tools(rubberband=True)
+    project = _load_project(project_dir)
+    parsed_keys = inst.parse_keys(keys)
+    search = FontSearch.load()
+    analysis = analyze_inst(project, parsed_keys, search)
+    _print_issues(analysis.issues)
+    if not subs.ok(analysis.issues):
+        raise typer.Exit(1)
+    assert analysis.lyrics is not None and analysis.duration_s is not None and analysis.font_index is not None
+
+    duration_ms = round(analysis.duration_s * 1000)
+    video = project.config.video
+    for key in parsed_keys:
+        label = inst.key_label(key)
+        script = compose_inst(project, analysis.lyrics, duration_ms, analysis.font_index, label)
+        target = VideoTarget(
+            "final",
+            video.size,
+            video.focus,
+            inst.work_ass_path(project.work_dir, key),
+            inst.output_path(project.build_dir, key),
+            f"inst {label}",
+            pitch=inst.pitch_ratio(key),
+        )
+        write_video(project, script, target, analysis.duration_s, analysis.font_files, None)
 
 
 @app.command("vertical-ass")

@@ -102,11 +102,13 @@ def add_fades(
             event.text = "{" + tag + "}" + event.text
 
 
-def format_overlay_text(template: str, song: Song, *, key: str | None = None) -> str:
+def format_overlay_text(
+    template: str, song: Song, *, setting: str = "overlay_text.text", key: str | None = None
+) -> str:
     values = {"title": song.title, "artist": song.artist, "label": song.label}
     if key is not None:
         values["key"] = key
-    return format_setting(template, "overlay_text.text", **values)
+    return format_setting(template, setting, **values)
 
 
 def compose(
@@ -119,12 +121,14 @@ def compose(
     include_lyrics: bool,
     font_index: fonts.FontIndex,
     no_fade_style_prefix: str | None = None,
+    overlay_setting: str = "overlay_text.text",
     key: str | None = None,
 ) -> pysubs2.SSAFile:
     """書き出しに使うスクリプトを作る。元の lyrics は変更しない。
 
     スタイル名が no_fade_style_prefix で始まる行には、自動のフェードを入れない。
     key は inst（歌唱練習用の動画）のキー変更の表示にだけ使う。渡さなければ {key} は使えない。
+    overlay_setting は overlay.text の書式が不正なときに名指しする設定名（inst は "inst.text"）。
     """
     script = copy.deepcopy(lyrics) if include_lyrics else without_events(lyrics)
     add_fades(script, fade_ms, no_fade_style_prefix=no_fade_style_prefix)
@@ -135,7 +139,7 @@ def compose(
                 end=duration_ms,
                 style=overlay.style,
                 layer=OVERLAY_LAYER,
-                text=format_overlay_text(overlay.text, song, key=key),
+                text=format_overlay_text(overlay.text, song, setting=overlay_setting, key=key),
             )
         )
     _normalize_font_names(script, font_index)

@@ -237,6 +237,12 @@ class Announce(_Model):
     hashtags: Hashtags = ()
 
 
+class Inst(_Model):
+    """歌唱練習用の動画（inst）に描く、曲名・キーの表示。"""
+
+    text: str = "{title} / {artist}（Key: {key}）"
+
+
 class ProjectConfig(_Model):
     song: Song
     audio: Audio
@@ -251,6 +257,7 @@ class ProjectConfig(_Model):
     shorts: Annotated[tuple[Short, ...], NOT_RENDERED] = ()
     uploads: Annotated[tuple[Upload, ...], NOT_RENDERED] = ()
     announce: Annotated[Announce | None, NOT_RENDERED] = None
+    inst: Annotated[Inst, NOT_RENDERED] = Field(default_factory=Inst)
 
     @field_validator("thumbnails")
     @classmethod

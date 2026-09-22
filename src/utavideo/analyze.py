@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pysubs2
 
-from utavideo import fonts, graph, layout, shorts, subs, thumbnail, vertical
+from utavideo import fonts, graph, inst, layout, shorts, subs, thumbnail, vertical
 from utavideo.config import Layout, Short, Thumbnail, cache_dir, load_user_config
 from utavideo.console import err_console
 from utavideo.ffmpeg import FFmpegError, probe_audio, probe_duration
 from utavideo.project import Project
-from utavideo.render import compose
+from utavideo.render import compose, compose_inst
 from utavideo.timecode import format_time
 
 
@@ -127,6 +127,32 @@ def vertical_inputs(project: Project, search: FontSearch, *, draws_main: bool) -
     if lyrics is not None:
         issues += subs.layout_res_issues(lyrics)
     return Analysis(issues, duration_s, lyrics, ())
+
+
+def analyze_inst(project: Project, keys: list[int], search: FontSearch | None = None) -> Analysis:
+    """歌唱練習用の動画（inst）に要るものの検査。歌詞の中身は問わず、曲名表示のスタイルだけ見る。"""
+    config = project.config
+    issues, duration_s = audio_issues(project)
+    issues += background_issues(project)
+    if not project.lyrics_path.is_file():
+        message = f"lyrics.file のファイルがありません: {project.lyrics_path}（曲名表示のスタイルに使います）"
+        issues.append(subs.Issue("error", message))
+        return Analysis(issues, duration_s, None, ())
+
+    lyrics = subs.load(project.lyrics_path)
+    overlay = inst.overlay_text(config.overlay_text, config.inst)
+    issues += subs.lint_inst(lyrics, size=config.video.size, overlay=overlay)
+    if duration_s is None:
+        return Analysis(issues, duration_s, lyrics, ())
+
+    search = search or FontSearch.load()
+    # はみ出しは表示する文字数（key の桁数）で変わるので、--keys のうち最も長くなるキーで検査する。
+    # overlay の1行しか描かないので、はみ出しの検査もここで行う（vertical/shorts と違い、
+    # ほかで検査される行が無い）
+    widest_key = max(keys, key=lambda key: len(inst.key_label(key)))
+    script = compose_inst(project, lyrics, round(duration_s * 1000), search.index, inst.key_label(widest_key))
+    font_issues, font_files = check_fonts(script, search)
+    return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index)
 
 
 @dataclass(frozen=True)
