@@ -8,10 +8,13 @@ import math
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
 
 import pysubs2
 
 from utavideo import subs
+from utavideo.config import Focus, Layout, Short
 from utavideo.subs import Issue, describe
 from utavideo.vertical import SHORT_STYLE, VERTICAL_STYLE_PREFIX
 
@@ -378,3 +381,35 @@ def _compare(group: Sequence[_MainLine]) -> list[Issue]:
         )
         issues.append(Issue("warning", message))
     return issues
+
+
+def resolve_focus(short: Short, default_focus: Focus) -> Focus:
+    return short.focus or default_focus
+
+
+def resolve_layout(short: Short, default_layout: Layout) -> Layout:
+    return short.layout or default_layout
+
+
+def layouts(targets: Sequence[Short], default_layout: Layout) -> tuple[Layout, ...]:
+    """縦用 .ass から実際に描く画面の作り方（[[shorts]] で使うもの）。
+
+    [[shorts]] を書く前（vertical-ass・preview-bg --vertical）は vertical.layout だけになる。
+    """
+    if not targets:
+        return (default_layout,)
+    return tuple(dict.fromkeys(resolve_layout(s, default_layout) for s in targets))
+
+
+def directory(build_dir: Path) -> Path:
+    return build_dir / "shorts"
+
+
+def output_path(build_dir: Path, short: Short, *, wide: bool = False) -> Path:
+    # 16:9 版は別のフォルダに置く。<name>-wide.mp4 だと、name = "chorus-wide" のショートとぶつかる
+    return (directory(build_dir) / "wide" if wide else directory(build_dir)) / f"{short.name}.mp4"
+
+
+def work_ass_path(work_dir: Path, short: Short, folder: Literal["", "wide", "frame"] = "") -> Path:
+    """描画に使った .ass。folder は 16:9 版が "wide"、blur の真ん中に置く本編が "frame"。"""
+    return work_dir.joinpath("shorts", folder, f"{short.name}.ass")

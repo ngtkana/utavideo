@@ -7,17 +7,13 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from importlib import resources
 from pathlib import Path
-from typing import Literal
 
-from utavideo import vertical
 from utavideo.config import (
     PROJECT_CONFIG_NAME,
     ConfigError,
     Credit,
     Defaults,
-    Layout,
     ProjectConfig,
-    Short,
     Thumbnail,
     load_project_config,
 )
@@ -98,34 +94,6 @@ class Project:
     @property
     def preview_bg_output(self) -> Path:
         return self.build_dir / "preview" / "bg.mp4"
-
-    @property
-    def vertical_layouts(self) -> tuple[Layout, ...]:
-        """縦用 .ass から実際に描く画面の作り方（[[shorts]] で使うもの）。
-
-        [[shorts]] を書く前（vertical-ass・preview-bg --vertical）は vertical.layout だけになる。
-        """
-        if not self.config.shorts:
-            return (self.config.vertical.layout,)
-        return tuple(dict.fromkeys(self.short_layout(s) for s in self.config.shorts))
-
-    def short_focus(self, short: Short) -> tuple[float, float]:
-        return short.focus or vertical.focus(self.config.vertical, self.config.video.focus)
-
-    def short_layout(self, short: Short) -> Layout:
-        return short.layout or self.config.vertical.layout
-
-    @property
-    def shorts_dir(self) -> Path:
-        return self.build_dir / "shorts"
-
-    def short_output(self, short: Short, *, wide: bool = False) -> Path:
-        # 16:9 版は別のフォルダに置く。<name>-wide.mp4 だと、name = "chorus-wide" のショートとぶつかる
-        return (self.shorts_dir / "wide" if wide else self.shorts_dir) / f"{short.name}.mp4"
-
-    def short_work_ass(self, short: Short, folder: Literal["", "wide", "frame"] = "") -> Path:
-        """描画に使った .ass。folder は 16:9 版が "wide"、blur の真ん中に置く本編が "frame"。"""
-        return self.work_dir.joinpath("shorts", folder, f"{short.name}.ass")
 
     @property
     def thumbnail_dir(self) -> Path:
