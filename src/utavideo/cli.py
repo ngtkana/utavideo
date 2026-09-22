@@ -407,7 +407,8 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
     assert checked.script is not None and duration_s is not None
 
     duration_ms = round(duration_s * 1000)
-    overlay = project.vertical_script_overlay_text([layout_])
+    overlay_text = vertical.overlay_text(project.config.overlay_text, project.config.vertical)
+    overlay = vertical.script_overlay_text(overlay_text, [layout_])
     script = compose(
         project, checked.script, duration_ms, "preview", search.index, no_vertical_fade=True, overlay=overlay
     )
@@ -421,9 +422,9 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
     target = VideoTarget(
         "preview",
         project.config.vertical.size,
-        project.vertical_focus,
+        vertical.focus(project.config.vertical, project.config.video.focus),
         project.work_dir / "vertical-preview.ass",
-        project.vertical_preview_bg_output,
+        vertical.preview_bg_output(project.build_dir),
         "preview-bg --vertical",
         frame=frame,
     )
@@ -571,7 +572,9 @@ def shorts_command(
         length_s = clip.duration_s(fps)
         # .ass の時刻はずらさない。区間の頭をまたぐ行の \\move・\\fad を本編と同じ状態で描くため
         in_section = shorts.lines_in_sections(analysis.script, [section], vertical_only=blur)
-        overlay = project.vertical_script_overlay_text([layout_])
+        overlay = vertical.script_overlay_text(
+            vertical.overlay_text(config.overlay_text, config.vertical), [layout_]
+        )
         script = compose(
             project, in_section, duration_ms, "final", search.index, no_vertical_fade=True, overlay=overlay
         )
@@ -612,21 +615,21 @@ def shorts_command(
 def vertical_ass(project_dir: ProjectOption = None) -> None:
     """本編の歌詞 .ass から、縦型のショート用の .ass（vertical.lyrics）を作る。既にあれば止まる。"""
     project = _load_project(project_dir)
-    dest = project.vertical_lyrics_path
+    config = project.config
+    dest = vertical.lyrics_path(project.root, config.vertical)
     if dest.exists():
         _fail(f"既にあります: {dest}（上書きしません。作り直すときは、消してから実行します）")
     source = project.lyrics_path
     if not source.is_file():
         _fail(f"lyrics.file のファイルがありません: {source}")
-    config = project.config
     size = config.vertical.size
     # blur では歌詞が本編の映像に入るので、縦用 .ass には写さない（Aegisub で二重に見えないように）。
     # reframe のショートが1本でもあれば、その区間では縦用 .ass の歌詞を描くので写す
-    include_lyrics = Project.draws_vertical_lyrics(project.vertical_layouts)
+    include_lyrics = vertical.draws_lyrics(project.vertical_layouts)
     conversion = vertical.convert(
         subs.load(source),
         size=size,
-        video_file=_path_from(dest.parent, project.vertical_preview_bg_output),
+        video_file=_path_from(dest.parent, vertical.preview_bg_output(project.build_dir)),
         source_dir=_path_from(dest.parent, source.parent),
         include_lyrics=include_lyrics,
     )
