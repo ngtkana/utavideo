@@ -43,6 +43,10 @@ def prefixed(issues: list[Issue], prefix: str) -> list[Issue]:
     return [Issue(i.level, prefix + i.message) for i in issues]
 
 
+def ok(issues: list[Issue]) -> bool:
+    return all(issue.level != "error" for issue in issues)
+
+
 def load(path: Path) -> pysubs2.SSAFile:
     try:
         # Aegisub は BOM 付きで保存することがある

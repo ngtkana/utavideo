@@ -23,10 +23,6 @@ class Analysis:
     font_files: tuple[Path, ...]
     font_index: fonts.FontIndex | None = None
 
-    @property
-    def ok(self) -> bool:
-        return all(issue.level != "error" for issue in self.issues)
-
 
 def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = None) -> Analysis:
     """書き出しに必要なものが揃っているかを調べる。preview では歌詞の行の中身は問わない。"""
