@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pysubs2
 
-from utavideo import fonts, graph, layout, shorts, subs, vertical
+from utavideo import fonts, graph, layout, shorts, subs, thumbnail, vertical
 from utavideo.config import Layout, Short, Thumbnail, cache_dir, load_user_config
 from utavideo.console import err_console
 from utavideo.ffmpeg import FFmpegError, probe_audio, probe_duration
@@ -333,13 +333,13 @@ def background_time_issues(background: Path, at: float | None, duration: float |
 def _thumbnail_ass_issues(
     project: Project, thumb: Thumbnail, search: FontSearch, font_files: dict[str, tuple[Path, ...]]
 ) -> list[subs.Issue]:
-    path = project.thumbnail_file(thumb)
+    path = thumbnail.file_path(project.root, thumb)
     if not path.is_file():
         return [subs.Issue("error", f"file のファイルがありません: {path}")]
     try:
         script = subs.load(path)
     except subs.SubtitleError as e:
         return [subs.Issue("error", str(e))]
-    issues = subs.lint_still(script, size=project.thumbnail_size(thumb))
+    issues = subs.lint_still(script, size=thumbnail.size(thumb, project.config.video.size))
     font_issues, font_files[thumb.name] = check_fonts(script, search)
     return issues + font_issues
