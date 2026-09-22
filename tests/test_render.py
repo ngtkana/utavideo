@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
 from utavideo import analyze, graph
 from utavideo.cli import app
-from utavideo.ffmpeg import subtitles_filter_error
+from utavideo.ffmpeg import rubberband_filter_error, subtitles_filter_error
 from utavideo.project import scaffold
 
 pytestmark = pytest.mark.skipif(subtitles_filter_error() is not None, reason="libass 付きの ffmpeg が必要")
@@ -824,3 +824,29 @@ def test_preview_bg_vertical_follows_the_layouts_the_shorts_use(project: Path) -
     # 完成図と同じく、真ん中に本編の映像（歌詞入り）を置く
     frame = (project / "build/.work/vertical-preview-frame.ass").read_text(encoding="utf-8")
     assert "AAAA" in frame
+
+
+@pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")
+def test_inst_writes_one_video_per_key_without_lyrics(project: Path) -> None:
+    invoke("inst", "-C", str(project), "--keys", "-1,2")
+
+    minus_one, plus_two = project / "build/inst/key-1.mp4", project / "build/inst/key+2.mp4"
+    for output in (minus_one, plus_two):
+        video, audio = _stream(_probe(output), "video"), _stream(_probe(output), "audio")
+        assert (video["codec_name"], video["width"], video["height"]) == ("h264", 320, 180)
+        assert audio["codec_name"] == "aac"
+    # 歌詞は焼かず、曲名表示（{title} / {artist}（Key: ...））だけを描く
+    assert _pixels(minus_one) != _pixels(plus_two)  # キーごとに違う文字が描かれている
+    ass = (project / "build/.work/inst/key-1.ass").read_text(encoding="utf-8")
+    assert "AAAA" not in ass  # 歌詞の行は含まれない
+    assert "Key: -1" in ass
+    # ピッチを変えるだけなので、キーが違っても長さは変わらない
+    assert float(_probe(minus_one)["format"]["duration"]) == pytest.approx(
+        float(_probe(plus_two)["format"]["duration"]), abs=0.05
+    )
+
+
+@pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")
+def test_inst_defaults_to_key_zero(project: Path) -> None:
+    invoke("inst", "-C", str(project))
+    assert (project / "build/inst/key0.mp4").is_file()

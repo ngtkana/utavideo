@@ -7,7 +7,7 @@ from typing import Any
 import pysubs2
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
 
-from utavideo import fonts, graph, inputs, subs, vertical
+from utavideo import fonts, graph, inputs, inst, subs, vertical
 from utavideo.config import OverlayText, cache_dir
 from utavideo.console import console
 from utavideo.ffmpeg import run, write_text
@@ -52,6 +52,25 @@ def frame_script(
     """
     overlay = vertical.overlay_text(project.config.overlay_text, project.config.vertical)
     return compose(project, lyrics, duration_ms, "final", font_index, overlay=overlay)
+
+
+def compose_inst(
+    project: Project, lyrics: pysubs2.SSAFile, duration_ms: int, font_index: fonts.FontIndex, key: str
+) -> pysubs2.SSAFile:
+    """歌唱練習用の動画に焼き込む、曲名・アーティスト・キーだけの .ass（歌詞は含めない）。"""
+    config = project.config
+    overlay = inst.overlay_text(config.overlay_text, config.inst)
+    return subs.compose(
+        lyrics,
+        song=config.song,
+        overlay=overlay,
+        fade_ms=(0, 0),
+        duration_ms=duration_ms,
+        include_lyrics=False,
+        font_index=font_index,
+        overlay_setting="inst.text",
+        key=key,
+    )
 
 
 @dataclass(frozen=True)

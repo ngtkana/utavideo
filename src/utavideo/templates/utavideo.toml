@@ -86,3 +86,7 @@ ${credits}# [[credits]]
 # section = "イラスト"
 # urls = ["https://..."]
 # files = ["src/bg/background.png"]
+
+# [inst]
+# 歌唱練習用の動画（utavideo inst --keys -1,-2,-3）に表示する文字。{key} が使える
+# text = "{title} / {artist}（Key: {key}）"

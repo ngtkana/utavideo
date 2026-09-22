@@ -241,6 +241,12 @@ def test_overlay_text_can_use_the_key_placeholder() -> None:
         subs.format_overlay_text("{key}", SONG)
 
 
+def test_overlay_text_blames_the_given_setting() -> None:
+    # inst からの呼び出しは setting="inst.text" を渡すので、overlay_text.text ではなくそちらのせいにする
+    with pytest.raises(ConfigError, match=r"inst\.text"):
+        subs.format_overlay_text("{composer}", SONG, setting="inst.text", key="-1")
+
+
 def test_compose_passes_the_key_to_the_overlay_text() -> None:
     lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
     overlay = OverlayText(text="{title}（Key: {key}）")
@@ -255,6 +261,23 @@ def test_compose_passes_the_key_to_the_overlay_text() -> None:
         key="+2",
     )
     assert script.events[-1].text == "曲（Key: +2）"
+
+
+def test_compose_blames_the_given_overlay_setting() -> None:
+    lyrics = _make([_line("0:00:01.00", "0:00:02.00", "あ")])
+    overlay = OverlayText(text="{composer}")
+    with pytest.raises(ConfigError, match=r"inst\.text"):
+        subs.compose(
+            lyrics,
+            song=SONG,
+            overlay=overlay,
+            fade_ms=(0, 0),
+            duration_ms=5000,
+            include_lyrics=False,
+            font_index=EMPTY_INDEX,
+            overlay_setting="inst.text",
+            key="+2",
+        )
 
 
 def test_used_fonts_from_used_styles_and_fn_tags() -> None:
