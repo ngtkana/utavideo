@@ -76,7 +76,7 @@ def test_the_bundled_font_is_a_static_regular_instance(sample: Path) -> None:
 
 
 def test_every_command_runs_on_the_sample(sample: Path) -> None:
-    # overlay は 36 秒の ProRes 4444 で大きく遅いので、ここでは動かさない（手順でも既定では使わない）
+    # overlay は 34 秒の ProRes 4444 で大きく遅いので、ここでは動かさない（手順でも既定では使わない）
     invoke("preview-bg", "-C", str(sample))
     invoke("build", "-C", str(sample))
     invoke("description", "-C", str(sample))

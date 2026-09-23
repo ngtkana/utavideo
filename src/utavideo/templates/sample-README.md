@@ -1,9 +1,11 @@
 # utavideo の見本
 
-`utavideo sample` が作った、動作確認用の曲フォルダです。音源・背景・歌詞・フォントはすべて合成したもので、曲名・人・URL は架空です。
+`utavideo sample` が作った、動作確認用の曲フォルダです。歌詞・曲名・人・URL はすべて架空です。
 書き出したものが要らなくなったら、このフォルダごと消してください。
 
 $font_note
+
+$material_note
 
 ## 試すこと
 
@@ -17,4 +19,4 @@ ${prefix}utavideo overlay      # build/overlay.mov（透過。大きいので必
 ```
 
 - 見本の中身とコマンドの説明: https://github.com/ngtkana/utavideo/blob/main/docs/commands.md
-- 背景の形式を変えて試すときは `utavideo.toml` の `video.background` を書き換えます。`src/bg/still.png` は 4:3 なので、`video.fit` を `"cover"`（上下が切り取られる）と `"contain"`（左右に余白が出る）で見比べられます
+- 背景の形式を変えて試すときは `utavideo.toml` の `video.background` を書き換えます。`src/bg/still.jpg` は 4:3 なので、`video.fit` を `"cover"`（上下が切り取られる）と `"contain"`（左右に余白が出る）で見比べられます

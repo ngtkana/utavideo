@@ -1,11 +1,11 @@
-"""動作確認用の見本の曲フォルダを作る。フォント以外の素材（音源・背景）はその場で合成する。
+"""動作確認用の見本の曲フォルダを作る。
 
-公開リポジトリに実際の曲は置けないので、確認したい要素（ループする背景、位置を指定した行、
-はみ出す行、概要欄のクレジット）だけを持つ曲フォルダを合成する。フォントは Noto Sans JP を
-同梱するため、既定では環境にフォントを要求しない（--font に実在のフォント名を渡すと、その
-フォントで描く）。
+公開リポジトリに実際の曲は置けないので、確認したい要素（背景に負けない文字、歌詞と音の合い方、
+位置を指定した行、はみ出す行、概要欄のクレジット）だけを持つ曲フォルダを作る。静止画の背景と
+音源はリポジトリ作者本人が用意した素材を同梱し、ループ動画・GIF・フォントはその場で合成する
+（フォントは既定では環境に要求せず、--font に実在のフォント名を渡すと、そのフォントで描く）。
 
-寸法と長さは固定にする。座標もスタイルの大きさもここで一緒に作るので、--small で小さくしても
+寸法は固定にする。座標もスタイルの大きさもここで一緒に作るので、--small で小さくしても
 警告の出る行はそのまま警告が出る。
 """
 
@@ -27,22 +27,21 @@ _FONT_TEMPLATE_DIR = "sample-fonts"
 FONT_DIRS_PREFIX = f"UTAVIDEO_FONT_DIRS={FONT_DIR.as_posix()}"
 AUDIO_FILE = Path("src/mix/sample-v1.0.flac")
 VIDEO_BACKGROUND = Path("src/bg/loop.mp4")
-STILL_BACKGROUND = Path("src/bg/still.png")
+STILL_BACKGROUND = Path("src/bg/still.jpg")
 GIF_BACKGROUND = Path("src/bg/loop.gif")
 LYRICS_FILE = Path("src/lyrics.ass")
+_MATERIAL_TEMPLATE_DIR = "sample-materials"
+_MATERIAL_CREDIT = "Kana Nagata（背景: VRoid Studio で制作・VRM Posing Desktop で撮影 / 音源: 作曲）"
 
 # 1920x1080 を基準にして、--small では全部を同じ比率で縮める
 BASE_SIZE = (1920, 1080)
 SMALL_SIZE = (640, 360)
-# 音源の長さ。sample-lyrics.ass の行はこの中に収める（はみ出すと検査の警告が増え、テストが落ちる）
-DURATION_S = 36
-LOOP_S = 5  # 背景が1周する秒数。36 秒の間に 7 周と少しするので、繰り返しを確かめられる
+# 同梱の音源（src/mix/sample-v1.0.flac）は 34 秒。sample-lyrics.ass の行はこの中に収める
+# （はみ出すと検査の警告が増え、テストが落ちる）
+LOOP_S = 5  # 背景が1周する秒数。34 秒の間に 6 周と少しするので、繰り返しを確かめられる
 GIF_SIZE = (480, 270)
 GIF_FPS = 8
 GIF_S = 2
-# 静止画の背景だけ 4:3 にする。動画と縦横比が違わないと、fit の cover（切り取り）と
-# contain（余白）がどちらも何もしないので、差し替えても見た目が変わらない
-STILL_ASPECT = 4 / 3
 # GIF は 256 色までなので、既定のエンコーダに任せるとカラーバーの平らな面がディザの市松模様になる。
 # 出てくる色を数えたパレットを作り、ディザ無しで割り当てる（色の潰れが背景の見え方に混ざらない）
 _GIF_PALETTE = ",split[a][b];[a]palettegen=max_colors=32[p];[b][p]paletteuse=dither=none"
@@ -84,18 +83,26 @@ def create(root: Path, *, font: str | None = None, small: bool = False) -> Scaff
         _write(root / LYRICS_FILE, lyrics),
         _write(
             root / "README.md",
-            render_template("sample-README.md", font_note=font_note(font), prefix=command_prefix(font)),
+            render_template(
+                "sample-README.md",
+                font_note=font_note(font),
+                material_note=material_note(),
+                prefix=command_prefix(font),
+            ),
         ),
     ]
     created += _materials(root, spec)
     if font is None:
-        created += [_install_font_asset(root, path) for path in (FONT_FILE, FONT_LICENSE_FILE)]
+        created += [
+            _install_asset(root, _FONT_TEMPLATE_DIR, path, path.name)
+            for path in (FONT_FILE, FONT_LICENSE_FILE)
+        ]
     return ScaffoldResult(created=created)
 
 
-def _install_font_asset(root: Path, path: Path) -> Path:
-    """templates/sample-fonts/ の同名ファイルを曲フォルダにコピーする。"""
-    return _write_bytes(root / path, read_template_bytes(_FONT_TEMPLATE_DIR, path.name))
+def _install_asset(root: Path, template_dir: str, dest: Path, source_name: str) -> Path:
+    """templates/<template_dir>/ のファイルを曲フォルダにコピーする。"""
+    return _write_bytes(root / dest, read_template_bytes(template_dir, source_name))
 
 
 def _write(path: Path, text: str) -> Path:
@@ -174,18 +181,21 @@ def font_note(font: str | None) -> str:
     )
 
 
-def _materials(root: Path, spec: _Spec) -> list[Path]:
-    h = spec.size[1]
-    # 4 秒ごとに 220Hz ずつ高くなる合成音。36 秒で 9 段すべて違う高さになるので、
-    # どこを切り出したか・どこでフェードしたかが耳で分かる（繰り返すと区別できない）
-    tone = "0.25*sin(2*PI*220*(1+floor(t/4))*t)"
-    audio = root / AUDIO_FILE
-    _ffmpeg(["-f", "lavfi", "-i", f"aevalsrc={tone}:d={DURATION_S}:s=48000", "-ac", "1"], audio)
+def material_note() -> str:
+    """背景の静止画・音源についての説明（出所）。"""
+    return (
+        f"背景の静止画（`{STILL_BACKGROUND.as_posix()}`）と音源（`{AUDIO_FILE.as_posix()}`）は、"
+        f"{_MATERIAL_CREDIT}によるものです。ループする背景（`{VIDEO_BACKGROUND.as_posix()}`・"
+        f"`{GIF_BACKGROUND.as_posix()}`）とフォント以外の合成音は、その場で合成したものです。"
+    )
 
-    # カラーバーの静止画。動画と縦横比が違うので、fit の切り取り・余白の効き方が目で分かる
-    bars = root / STILL_BACKGROUND
-    still_w = round(h * STILL_ASPECT)
-    _ffmpeg(["-f", "lavfi", "-i", f"smptebars=size={still_w}x{h}", "-frames:v", "1"], bars)
+
+def _materials(root: Path, spec: _Spec) -> list[Path]:
+    # 4:3（動画と縦横比が違う）の実素材。fit の切り取り・余白の効き方や、
+    # 実際の絵の上での文字の読みやすさが目で分かる
+    audio = _install_asset(root, _MATERIAL_TEMPLATE_DIR, AUDIO_FILE, "audio.flac")
+    still = _install_asset(root, _MATERIAL_TEMPLATE_DIR, STILL_BACKGROUND, "still.jpg")
+
     # カラーバー ＋ 1周で横断する白い箱
     loop = root / VIDEO_BACKGROUND
     _ffmpeg(
@@ -195,7 +205,7 @@ def _materials(root: Path, spec: _Spec) -> list[Path]:
     )  # fmt: skip
     gif = root / GIF_BACKGROUND
     _ffmpeg(_box_over_bars(GIF_SIZE, GIF_FPS, GIF_S, extra_filters=_GIF_PALETTE), gif)
-    return [audio, bars, loop, gif]
+    return [audio, still, loop, gif]
 
 
 def _box_over_bars(size: tuple[int, int], fps: int, seconds: int, *, extra_filters: str = "") -> list[str]:

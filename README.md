@@ -20,6 +20,7 @@
   - 別のフォントを使う場合は、.ass のスタイルで指定します
 - 見本（`utavideo sample`）に同梱しているフォント [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)（SIL Open Font License 1.1）
   - ライセンス全文は見本の `src/fonts/OFL.txt` に同梱しています
+- 見本（`utavideo sample`）に同梱している背景の静止画（`src/bg/still.jpg`）と音源（`src/mix/sample-v1.0.flac`）は、リポジトリ作者本人（Kana Nagata）が用意したものです（背景: VRoid Studio で制作・VRM Posing Desktop で撮影、音源: 作曲）
 - [uv](https://docs.astral.sh/uv/)
 - 歌詞を作るのに [Aegisub](https://aegisub.org/) 3.4 以降（推奨）
 
