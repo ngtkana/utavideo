@@ -1,0 +1,648 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "song": {
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "title": "Title",
+          "type": "string"
+        },
+        "slug": {
+          "default": "",
+          "title": "Slug",
+          "type": "string"
+        },
+        "artist": {
+          "default": "",
+          "title": "Artist",
+          "type": "string"
+        },
+        "label": {
+          "default": "",
+          "title": "Label",
+          "type": "string"
+        },
+        "original_urls": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "title": "Original Urls",
+          "type": "array"
+        }
+      },
+      "required": [
+        "title"
+      ],
+      "title": "Song",
+      "type": "object"
+    },
+    "audio": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "format": "path",
+          "title": "File",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file"
+      ],
+      "title": "Audio",
+      "type": "object"
+    },
+    "video": {
+      "additionalProperties": false,
+      "properties": {
+        "background": {
+          "format": "path",
+          "title": "Background",
+          "type": "string"
+        },
+        "size": {
+          "default": [
+            1920,
+            1080
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            }
+          ],
+          "title": "Size",
+          "type": "array"
+        },
+        "fps": {
+          "default": 30,
+          "exclusiveMinimum": 0,
+          "title": "Fps",
+          "type": "integer"
+        },
+        "crf": {
+          "default": 18,
+          "maximum": 51,
+          "minimum": 0,
+          "title": "Crf",
+          "type": "integer"
+        },
+        "preset": {
+          "enum": [
+            "ultrafast",
+            "superfast",
+            "veryfast",
+            "faster",
+            "fast",
+            "medium",
+            "slow",
+            "slower",
+            "veryslow",
+            "placebo"
+          ],
+          "type": "string",
+          "default": "slow"
+        },
+        "fit": {
+          "enum": [
+            "cover",
+            "contain"
+          ],
+          "type": "string",
+          "default": "cover"
+        },
+        "focus": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            }
+          ],
+          "type": "array",
+          "default": [
+            0.5,
+            0.5
+          ]
+        },
+        "scale_flags": {
+          "enum": [
+            "lanczos",
+            "bicubic",
+            "bilinear",
+            "area",
+            "neighbor"
+          ],
+          "type": "string",
+          "default": "lanczos"
+        },
+        "pad_color": {
+          "default": "black",
+          "title": "Pad Color",
+          "type": "string"
+        }
+      },
+      "required": [
+        "background"
+      ],
+      "title": "Video",
+      "type": "object"
+    },
+    "lyrics": {
+      "additionalProperties": false,
+      "properties": {
+        "file": {
+          "default": "src/lyrics.ass",
+          "format": "path",
+          "title": "File",
+          "type": "string"
+        },
+        "fade_ms": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "type": "array",
+          "default": [
+            150,
+            150
+          ]
+        }
+      },
+      "title": "Lyrics",
+      "type": "object"
+    },
+    "overlay_text": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "default": true,
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "style": {
+          "default": "Title",
+          "title": "Style",
+          "type": "string"
+        },
+        "text": {
+          "default": "{title} / {artist}",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "title": "OverlayText",
+      "type": "object"
+    },
+    "credits": {
+      "default": [],
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "roles": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Roles",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "urls": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Urls",
+            "type": "array"
+          }
+        },
+        "required": [
+          "roles",
+          "name"
+        ],
+        "title": "Credit",
+        "type": "object"
+      },
+      "title": "Credits",
+      "type": "array"
+    },
+    "materials": {
+      "default": [],
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "section": {
+            "title": "Section",
+            "type": "string"
+          },
+          "urls": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Urls",
+            "type": "array"
+          },
+          "files": {
+            "default": [],
+            "items": {
+              "format": "path",
+              "type": "string"
+            },
+            "title": "Files",
+            "type": "array"
+          }
+        },
+        "required": [
+          "section"
+        ],
+        "title": "Material",
+        "type": "object"
+      },
+      "title": "Materials",
+      "type": "array"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "default": "",
+              "title": "Text",
+              "type": "string"
+            },
+            "hashtags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Hashtags",
+              "type": "array"
+            },
+            "title": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Title"
+            }
+          },
+          "title": "Description",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "thumbnails": {
+      "default": [],
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "file": {
+            "format": "path",
+            "title": "File",
+            "type": "string"
+          },
+          "size": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  },
+                  {
+                    "exclusiveMinimum": 0,
+                    "type": "integer"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Size"
+          },
+          "at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "At"
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          }
+        },
+        "required": [
+          "name",
+          "file"
+        ],
+        "title": "Thumbnail",
+        "type": "object"
+      },
+      "title": "Thumbnails",
+      "type": "array"
+    },
+    "vertical": {
+      "additionalProperties": false,
+      "description": "縦型のショートの共通設定。",
+      "properties": {
+        "size": {
+          "default": [
+            1080,
+            1920
+          ],
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            },
+            {
+              "exclusiveMinimum": 0,
+              "type": "integer"
+            }
+          ],
+          "title": "Size",
+          "type": "array"
+        },
+        "layout": {
+          "enum": [
+            "reframe",
+            "blur"
+          ],
+          "type": "string",
+          "default": "reframe"
+        },
+        "lyrics": {
+          "default": "src/vertical.ass",
+          "format": "path",
+          "title": "Lyrics",
+          "type": "string"
+        },
+        "focus": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                {
+                  "maximum": 1,
+                  "minimum": 0,
+                  "type": "number"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frame_y": {
+          "default": 0.5,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Frame Y",
+          "type": "number"
+        },
+        "overlay_text": {
+          "default": true,
+          "title": "Overlay Text",
+          "type": "boolean"
+        },
+        "audio_fade_ms": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "minimum": 0,
+              "type": "integer"
+            }
+          ],
+          "type": "array",
+          "default": [
+            300,
+            1000
+          ]
+        }
+      },
+      "title": "Vertical",
+      "type": "object"
+    },
+    "shorts": {
+      "default": [],
+      "items": {
+        "additionalProperties": false,
+        "description": "縦型のショート1本。区間は縦用 .ass の、本文が name のコメント行（スタイル Short）に置く。",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "layout": {
+            "anyOf": [
+              {
+                "enum": [
+                  "reframe",
+                  "blur"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "focus": {
+            "anyOf": [
+              {
+                "maxItems": 2,
+                "minItems": 2,
+                "prefixItems": [
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  },
+                  {
+                    "maximum": 1,
+                    "minimum": 0,
+                    "type": "number"
+                  }
+                ],
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
+          "wide": {
+            "default": false,
+            "title": "Wide",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "Short",
+        "type": "object"
+      },
+      "title": "Shorts",
+      "type": "array"
+    },
+    "uploads": {
+      "default": [],
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "url"
+        ],
+        "title": "Upload",
+        "type": "object"
+      },
+      "title": "Uploads",
+      "type": "array"
+    },
+    "announce": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "text": {
+              "default": "",
+              "title": "Text",
+              "type": "string"
+            },
+            "hashtags": {
+              "default": [],
+              "items": {
+                "type": "string"
+              },
+              "title": "Hashtags",
+              "type": "array"
+            }
+          },
+          "title": "Announce",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "inst": {
+      "additionalProperties": false,
+      "description": "歌唱練習用の動画（inst）に描く、曲名・キーの表示。",
+      "properties": {
+        "text": {
+          "default": "{title} / {artist}（Key: {key}）",
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "title": "Inst",
+      "type": "object"
+    }
+  },
+  "required": [
+    "song",
+    "audio",
+    "video"
+  ],
+  "title": "ProjectConfig",
+  "type": "object"
+}
