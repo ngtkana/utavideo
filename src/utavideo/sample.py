@@ -1,30 +1,28 @@
-"""動作確認用の見本の曲フォルダを作る。素材（フォント・音源・背景）はその場で合成する。
+"""動作確認用の見本の曲フォルダを作る。フォント以外の素材（音源・背景）はその場で合成する。
 
 公開リポジトリに実際の曲は置けないので、確認したい要素（ループする背景、位置を指定した行、
-はみ出す行、概要欄のクレジット）だけを持つ曲フォルダを合成する。フォントも合成するため、
-既定では環境にフォントを要求しない（--font に実在のフォント名を渡すと、そのフォントで描く）。
+はみ出す行、概要欄のクレジット）だけを持つ曲フォルダを合成する。フォントは Noto Sans JP を
+同梱するため、既定では環境にフォントを要求しない（--font に実在のフォント名を渡すと、その
+フォントで描く）。
 
 寸法と長さは固定にする。座標もスタイルの大きさもここで一緒に作るので、--small で小さくしても
 警告の出る行はそのまま警告が出る。
 """
 
-from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
-import pysubs2
-from fontTools.fontBuilder import FontBuilder
-from fontTools.pens.ttGlyphPen import TTGlyphPen
-
-from utavideo import graph, subs
+from utavideo import graph
 from utavideo.config import PROJECT_CONFIG_NAME, OverlayText, Song
 from utavideo.ffmpeg import run
-from utavideo.project import SCAFFOLD_DIRS, ScaffoldResult, render_template
+from utavideo.project import SCAFFOLD_DIRS, ScaffoldResult, read_template_bytes, render_template
 
-FONT_FAMILY = "Utavideo Sample"
+FONT_FAMILY = "Noto Sans JP"
 FONT_DIR = Path("src/fonts")
-FONT_FILE = FONT_DIR / "UtavideoSample.ttf"
-# 合成フォントは既定の探索先に無いので、環境変数で渡してもらう（UTAVIDEO_FONT_DIRS は探索先を置き換える）。
+FONT_FILE = FONT_DIR / "NotoSansJP-Regular.ttf"
+FONT_LICENSE_FILE = FONT_DIR / "OFL.txt"
+_FONT_TEMPLATE_DIR = "sample-fonts"
+# 同梱フォントは既定の探索先に無いので、環境変数で渡してもらう（UTAVIDEO_FONT_DIRS は探索先を置き換える）。
 # export にすると同じシェルで自分の曲に戻ったときにも効き続けるので、その場限りの形にする
 FONT_DIRS_PREFIX = f"UTAVIDEO_FONT_DIRS={FONT_DIR.as_posix()}"
 AUDIO_FILE = Path("src/mix/sample-v1.0.flac")
@@ -49,11 +47,10 @@ STILL_ASPECT = 4 / 3
 # 出てくる色を数えたパレットを作り、ディザ無しで割り当てる（色の潰れが背景の見え方に混ざらない）
 _GIF_PALETTE = ",split[a][b];[a]palettegen=max_colors=32[p];[b][p]paletteuse=dither=none"
 
-# 見本の曲（架空）。utavideo.toml と、合成フォントに入れる字形をここから作る
+# 見本の曲（架空）。utavideo.toml をここから作る
 _SONG = Song(title="見本のうた", slug="sample", artist="架空アーティスト", label="utavideo 見本")
 _SINGER = "架空シンガー"  # 歌った人（song.artist は原曲の人）
-# 曲名表示。画面に出るので、この文字も合成フォントの字形に入れる（区切りの / を含む）
-_OVERLAY_TEXT = OverlayText().text
+_OVERLAY_TEXT = OverlayText().text  # 曲名表示（画面に出る）
 
 
 @dataclass(frozen=True)
@@ -67,44 +64,6 @@ class _Spec:
     def px(self, base: int) -> int:
         """1920x1080 のときの px を、この見本の寸法に合わせる。"""
         return round(base * self.size[0] / BASE_SIZE[0])
-
-
-def build_box_font(
-    path: Path, family: str, *, chars: Iterable[str], advance: int = 1000, space_advance: int = 500
-) -> Path:
-    """どの文字も塗りつぶしの四角になる TrueType フォントを作る（見本とテストの共通部品）。
-
-    字形を持たない文字は別のフォントで代替されて環境ごとに絵が変わるので、使う文字はすべて
-    cmap に入れる。送り幅は全部同じなので、はみ出しの概算は文字数に比例する。
-    """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    codes = sorted({ord(ch) for ch in chars} - {0x20})
-    names = {code: f"c{code:04X}" for code in codes}
-    box = _box(advance)
-    fb = FontBuilder(unitsPerEm=1000, isTTF=True)
-    fb.setupGlyphOrder([".notdef", "space", *names.values()])
-    fb.setupCharacterMap({0x20: "space", **names})
-    fb.setupGlyf({".notdef": box, "space": TTGlyphPen(None).glyph(), **{n: box for n in names.values()}})
-    fb.setupHorizontalMetrics(
-        {".notdef": (advance, 0), "space": (space_advance, 0), **{n: (advance, 0) for n in names.values()}}
-    )
-    fb.setupHorizontalHeader(ascent=800, descent=-200)
-    fb.setupNameTable({"familyName": family, "styleName": "Regular"})
-    fb.setupOS2(sTypoAscender=800, sTypoDescender=-200, usWinAscent=800, usWinDescent=200)
-    fb.setupPost()
-    fb.save(str(path))
-    return path
-
-
-def _box(advance: int):
-    left, right = round(advance * 0.1), round(advance * 0.9)
-    pen = TTGlyphPen(None)
-    pen.moveTo((left, 0))
-    pen.lineTo((left, 700))
-    pen.lineTo((right, 700))
-    pen.lineTo((right, 0))
-    pen.closePath()
-    return pen.glyph()
 
 
 def create(root: Path, *, font: str | None = None, small: bool = False) -> ScaffoldResult:
@@ -128,21 +87,25 @@ def create(root: Path, *, font: str | None = None, small: bool = False) -> Scaff
             render_template("sample-README.md", font_note=font_note(font), prefix=command_prefix(font)),
         ),
     ]
-    if font is None:
-        created.append(build_box_font(root / FONT_FILE, FONT_FAMILY, chars=_drawn_text(lyrics)))
     created += _materials(root, spec)
+    if font is None:
+        created += [_install_font_asset(root, path) for path in (FONT_FILE, FONT_LICENSE_FILE)]
     return ScaffoldResult(created=created)
 
 
-def _drawn_text(lyrics: str) -> str:
-    """画面に出る文字だけ（上書きタグを除いた歌詞の行と、曲名表示）。合成フォントの字形を決める。"""
-    script = pysubs2.SSAFile.from_string(lyrics, format_="ass")
-    drawn = "".join(subs.OVERRIDE_BLOCK.sub("", event.text) for event in subs.dialogues(script))
-    return drawn.replace(r"\N", "") + subs.format_overlay_text(_OVERLAY_TEXT, _SONG)
+def _install_font_asset(root: Path, path: Path) -> Path:
+    """templates/sample-fonts/ の同名ファイルを曲フォルダにコピーする。"""
+    return _write_bytes(root / path, read_template_bytes(_FONT_TEMPLATE_DIR, path.name))
 
 
 def _write(path: Path, text: str) -> Path:
     path.write_text(text, encoding="utf-8", newline="\n")
+    return path
+
+
+def _write_bytes(path: Path, data: bytes) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
     return path
 
 
@@ -194,16 +157,18 @@ def _lyrics(spec: _Spec) -> str:
 
 
 def command_prefix(font: str | None) -> str:
-    """合成フォントのときに、コマンドの前に付ける環境変数（末尾の空白を含む）。"""
+    """同梱フォントのときに、コマンドの前に付ける環境変数（末尾の空白を含む）。"""
     return "" if font is not None else f"{FONT_DIRS_PREFIX} "
 
 
 def font_note(font: str | None) -> str:
-    """歌詞のフォントについての説明。合成フォントのときは、その場所の渡し方も。"""
+    """歌詞のフォントについての説明。同梱フォントのときは、その場所の渡し方も。"""
     if font is not None:
         return f"歌詞には実在のフォント {font} を使います。"
     return (
-        "歌詞のフォントも合成してあるので、この曲フォルダで実行するコマンドの前に "
+        "歌詞のフォントには Noto Sans JP（SIL Open Font License、"
+        f"`{FONT_LICENSE_FILE.as_posix()}` に全文を同梱）を使います。"
+        "この曲フォルダで実行するコマンドの前に "
         f"`{FONT_DIRS_PREFIX}` を付けて、その場所を渡します"
         "（`UTAVIDEO_FONT_DIRS` は探す場所を置き換えるので、自分の曲に戻るときは付けません）。"
     )

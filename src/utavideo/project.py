@@ -258,6 +258,11 @@ def render_template(name: str, **values: str) -> str:
     return string.Template(text).substitute(values)
 
 
+def read_template_bytes(*parts: str) -> bytes:
+    """templates/ 配下のバイナリファイルをそのまま読む。"""
+    return resources.files("utavideo").joinpath("templates", *parts).read_bytes()
+
+
 def _toml_string(value: str) -> str:
     # JSON の文字列リテラルは TOML の basic string としても有効
     return json.dumps(value, ensure_ascii=False)

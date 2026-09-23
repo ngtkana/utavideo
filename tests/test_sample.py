@@ -56,13 +56,23 @@ def test_the_warnings_do_not_change_with_the_user_config(
     assert "警告 2 件" in invoke("check", "-C", str(sample)).output
 
 
-def test_the_synthesized_font_has_a_glyph_for_the_song_name_overlay(sample: Path) -> None:
+def test_the_bundled_font_has_a_glyph_for_the_song_name_overlay(sample: Path) -> None:
     # 字形の無い文字は別のフォントで描かれて環境ごとに絵が変わる（区切りの / を忘れやすい）
     config = Project.load(sample).config
     drawn = subs.format_overlay_text(config.overlay_text.text, config.song)
-    cmap = TTFont(sample / "src" / "fonts" / "UtavideoSample.ttf").getBestCmap() or {}
+    cmap = TTFont(sample / sample_module.FONT_FILE).getBestCmap() or {}
 
     assert [ch for ch in drawn if ord(ch) not in cmap] == []
+
+
+def test_the_bundled_font_is_a_static_regular_instance(sample: Path) -> None:
+    # 可変フォントのまま同梱すると既定のウェイトが Regular と違うので、静的インスタンスであることを確かめる
+    font = TTFont(sample / sample_module.FONT_FILE)
+
+    assert "fvar" not in font
+    assert font["name"].getDebugName(1) == sample_module.FONT_FAMILY
+    assert font["OS/2"].usWeightClass == 400  # pyright: ignore[reportAttributeAccessIssue]
+    assert (sample / sample_module.FONT_LICENSE_FILE).is_file()
 
 
 def test_every_command_runs_on_the_sample(sample: Path) -> None:

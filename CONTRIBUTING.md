@@ -46,7 +46,7 @@ uv run ruff format && uv run ruff check && uv run pyright && uv run pytest
    cd <見本のフォルダ>
    ```
 
-   見栄えを見る項目があるときは `--font "<手元にあるフォント名>"` を付ける（合成フォントはどの文字も四角なので、書体は確かめられない）。
+   見栄えを見る項目は既定（同梱の Noto Sans JP）のままでも確かめられる。別の書体で確かめたいときは `--font "<手元にあるフォント名>"` を付ける。
 
 2. 実行する（`--font` を付けたときは `UTAVIDEO_FONT_DIRS=src/fonts ` は要らない）
 
