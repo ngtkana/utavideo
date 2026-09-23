@@ -1,4 +1,4 @@
-"""build/main.mp4・shorts・thumbnail を書き出したときの入力の記録と、release・status のときの比較。
+"""build/main.mp4・shorts・thumbnail・inst を書き出したときの入力の記録と、release・status のときの比較。
 
 release が止まるのは、確かめた動画と描画に効く入力が違うときだけにしたい。
 更新時刻では、概要欄を書き足しただけ・保存し直しただけでも止まってしまうので、中身で比べる。
@@ -7,9 +7,9 @@ release が止まるのは、確かめた動画と描画に効く入力が違う
 頻繁に呼ぶ用途では重い。size・mtime_ns が記録と一致すれば読まずに済ませ、違うときだけ実際に読んで
 確かめる（racy git の要領。issue #78）。
 
-shorts・thumbnail はフォント依存を見ない。歌詞を合成しないと使うフォントが決まらないため、正確に
+shorts・thumbnail・inst はフォント依存を見ない。歌詞を合成しないと使うフォントが決まらないため、正確に
 見るには合成をやり直す必要があるが、それでは status のように頻繁に呼ぶ用途に重すぎる。歌詞・config
-ファイル自体の変化だけを見る簡略版にする（issue #79）。
+ファイル自体の変化だけを見る簡略版にする（issue #79・#80）。
 """
 
 import hashlib
@@ -19,7 +19,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from utavideo import shorts, thumbnail, vertical
+from utavideo import inst, shorts, thumbnail, vertical
 from utavideo.config import PROJECT_CONFIG_NAME, Short, Thumbnail, rendered_values
 from utavideo.ffmpeg import write_text
 from utavideo.project import Project
@@ -100,6 +100,31 @@ def thumbnail_target(project: Project, thumb: Thumbnail) -> RecordTarget:
             ("thumbnail.file", thumbnail.file_path(project.root, thumb)),
         ),
         {"video": rendered_values(config.video), "thumbnail": rendered_values(thumb)},
+        str(output),
+        track_fonts=False,
+    )
+
+
+def inst_target(project: Project, key: int) -> RecordTarget:
+    """inst は --keys で任意のキーを指定でき、事前宣言された個数を持たないので、キーごとに作る。"""
+    config = project.config
+    output = inst.output_path(project.build_dir, key)
+    return RecordTarget(
+        output,
+        project.inst_inputs_record(inst.key_label(key)),
+        (
+            (PROJECT_CONFIG_NAME, project.config_path),
+            ("audio.file", project.audio_path),
+            ("video.background", project.background_path),
+            ("lyrics.file", project.lyrics_path),
+        ),
+        {
+            "video": rendered_values(config.video),
+            "lyrics": rendered_values(config.lyrics),
+            "overlay_text": rendered_values(config.overlay_text),
+            "song": rendered_values(config.song),
+            "inst": rendered_values(config.inst),
+        },
         str(output),
         track_fonts=False,
     )

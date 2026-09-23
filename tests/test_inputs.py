@@ -88,6 +88,73 @@ def test_old_format_record_is_ignored(project: Path) -> None:
     assert inputs._read_record(target) is None
 
 
+def _record_inst_build(project: Path, key: int) -> None:
+    loaded = Project.load(project)
+    target = inputs.inst_target(loaded, key)
+    target.output.parent.mkdir(parents=True, exist_ok=True)
+    target.output.write_bytes(b"video")
+    record = inputs.record_text(target, inputs.snapshot(target))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
+
+
+def test_inst_target_uses_a_key_specific_record_path(project: Path) -> None:
+    loaded = Project.load(project)
+    assert inputs.inst_target(loaded, -1).record_path == loaded.work_dir / "inst-key-1-inputs.json"
+    assert inputs.inst_target(loaded, 2).record_path == loaded.work_dir / "inst-key+2-inputs.json"
+
+
+def test_inst_snapshot_has_no_font_key(project: Path) -> None:
+    """inst もフォント依存を見ない簡略版（issue #80、shorts・thumbnail と同じ理由）。"""
+    loaded = Project.load(project)
+    target = inputs.inst_target(loaded, 0)
+    assert inputs.FONTS not in inputs.snapshot(target)
+
+
+def test_inst_stale_detects_lyrics_changes(project: Path) -> None:
+    _record_inst_build(project, -1)
+    (project / "src/lyrics.ass").write_text("変えた", encoding="utf-8")
+
+    loaded = Project.load(project)
+    stale = inputs.stale_inputs(inputs.inst_target(loaded, -1))
+    assert stale is not None
+    assert "lyrics.file" in stale
+
+
+def test_inst_stale_ignores_font_file_changes(project: Path) -> None:
+    """フォントファイル単体の差し替えは検出対象外（歌詞・config ファイル自体の変化だけを見る）。"""
+    _record_inst_build(project, -1)
+
+    loaded = Project.load(project)
+    assert inputs.stale_inputs(inputs.inst_target(loaded, -1)) is None
+
+
+def test_inst_config_entry_change_is_detected(project: Path) -> None:
+    _record_inst_build(project, -1)
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    (project / "utavideo.toml").write_text(toml + '\n[inst]\ntext = "変えた"\n', encoding="utf-8")
+
+    loaded = Project.load(project)
+    stale = inputs.stale_inputs(inputs.inst_target(loaded, -1))
+    assert stale is not None
+    assert "utavideo.toml" in stale
+
+
+def test_two_inst_keys_have_independent_records(project: Path) -> None:
+    _record_inst_build(project, -1)
+    _record_inst_build(project, 2)
+    (project / "src/lyrics.ass").write_text("変えた", encoding="utf-8")
+
+    loaded = Project.load(project)
+    minus_one = inputs.inst_target(loaded, -1)
+    plus_two = inputs.inst_target(loaded, 2)
+
+    # 両方とも同じ lyrics.file に依存するので、両方 stale になる（記録自体は別ファイル）
+    assert minus_one.record_path != plus_two.record_path
+    assert inputs.stale_inputs(minus_one) is not None
+    assert inputs.stale_inputs(plus_two) is not None
+
+
 NAMED_TOML = """
 [song]
 title = "曲"
