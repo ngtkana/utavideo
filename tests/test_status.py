@@ -160,7 +160,7 @@ def test_editing_lyrics_marks_only_the_built_key_stale(project: Path) -> None:
     assert "inst -1:" in output and "（lyrics.file）" in output
 
 
-def test_other_keys_are_unaffected_by_one_key_going_stale(project: Path) -> None:
+def test_all_keys_sharing_the_same_lyrics_file_go_stale_together(project: Path) -> None:
     _record_inst_build(project, -1)
     _record_inst_build(project, 2)
     lyrics = project / "src/lyrics.ass"
