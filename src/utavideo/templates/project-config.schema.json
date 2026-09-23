@@ -369,6 +369,9 @@
           "at": {
             "anyOf": [
               {
+                "type": "string"
+              },
+              {
                 "type": "number"
               },
               {

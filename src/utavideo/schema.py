@@ -24,8 +24,8 @@ def _inline_refs(node: Any, defs: dict[str, Any], seen: tuple[str, ...] = ()) ->
             if name in seen:
                 raise ValueError(f"$defs が循環参照しています: {name}")
             resolved = _inline_refs(copy.deepcopy(defs[name]), defs, (*seen, name))
-            merged = {**resolved, **{k: v for k, v in node.items() if k != "$ref"}}
-            return _inline_refs(merged, defs, seen)
+            siblings = _inline_refs({k: v for k, v in node.items() if k != "$ref"}, defs, seen)
+            return {**resolved, **siblings}
         return {k: _inline_refs(v, defs, seen) for k, v in node.items() if k != "$defs"}
     if isinstance(node, list):
         return [_inline_refs(v, defs, seen) for v in node]
