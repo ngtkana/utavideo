@@ -159,8 +159,8 @@ def test_vertical_ass_follows_the_layouts_the_shorts_use(tmp_path: Path) -> None
     root = tmp_path / "20260916-song"
     assert runner.invoke(app, ["new", str(root)]).exit_code == 0
     with (root / "utavideo.toml").open("a", encoding="utf-8") as toml:
-        # vertical.layout は既定（reframe）のまま、ショートだけ blur にする
-        toml.write('\n[[shorts]]\nname = "chorus"\nlayout = "blur"\n')
+        # vertical.layout は reframe のまま、ショートだけ blur にする（上書きの検証）
+        toml.write('\n[vertical]\nlayout = "reframe"\n\n[[shorts]]\nname = "chorus"\nlayout = "blur"\n')
 
     assert runner.invoke(app, ["vertical-ass", "-C", str(root)]).exit_code == 0
     assert subs.load(root / "src/vertical.ass").events == []

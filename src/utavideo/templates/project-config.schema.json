@@ -447,7 +447,7 @@
             "blur"
           ],
           "type": "string",
-          "default": "reframe"
+          "default": "blur"
         },
         "lyrics": {
           "default": "src/vertical.ass",
