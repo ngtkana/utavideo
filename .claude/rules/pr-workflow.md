@@ -11,12 +11,12 @@
 
 - 独立したworktreeで動作確認する。fork（コンテキスト継承）ではなく新規general-purpose agentに依頼する
 - 依頼する内容の定型:
-  1. `git worktree add ~/worktrees/utavideo/<branch> <branch>` でPRのブランチ用worktreeを作る
+  1. 開発時に使ったworktree（`~/worktrees/utavideo/<branch>`）が既にあればそれをそのまま使う。無ければ `git worktree add ~/worktrees/utavideo/<branch> <branch>` で作る（同じブランチを2つのworktreeにcheckoutすることはできないので、新規作成を先に試さない）
   2. `CONTRIBUTING.md`の「確認」（`uv run ruff format && uv run ruff check && uv run pyright && uv run pytest`）を実行する
   3. PR本文が主張する挙動を実機で確認する
   4. 確認結果を `gh pr comment <番号> --body-file <ファイル>` で日本語で投稿する。OSユーザー名やホームディレクトリの絶対パスは書かない
   5. 不具合があれば、まず `gh issue list --state all` で重複がないか確認してから `gh issue create` で起票する。「PR #<番号> の動作確認中に見つかった」ことを明記する
-  6. 確認が終わったら `git worktree remove ~/worktrees/utavideo/<branch>` と、使った一時ファイル（`/tmp`配下）を削除する
+  6. 使った一時ファイル（`/tmp`配下）だけ削除する。**worktreeはここでは消さない**（実機確認はマージ前の最終ゲートなので、マージが終わるまで残す。削除は3.のマージ後に1箇所でまとめて行う）
   7. 200〜300字程度で完了報告する（確認内容・問題の有無・issue化した場合は番号）
 
 ## 3. マージ
