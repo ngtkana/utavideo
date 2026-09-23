@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from utavideo import announce, description, inputs, thumbnail
+from utavideo import announce, description, inputs
 from utavideo.analyze import FontSearch, analyze, analyze_thumbnails, background_issues
 from utavideo.config import load_user_config
 from utavideo.project import Project
@@ -47,7 +47,8 @@ def _build_status(project: Project, search: FontSearch) -> TargetStatus:
     output = project.main_output
     if errors:
         return TargetStatus("build", "issues", errors)
-    if output.is_file() and inputs.stale_inputs(project) is None:
+    exists, stale = inputs.state(inputs.main_target(project))
+    if exists and stale is None:
         return TargetStatus("build", "skip", outputs=(output,))
     return TargetStatus("build", "run", outputs=(output,))
 
@@ -84,14 +85,14 @@ def _thumbnail_statuses(project: Project, search: FontSearch) -> list[TargetStat
         name = f"thumbnail:{thumb.name}"
         own_errors = _errors(analyze_thumbnails(project, (thumb,), bg_only=False, search=search).issues)
         errors = background_errors + own_errors
-        output = thumbnail.output_path(project.build_dir, thumb)
+        thumb_target = inputs.thumbnail_target(project, thumb)
+        output = thumb_target.output
         if errors:
             statuses.append(TargetStatus(name, "issues", errors))
-        # v1: staleness は見ず、出力の有無だけで「済み」を判定する簡易版
-        elif output.is_file():
-            statuses.append(TargetStatus(name, "skip", outputs=(output,)))
         else:
-            statuses.append(TargetStatus(name, "run", outputs=(output,)))
+            exists, stale = inputs.state(thumb_target)
+            target_state = "skip" if exists and stale is None else "run"
+            statuses.append(TargetStatus(name, target_state, outputs=(output,)))
     return statuses
 
 

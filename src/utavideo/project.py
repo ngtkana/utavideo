@@ -87,6 +87,12 @@ class Project:
         """build/main.mp4 を書き出したときの入力の記録（release が比べる）。"""
         return self.work_dir / "main-inputs.json"
 
+    def shorts_inputs_record(self, name: str) -> Path:
+        return self.work_dir / f"shorts-{name}-inputs.json"
+
+    def thumbnail_inputs_record(self, name: str) -> Path:
+        return self.work_dir / f"thumbnail-{name}-inputs.json"
+
     @property
     def overlay_output(self) -> Path:
         return self.build_dir / "overlay.mov"

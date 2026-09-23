@@ -133,7 +133,10 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     require_tools()
     project = _load_project(project_dir)
     # analyze が素材を読む前に取る（理由は inputs.snapshot）
-    built_inputs = inputs.snapshot(project) if mode == "final" else None
+    record = None
+    if mode == "final":
+        main_target = inputs.main_target(project)
+        record = inputs.Record(main_target, inputs.snapshot(main_target))
     analysis = analyze(project, mode)
     _print_issues(analysis.issues)
     if not subs.ok(analysis.issues):
@@ -148,7 +151,7 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     }[mode]
     video = project.config.video
     target = VideoTarget(mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label)
-    return write_video(project, script, target, analysis.duration_s, analysis.font_files, built_inputs)
+    return write_video(project, script, target, analysis.duration_s, analysis.font_files, record)
 
 
 def _print_scaffold(result: ScaffoldResult, root: Path) -> None:
@@ -529,7 +532,7 @@ def release(
         _fail(f"音源のバージョンは v1.0 のような vX.Y の形で指定してください: {version}")
     version = version.lower()
 
-    if not allow_stale and (stale := inputs.stale_inputs(project)):
+    if not allow_stale and (stale := inputs.stale_inputs(inputs.main_target(project))):
         _fail(f"{stale}。build し直すか --allow-stale を付けてください")
 
     # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
@@ -570,8 +573,17 @@ def shorts_command(
     any_blur, any_wide = "blur" in layouts, any(s.wide for s in selected)
     # wide は本編と同じ画面、blur は真ん中に本編の映像を置くので、どちらも本編の .ass を描く
     draws_main = any_blur or any_wide
-    inputs = vertical_inputs(project, search, draws_main=draws_main)
-    issues, duration_s, lyrics = inputs.issues, inputs.duration_s, inputs.lyrics
+    # 縦用.ass・本編歌詞を読む前に、ショートごとの記録の元になる snapshot を取る
+    records = {}
+    for short in selected:
+        target = inputs.shorts_target(project, short)
+        records[short.name] = inputs.Record(target, inputs.snapshot(target))
+    vertical_analysis = vertical_inputs(project, search, draws_main=draws_main)
+    issues, duration_s, lyrics = (
+        vertical_analysis.issues,
+        vertical_analysis.duration_s,
+        vertical_analysis.lyrics,
+    )
     analysis = analyze_shorts(project, search, duration_s, lyrics, selected, report_unused=name is None)
     issues += analysis.issues
     _print_issues(issues)
@@ -590,7 +602,7 @@ def shorts_command(
         if any_blur:
             frame_ass = frame_script(project, lyrics, duration_ms, search.index)
     # blur では本編の .ass も描くので、そのフォントも渡す（どのショートでも同じ）
-    blur_font_files = analysis.font_files + inputs.font_files
+    blur_font_files = analysis.font_files + vertical_analysis.font_files
     default_focus = vertical.focus(config.vertical, config.video.focus)
     for short, layout_ in zip(selected, layouts, strict=True):
         section = analysis.sections[short.name]
@@ -620,7 +632,7 @@ def shorts_command(
             clip,
             frame,
         )
-        write_video(project, script, target, length_s, font_files, None)
+        write_video(project, script, target, length_s, font_files, records[short.name])
         if not short.wide:
             continue
         assert wide_script is not None
@@ -634,7 +646,8 @@ def shorts_command(
             clip,
         )
         # 本編と同じ .ass・同じ大きさで描くので、区間のコマは build/main.mp4 と一致する
-        write_video(project, wide_script, wide_target, length_s, inputs.font_files, None)
+        # （wide は shorts:<name> の記録で代表させ、個別の記録は持たない）
+        write_video(project, wide_script, wide_target, length_s, vertical_analysis.font_files, None)
 
 
 @app.command("inst")
@@ -783,18 +796,29 @@ def thumbnail_command(
     video = project.config.video
     for thumb in thumbnails:
         font_files = analysis.font_files.get(thumb.name, ())
-        output = _write_thumbnail(project, thumb, video, font_files, bg_only=bg_only)
+        record = None
+        if not bg_only:
+            target = inputs.thumbnail_target(project, thumb)
+            record = inputs.Record(target, inputs.snapshot(target))
+        output = _write_thumbnail(project, thumb, video, font_files, bg_only=bg_only, record=record)
         console.print(f"書き出しました: {output}（{output.stat().st_size:,} バイト）", markup=False)
         if windows_path := to_windows_path(output):
             console.print(f"  Windows: {windows_path}", markup=False)
 
 
 def _write_thumbnail(
-    project: Project, thumb: Thumbnail, video: Video, font_files: tuple[Path, ...], *, bg_only: bool
+    project: Project,
+    thumb: Thumbnail,
+    video: Video,
+    font_files: tuple[Path, ...],
+    *,
+    bg_only: bool,
+    record: inputs.Record | None = None,
 ) -> Path:
     """背景のフレームに1本のサムネイルを書き出し、出力先を返す。
 
     thumbnail_command と build-all の両方から呼ぶ（画面への表示はそれぞれの呼び出し側が行う）。
+    record は --bg-only のとき渡さない（bg は status の対象ではないので記録しない）。
     """
     if bg_only:
         subtitles = fontsdir = None
@@ -815,12 +839,14 @@ def _write_thumbnail(
         scale_flags=video.scale_flags,
         pad_color=video.pad_color,
     )
+    inputs.unlink_stale_record(record)
     try:
         run(graph.build_still_args(spec), output, total_s=0)
     except NoOutputError as e:
         raise NoOutputError(
             f"{e}。背景の終わり近くの at では、その時刻以降のフレームが無いことがあります"
         ) from e
+    inputs.save_record(record)
     return output
 
 
@@ -874,4 +900,6 @@ def _run_build_all_target(project: Project, search: FontSearch, name: str) -> No
         if not subs.ok(issues):
             raise typer.Exit(1)
         font_files = analysis.font_files.get(thumb_name, ())
-        _write_thumbnail(project, thumb, project.config.video, font_files, bg_only=False)
+        thumb_target = inputs.thumbnail_target(project, thumb)
+        record = inputs.Record(thumb_target, inputs.snapshot(thumb_target))
+        _write_thumbnail(project, thumb, project.config.video, font_files, bg_only=False, record=record)

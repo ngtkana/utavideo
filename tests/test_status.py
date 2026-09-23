@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import scaffold_named_project
 from utavideo import inputs
 from utavideo.cli import app
 from utavideo.project import Project, scaffold
@@ -36,9 +37,10 @@ def _record_build(project: Path) -> None:
     (project / "build").mkdir(exist_ok=True)
     (project / "build/main.mp4").write_bytes(b"video")
     loaded = Project.load(project)
-    record = inputs.record_text(loaded, inputs.with_fonts(inputs.snapshot(loaded), ()))
-    loaded.inputs_record.parent.mkdir(parents=True, exist_ok=True)
-    loaded.inputs_record.write_text(record, encoding="utf-8")
+    target = inputs.main_target(loaded)
+    record = inputs.record_text(target, inputs.with_fonts(inputs.snapshot(target), ()))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
 
 
 def _edit_later(project: Path, rel: str, text: str) -> None:
@@ -109,3 +111,102 @@ def test_writing_the_outputs_clears_the_description_and_announce_lines(project: 
     output = _status(project)
     assert "概要欄" not in output
     assert "告知文: 未生成です" in output
+
+
+NAMED_TOML = """
+[song]
+title = "曲"
+[audio]
+file = "src/mix/曲 v1.2.wav"
+[video]
+background = "src/bg/bg.png"
+
+[[shorts]]
+name = "chorus"
+
+[[thumbnails]]
+name = "main"
+file = "src/thumbnail.ass"
+"""
+
+
+@pytest.fixture
+def named_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """[[shorts]]・[[thumbnails]] を持つ曲フォルダ。"""
+    return scaffold_named_project(tmp_path, monkeypatch, NAMED_TOML)
+
+
+def _record_shorts_build(project: Path) -> None:
+    loaded = Project.load(project)
+    short = loaded.config.shorts[0]
+    target = inputs.shorts_target(loaded, short)
+    target.output.parent.mkdir(parents=True, exist_ok=True)
+    target.output.write_bytes(b"video")
+    record = inputs.record_text(target, inputs.snapshot(target))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
+
+
+def _record_thumbnail_build(project: Path) -> None:
+    loaded = Project.load(project)
+    thumb = loaded.config.thumbnails[0]
+    target = inputs.thumbnail_target(loaded, thumb)
+    target.output.parent.mkdir(parents=True, exist_ok=True)
+    target.output.write_bytes(b"png")
+    record = inputs.record_text(target, inputs.snapshot(target))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
+
+
+def test_no_shorts_or_thumbnails_shows_nothing(project: Path) -> None:
+    """[[shorts]]・[[thumbnails]] が無い曲フォルダでは該当行が一切出ない。"""
+    output = _status(project)
+    assert "ショート" not in output
+    assert "サムネイル" not in output
+
+
+def test_shorts_and_thumbnails_show_not_generated(named_project: Path) -> None:
+    output = _status(named_project)
+    assert "ショート chorus: 未生成です（utavideo shorts --name chorus で" in output
+    assert "サムネイル main: 未生成です（utavideo thumbnail --name main で" in output
+
+
+def test_recorded_shorts_and_thumbnails_are_clean(named_project: Path) -> None:
+    _record_shorts_build(named_project)
+    _record_thumbnail_build(named_project)
+
+    output = _status(named_project)
+    assert "ショート" not in output
+    assert "サムネイル" not in output
+
+
+def test_editing_vertical_ass_marks_only_the_short_stale(named_project: Path) -> None:
+    _record_shorts_build(named_project)
+    _record_thumbnail_build(named_project)
+    (named_project / "src/vertical.ass").write_text("変えた", encoding="utf-8")
+
+    output = _status(named_project)
+    assert "ショート chorus:" in output and "vertical.lyrics" in output
+    assert "サムネイル" not in output  # thumbnail は vertical.ass に依存しない
+
+
+def test_editing_thumbnail_ass_marks_only_the_thumbnail_stale(named_project: Path) -> None:
+    _record_shorts_build(named_project)
+    _record_thumbnail_build(named_project)
+    (named_project / "src/thumbnail.ass").write_text("変えた", encoding="utf-8")
+
+    output = _status(named_project)
+    assert "サムネイル main:" in output
+    assert "ショート" not in output
+
+
+def test_shorts_config_entry_change_marks_stale_without_editing_files(named_project: Path) -> None:
+    _record_shorts_build(named_project)
+    _record_thumbnail_build(named_project)
+    toml = (named_project / "utavideo.toml").read_text(encoding="utf-8")
+    (named_project / "utavideo.toml").write_text(
+        toml.replace('name = "chorus"', 'name = "chorus"\nwide = true'), encoding="utf-8"
+    )
+
+    output = _status(named_project)
+    assert "ショート chorus:" in output and "utavideo.toml" in output

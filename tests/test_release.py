@@ -114,9 +114,10 @@ def test_writes_only_the_video_and_ignores_texts_in_release(project: Path) -> No
 def _record_build(project: Path, font_files: tuple[Path, ...] = ()) -> None:
     """build が書き出し終えたときの記録を、ffmpeg を使わずに作る。"""
     loaded = Project.load(project)
-    record = inputs.record_text(loaded, inputs.with_fonts(inputs.snapshot(loaded), font_files))
-    loaded.inputs_record.parent.mkdir(parents=True, exist_ok=True)
-    loaded.inputs_record.write_text(record, encoding="utf-8")
+    target = inputs.main_target(loaded)
+    record = inputs.record_text(target, inputs.with_fonts(inputs.snapshot(target), font_files))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
 
 
 def _edit_later(project: Path, rel: str, text: str) -> None:

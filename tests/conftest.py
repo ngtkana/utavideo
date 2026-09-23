@@ -11,8 +11,20 @@ from typer.testing import CliRunner
 
 from utavideo import cli
 from utavideo.cli import app
+from utavideo.project import scaffold
 
 type MakeFont = Callable[[Path, str], Path]
+
+
+def scaffold_named_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, toml: str) -> Path:
+    """`[[shorts]]`・`[[thumbnails]]` を持つ曲フォルダを作る（test_inputs.py・test_status.py で共有）。"""
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    root = tmp_path / "曲"
+    scaffold(root, "曲", "曲")
+    (root / "utavideo.toml").write_text(toml, encoding="utf-8")
+    (root / "src/vertical.ass").write_text("縦用", encoding="utf-8")
+    (root / "src/thumbnail.ass").write_text("サムネイル用", encoding="utf-8")
+    return root
 
 
 def build_box_font(

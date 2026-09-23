@@ -1,4 +1,4 @@
-"""曲フォルダの今の状態（build・概要欄・告知文・release）を git status 風に一覧する。
+"""曲フォルダの今の状態（build・概要欄・告知文・ショート・サムネイル・release）を git status 風に一覧する。
 
 check（analyze.py）は「今書き出しても大丈夫か」という正しさの検査で、時間軸を持たない。
 ここでは逆に「前回書き出した時から何が変わったか」を見る。状態を集める処理（collect）と、
@@ -28,6 +28,18 @@ class ArtifactStatus:
 
 
 @dataclass(frozen=True)
+class NamedStatus:
+    """[[shorts]]・[[thumbnails]] のように、名前ごとに複数ありうる成果物1本分の状態。"""
+
+    label: str  # "ショート"・"サムネイル"
+    command: str  # 未生成のとき見せる、書き出すコマンド
+    name: str
+    output: Path
+    exists: bool
+    stale: str | None  # exists が False なら常に None
+
+
+@dataclass(frozen=True)
 class ReleaseStatus:
     version: str | None  # audio.file の名前から分からなければ None（next_path も None）
     matched: bool  # main.output と同じ内容の release 済みファイルがあるか
@@ -40,6 +52,8 @@ class Status:
     main: MainStatus
     description: ArtifactStatus
     announce: ArtifactStatus
+    shorts: tuple[NamedStatus, ...]
+    thumbnails: tuple[NamedStatus, ...]
     # main が未生成・古いときは None（先に build を促すので release の判定に意味が無い）
     release: ReleaseStatus | None
 
@@ -50,19 +64,31 @@ def collect(project: Project) -> Status:
         main=main,
         description=_artifact_status("概要欄", (project.title_output, project.description_output)),
         announce=_artifact_status("告知文", (project.announce_output,)),
+        shorts=tuple(
+            _named_status("ショート", "utavideo shorts", inputs.shorts_target(project, s), s.name)
+            for s in project.config.shorts
+        ),
+        thumbnails=tuple(
+            _named_status("サムネイル", "utavideo thumbnail", inputs.thumbnail_target(project, t), t.name)
+            for t in project.config.thumbnails
+        ),
         release=None if not main.exists or main.stale else _release_status(project, main.output),
     )
 
 
 def _main_status(project: Project) -> MainStatus:
-    output = project.main_output
-    if not output.is_file():
-        return MainStatus(output, False, None)
-    return MainStatus(output, True, inputs.stale_inputs(project))
+    target = inputs.main_target(project)
+    exists, stale = inputs.state(target)
+    return MainStatus(target.output, exists, stale)
 
 
 def _artifact_status(label: str, outputs: tuple[Path, ...]) -> ArtifactStatus:
     return ArtifactStatus(label, tuple(p for p in outputs if not p.is_file()))
+
+
+def _named_status(label: str, command: str, target: inputs.RecordTarget, name: str) -> NamedStatus:
+    exists, stale = inputs.state(target)
+    return NamedStatus(label, command, name, target.output, exists, stale)
 
 
 def _release_status(project: Project, main_output: Path) -> ReleaseStatus:
@@ -80,6 +106,8 @@ def render(status: Status) -> str:
             _format_main(status.main),
             _format_artifact(status.description),
             _format_artifact(status.announce),
+            *(_format_named(s) for s in status.shorts),
+            *(_format_named(t) for t in status.thumbnails),
             _format_release(status.release),
         )
         if line is not None
@@ -98,6 +126,15 @@ def _format_artifact(status: ArtifactStatus) -> str | None:
         return None
     names = "、".join(str(p) for p in status.missing)
     return f"{status.label}: 未生成です（{names}）"
+
+
+def _format_named(status: NamedStatus) -> str | None:
+    if not status.exists:
+        return (
+            f"{status.label} {status.name}: 未生成です"
+            f"（{status.command} --name {status.name} で {status.output} を書き出してください）"
+        )
+    return f"{status.label} {status.name}: {status.stale}" if status.stale else None
 
 
 def _format_release(release: ReleaseStatus | None) -> str | None:
