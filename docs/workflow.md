@@ -8,7 +8,7 @@ Aegisub の字幕の描画エンジンを **libass** にします。utavideo も
 
 - 設定（Preferences）→ 詳細（Advanced）→ ビデオ（Video）→ 字幕プロバイダ（Subtitles provider）を `libass` にする
 
-雛形の字幕スタイルは [Zen Maru Gothic](https://fonts.google.com/specimen/Zen+Maru+Gothic) を使います。Aegisub を動かす環境（WSL2 なら Windows 側）にインストールしてください。入っていないと Aegisub では別のフォントで表示され、`utavideo check` はエラーになります。
+雛形の字幕スタイルは [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP) を使います。Aegisub を動かす環境（WSL2 なら Windows 側）にインストールしてください。入っていないと Aegisub では別のフォントで表示され、`utavideo check` はエラーになります。
 
 ## 1. 曲フォルダを用意する
 

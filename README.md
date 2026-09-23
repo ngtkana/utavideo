@@ -16,10 +16,9 @@
 - libass 付きの ffmpeg / ffprobe（Ubuntu なら `sudo apt install ffmpeg`）
   - libass 無しの ffmpeg では歌詞を描画できません。`preview-bg`・`build`・`overlay` は始めに調べて、書き出す前に止まります（`check` はエラーとして他の検査結果と一緒に出します）
   - macOS は未検証ですが、Homebrew の `ffmpeg` は libass 無しなので、使うなら `brew install ffmpeg-full` が要ります
-- 雛形の字幕スタイルが使うフォント [Zen Maru Gothic](https://fonts.google.com/specimen/Zen+Maru+Gothic)（無料）
+- 雛形の字幕スタイルが使うフォント [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)（無料、SIL Open Font License 1.1）
   - 別のフォントを使う場合は、.ass のスタイルで指定します
-- 見本（`utavideo sample`）に同梱しているフォント [Noto Sans JP](https://fonts.google.com/noto/specimen/Noto+Sans+JP)（SIL Open Font License 1.1）
-  - ライセンス全文は見本の `src/fonts/OFL.txt` に同梱しています
+  - 見本（`utavideo sample`）にはこのフォントを同梱しています。ライセンス全文は見本の `src/fonts/OFL.txt` に同梱しています
 - [uv](https://docs.astral.sh/uv/)
 - 歌詞を作るのに [Aegisub](https://aegisub.org/) 3.4 以降（推奨）
 
