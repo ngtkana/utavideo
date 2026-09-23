@@ -16,6 +16,7 @@ from utavideo import graph
 from utavideo.config import PROJECT_CONFIG_NAME, OverlayText, Song
 from utavideo.ffmpeg import run
 from utavideo.project import SCAFFOLD_DIRS, ScaffoldResult, read_template_bytes, render_template
+from utavideo.schema import schema_path
 
 FONT_FAMILY = "Noto Sans JP"
 FONT_DIR = Path("src/fonts")
@@ -119,6 +120,7 @@ def _write_bytes(path: Path, data: bytes) -> Path:
 def _config(spec: _Spec) -> str:
     return render_template(
         "sample.toml",
+        schema=schema_path().as_uri(),
         title=_SONG.title,
         slug=_SONG.slug,
         artist=_SONG.artist,

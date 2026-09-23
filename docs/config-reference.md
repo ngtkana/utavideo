@@ -5,6 +5,18 @@
 `utavideo.toml` は曲フォルダの直下に置く設定ファイルです。パスは `utavideo.toml` からの相対パスで書きます（絶対パスも使えます）。
 存在しない項目を書くとエラーになります（書き間違いに気づけるようにするためです）。
 
+## エディタの補完
+
+`utavideo new` / `utavideo init` / `utavideo sample` が作る `utavideo.toml` の1行目には `#:schema <パス>` が入っています。これは taplo（TOML の言語サーバー）が認識する規約で、次のエディタでキー名の補完・型の検証が効きます。
+
+- VSCode: [Even Better TOML](https://marketplace.visualstudio.com/items?itemName=tamasfe.even-better-toml) 拡張を入れるだけで、設定は不要です
+- Neovim: [taplo](https://taplo.tamasfe.dev/) を LSP として起動する設定を `toml` の filetype に追加します
+- JetBrains 系 IDE: 標準の TOML プラグインが対応しています
+
+エディタで効くのは項目名・型・配列の要素数のような構造の検証だけで、ハッシュタグの重複禁止のような意味の検証は `utavideo check` に任せています。
+
+`#:schema` が指すのは、インストールした utavideo に同梱された JSON Schema です（同梱ファイルなので、既存の曲フォルダの `utavideo.toml` に手で1行目として足しても使えます）。
+
 ## [song]
 
 | 項目 | 型 | 既定値 | 説明 |

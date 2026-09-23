@@ -43,7 +43,7 @@ ignore = ["RUF001", "RUF002", "RUF003"]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"
-include = ["src", "tests"]
+include = ["src", "tests", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -17,6 +17,7 @@ from pydantic import (
     NonNegativeInt,
     PositiveInt,
     ValidationError,
+    WithJsonSchema,
     field_validator,
 )
 from pydantic_core import to_jsonable_python
@@ -58,8 +59,12 @@ type Focus = tuple[Ratio, Ratio]
 # フェードの長さ（イン, アウト）。ミリ秒
 type FadeMs = tuple[NonNegativeInt, NonNegativeInt]
 
-# "M:SS(.fff)" または秒の数。読むときに秒（float）にする
-Time = Annotated[float, BeforeValidator(parse_time)]
+# "M:SS(.fff)" または秒の数。読むときに秒（float）にする。
+# BeforeValidator は入力の型を JSON Schema に伝えないので、WithJsonSchema で文字列も許すと明記する
+# （無いと taplo が "1:23.5" のような文字列を型不一致として警告してしまう）
+Time = Annotated[
+    float, BeforeValidator(parse_time), WithJsonSchema({"anyOf": [{"type": "string"}, {"type": "number"}]})
+]
 
 
 def _check_output_name(name: str) -> str:

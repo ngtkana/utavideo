@@ -1,6 +1,9 @@
+#:schema $schema
 # utavideo の設定。全項目の説明:
 # https://github.com/ngtkana/utavideo/blob/main/docs/config-reference.md
 # パスはこのファイルからの相対パス。
+# 先頭の #:schema は taplo 対応のエディタでキー名の補完・型の検証を効かせるためのもの
+# （詳しくは config-reference.md の「エディタの補完」）。
 
 [song]
 title = $title
