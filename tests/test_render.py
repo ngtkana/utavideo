@@ -736,23 +736,13 @@ def test_shorts_blur_places_the_main_video_by_frame_y_and_keeps_it_out_of_the_ba
     assert sum(counts[: 320 - FRAME_HEIGHT]) == 0
 
 
-def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_main_video(
+def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_band(
     project: Path,
 ) -> None:
     _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
     config = project / "utavideo.toml"
     config.write_text(
         config.read_text(encoding="utf-8").replace("enabled = false", "enabled = true"), encoding="utf-8"
-    )
-    vertical = project / "src/vertical.ass"
-    # blur では曲名表示を縦用 .ass に描かないので、Title のスタイルは要らない
-    text = "\n".join(
-        line for line in vertical.read_text(encoding="utf-8").splitlines() if "Style: Title," not in line
-    )
-    vertical.write_text(
-        text + "\nStyle: VerticalBand,Test Sans,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
-        "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1\n",
-        encoding="utf-8",
     )
     _add_vertical_lines(
         project,
@@ -763,19 +753,20 @@ def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_mai
     invoke("shorts", "-C", str(project))
 
     work = (project / "build/.work/shorts/chorus.ass").read_text(encoding="utf-8")
-    assert work.count("Dialogue:") == 1
+    assert work.count("Dialogue:") == 2
     assert "VerticalBand,,0,0,0,,AA" in work
-    assert "テスト / テスター" not in work
+    # 曲名表示は本編の映像ではなく、縦用 .ass の帯（vertical-ass が作るスタイル VerticalBand）に描く
+    assert "VerticalBand,,0,0,0,,テスト / テスター" in work
     frame = (project / "build/.work/shorts/frame/chorus.ass").read_text(encoding="utf-8")
-    assert "テスト / テスター" in frame and "AAAA" in frame
+    assert "テスト / テスター" not in frame and "AAAA" in frame
 
-    # vertical.overlay_text = false は、真ん中の本編の映像からも曲名表示を消す
+    # vertical.overlay_text = false は、帯からも曲名表示を消す
     config.write_text(
         config.read_text(encoding="utf-8").replace("[vertical]", "[vertical]\noverlay_text = false"),
         encoding="utf-8",
     )
     invoke("shorts", "-C", str(project))
-    assert "テスト / テスター" not in (project / "build/.work/shorts/frame/chorus.ass").read_text("utf-8")
+    assert "テスト / テスター" not in (project / "build/.work/shorts/chorus.ass").read_text("utf-8")
 
 
 def test_check_for_a_blur_section_uses_the_main_lyrics(project: Path) -> None:

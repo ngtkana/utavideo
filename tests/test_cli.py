@@ -147,7 +147,7 @@ def test_vertical_ass_for_blur_copies_the_styles_without_the_lyrics(tmp_path: Pa
 
     result = runner.invoke(app, ["vertical-ass", "-C", str(root)])
     assert result.exit_code == 0, result.output
-    assert "帯に出す文字" in result.output
+    assert "曲名表示は自動で帯に入る" in result.output
     script = subs.load(root / "src/vertical.ass")
     # 歌詞は本編の映像に入るので写さない。スタイルは Aegisub で選べるように写す
     assert script.events == []

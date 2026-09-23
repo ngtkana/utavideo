@@ -726,15 +726,19 @@ def vertical_ass(project_dir: ProjectOption = None) -> None:
     if not source.is_file():
         _fail(f"lyrics.file のファイルがありません: {source}")
     size = config.vertical.size
+    layouts = shorts.layouts(config.shorts, config.vertical.layout)
     # blur では歌詞が本編の映像に入るので、縦用 .ass には写さない（Aegisub で二重に見えないように）。
     # reframe のショートが1本でもあれば、その区間では縦用 .ass の歌詞を描くので写す
-    include_lyrics = vertical.draws_lyrics(shorts.layouts(config.shorts, config.vertical.layout))
+    include_lyrics = vertical.draws_lyrics(layouts)
     conversion = vertical.convert(
         subs.load(source),
         size=size,
         video_file=_path_from(dest.parent, vertical.preview_bg_output(project.build_dir)),
         source_dir=_path_from(dest.parent, source.parent),
         include_lyrics=include_lyrics,
+        # blur を使うショートが1本でもあれば、帯（VerticalBand）の MarginV を frame_y に合わせる
+        band_video_size=config.video.size if "blur" in layouts else None,
+        band_frame_y=config.vertical.frame_y,
     )
     write_text(dest, conversion.script.to_string("ass"))
 
@@ -747,8 +751,11 @@ def vertical_ass(project_dir: ProjectOption = None) -> None:
     next_step = (
         "Aegisub で開き、スタイル Lyrics の大きさを上げてから、長い行を \\N で改行する"
         if include_lyrics
-        # blur では歌詞を写していないので、直すのは帯の文字だけ
-        else f"Aegisub で開き、帯に出す文字をスタイル {vertical.BAND_STYLE} で書く（歌詞は本編の映像に入る）"
+        # blur では歌詞を写していないので、直すのは区間の指定と帯の文字だけ。曲名表示は自動で帯に入る
+        else (
+            "Aegisub で開き、区間をスタイル Short のコメント行で置く"
+            f"（曲名表示は自動で帯に入る。帯に文字を足すならスタイル {vertical.BAND_STYLE} で書く）"
+        )
     )
     console.print(f"次にやること（詳しくは docs/workflow.md）: {next_step}", markup=False)
 

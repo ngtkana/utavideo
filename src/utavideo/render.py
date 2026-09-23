@@ -47,9 +47,9 @@ def frame_script(
 ) -> pysubs2.SSAFile:
     """blur の真ん中に置く本編の映像に描く .ass。
 
-    build/main.mp4 と同じ画面にする。曲名表示だけ vertical.overlay_text で決まる。
+    build/main.mp4 と同じ画面にするが、曲名表示は縦用 .ass の帯に描くのでここには含めない。
     """
-    overlay = vertical.overlay_text(project.config.overlay_text, project.config.vertical)
+    overlay = project.config.overlay_text.model_copy(update={"enabled": False})
     return compose(project, lyrics, duration_ms, "final", font_index, overlay=overlay)
 
 

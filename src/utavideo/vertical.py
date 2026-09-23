@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pysubs2
 
-from utavideo import subs
+from utavideo import graph, subs
 from utavideo.config import Focus, Layout, OverlayText, Vertical
 
 SHORT_STYLE = "Short"
@@ -57,6 +57,8 @@ def convert(
     video_file: str,
     source_dir: str = ".",
     include_lyrics: bool = True,
+    band_video_size: tuple[int, int] | None = None,
+    band_frame_y: float = 0.5,
 ) -> Conversion:
     """本編の .ass を縦の解像度 size に変換した複製を作る。source は変更しない。
 
@@ -64,6 +66,8 @@ def convert(
     source_dir は、本編の .ass のフォルダの、縦用 .ass のフォルダから見たパス（/ 区切り）。
     include_lyrics が False なら、スタイルだけを写して行は写さない
     （blur では歌詞が本編の映像に入るので、縦用 .ass に写すと二重になる）。
+    band_video_size を渡すと（blur を使うとき）、帯（スタイル VerticalBand）の MarginV を、
+    band_frame_y（vertical.frame_y）の帯にだいたい収まる値にする。
     """
     res = subs.play_res(source)
     if res is None:
@@ -93,6 +97,8 @@ def convert(
     if BAND_STYLE not in script.styles:
         band = base.copy()
         band.alignment = pysubs2.Alignment.TOP_CENTER
+        if band_video_size is not None:
+            band.marginv = _band_margin_v(size, band_video_size, band_frame_y, band.fontsize)
         script.styles[BAND_STYLE] = band
 
     unconverted: list[str] = []
@@ -106,6 +112,15 @@ def convert(
         if skipped:
             unconverted.append(f"{subs.describe(event)}（{'・'.join(skipped)}）")
     return Conversion(script, unconverted)
+
+
+def _band_margin_v(
+    vertical_size: tuple[int, int], video_size: tuple[int, int], frame_y: float, fontsize: float
+) -> int:
+    """帯（スタイル VerticalBand、上揃え）の文字がだいたい帯の中央に来る MarginV。"""
+    frame_h = graph.frame_height(video_size, vertical_size[0])
+    band_height = (vertical_size[1] - frame_h) * frame_y
+    return round(max(0, (band_height - fontsize) / 2))
 
 
 def _retarget_project(script: pysubs2.SSAFile, video_file: str, source_dir: str) -> None:
@@ -201,15 +216,19 @@ def overlay_text(overlay: OverlayText, config: Vertical) -> OverlayText:
 
 
 def draws_lyrics(layouts: Collection[Layout]) -> bool:
-    """縦用 .ass に歌詞と曲名表示を持たせるか。
+    """縦用 .ass に歌詞を持たせるか。
 
-    blur ではどちらも本編の映像に入るので持たせない。reframe が1つでもあれば持たせる。
+    blur では歌詞が本編の映像に入るので持たせない。reframe が1つでもあれば持たせる。
     """
     return "reframe" in layouts
 
 
 def script_overlay_text(overlay: OverlayText, layouts: Collection[Layout]) -> OverlayText:
-    """縦用 .ass に描く曲名表示。blur では本編の映像に入るので、縦用 .ass には入れない。"""
+    """縦用 .ass に描く曲名表示。
+
+    reframe では本編と同じスタイル（既定 Title）で描く。blur では本編の映像には焼き込まず、
+    帯（スタイル VerticalBand）に描く。
+    """
     if draws_lyrics(layouts):
         return overlay
-    return overlay.model_copy(update={"enabled": False})
+    return overlay.model_copy(update={"style": BAND_STYLE})

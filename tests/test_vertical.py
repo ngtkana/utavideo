@@ -108,6 +108,30 @@ def test_existing_short_style_is_kept() -> None:
     assert _convert(source).script.styles["Short"].fontname == "Other"
 
 
+def test_band_style_margin_v_is_unchanged_without_a_video_size() -> None:
+    # band_video_size を渡さなければ、Lyrics スタイルを継承した MarginV のまま
+    styles = _convert().script.styles
+    assert styles["VerticalBand"].marginv == styles["Lyrics"].marginv
+
+
+def test_band_style_margin_v_fits_the_band_when_a_video_size_is_given() -> None:
+    source = pysubs2.SSAFile.from_string(SOURCE, format_="ass")
+    conversion = vertical.convert(
+        source, size=(1080, 1920), video_file=VIDEO, band_video_size=(1920, 1080), band_frame_y=0.5
+    )
+    band = conversion.script.styles["VerticalBand"]
+    # 本編（1920x1080）を幅 1080 に縮めた高さは 608。上帯の高さは (1920 - 608) * 0.5 = 656
+    assert band.marginv == round((656 - band.fontsize) / 2)
+
+
+def test_band_style_margin_v_is_zero_when_the_band_is_thinner_than_the_font() -> None:
+    source = pysubs2.SSAFile.from_string(SOURCE, format_="ass")
+    conversion = vertical.convert(
+        source, size=(1080, 1920), video_file=VIDEO, band_video_size=(1920, 1080), band_frame_y=0.02
+    )
+    assert conversion.script.styles["VerticalBand"].marginv == 0
+
+
 def test_events_are_copied_with_margins_and_tags_converted() -> None:
     source = pysubs2.SSAFile.from_string(SOURCE, format_="ass")
     conversion = vertical.convert(source, size=(1080, 1920), video_file=VIDEO)
