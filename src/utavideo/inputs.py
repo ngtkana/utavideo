@@ -1,7 +1,11 @@
-"""build/main.mp4 を書き出したときの入力の記録と、release のときの比較。
+"""build/main.mp4 を書き出したときの入力の記録と、release・status のときの比較。
 
 release が止まるのは、確かめた動画と描画に効く入力が違うときだけにしたい。
 更新時刻では、概要欄を書き足しただけ・保存し直しただけでも止まってしまうので、中身で比べる。
+
+音声・背景ファイルは数十〜数百MBになりうるので、毎回 SHA256 で全体を読み直すと status のように
+頻繁に呼ぶ用途では重い。size・mtime_ns が記録と一致すれば読まずに済ませ、違うときだけ実際に読んで
+確かめる（racy git の要領。issue #78）。
 """
 
 import hashlib
@@ -13,7 +17,7 @@ from typing import Any
 from utavideo.config import PROJECT_CONFIG_NAME, rendered_values
 from utavideo.project import Project
 
-_FORMAT = 1
+_FORMAT = 2
 FONTS = "フォント"
 
 
@@ -32,18 +36,32 @@ def snapshot(project: Project) -> dict[str, Any]:
     build では、utavideo や ffmpeg が素材を読むより前に呼ぶ。読むまでの間に変わっても、記録が古い側になって
     release が止まる。
     """
+    values: dict[str, Any] = {PROJECT_CONFIG_NAME: _config_hash(project)}
+    values |= {name: _file_record(path) for name, path in _files(project) if name != PROJECT_CONFIG_NAME}
+    return values
+
+
+def _config_hash(project: Project) -> str:
     # utavideo.toml は書き方ではなく、読み込んだ値のうち描画に効くもので比べる
     config = json.dumps(rendered_values(project.config), ensure_ascii=False, sort_keys=True)
-    values: dict[str, Any] = {PROJECT_CONFIG_NAME: hashlib.sha256(config.encode()).hexdigest()}
-    values |= {name: _file_digest(path) for name, path in _files(project) if name != PROJECT_CONFIG_NAME}
-    return values
+    return hashlib.sha256(config.encode()).hexdigest()
+
+
+def _file_record(path: Path) -> dict[str, Any]:
+    """ファイルの要約。size・mtime_ns（読まずに済む）と sha256（中身で確かめる）を持つ。"""
+    size, mtime_ns = _stamp(path)
+    return {"size": size, "mtime_ns": mtime_ns, "sha256": _file_digest(path)}
+
+
+def _font_values(font_files: Iterable[Path]) -> list[list[Any]]:
+    unique = sorted({path.absolute() for path in font_files})
+    return [[str(path), *_stamp(path)] for path in unique]
 
 
 def with_fonts(values: dict[str, Any], font_files: Iterable[Path]) -> dict[str, Any]:
     """snapshot に、使うフォントの要約を足したもの。使うフォントは歌詞を読んだ後にしか分からない。"""
     # 中身を読むと重いので、パス・大きさ・更新時刻で代える（issue #26）
-    unique = sorted({path.absolute() for path in font_files})
-    return {**values, FONTS: [[str(path), *_stamp(path)] for path in unique]}
+    return {**values, FONTS: _font_values(font_files)}
 
 
 def record_text(project: Project, inputs: dict[str, Any]) -> str:
@@ -61,14 +79,34 @@ def stale_inputs(project: Project) -> str | None:
         files = _files(project)
         newer = [name for name, path in files if path.is_file() and path.stat().st_mtime > built_at]
         return f"build/main.mp4 より新しい入力があります（{', '.join(newer)}）" if newer else None
-    fonts = [Path(entry[0]) for entry in recorded.get(FONTS, [])]
-    # 記録に無い入力（形式を変えたときなど）も、変わったものとして扱う
-    changed = [
-        name for name, value in with_fonts(snapshot(project), fonts).items() if recorded.get(name) != value
-    ]
+    changed = _changed_inputs(project, recorded)
     return (
         f"build/main.mp4 を書き出した後に変わった入力があります（{', '.join(changed)}）" if changed else None
     )
+
+
+def _changed_inputs(project: Project, recorded: dict[str, Any]) -> list[str]:
+    """記録と比べて変わった入力の名前。ファイルは size・mtime_ns が一致すれば読まずに済ませる。"""
+    changed = [] if recorded.get(PROJECT_CONFIG_NAME) == _config_hash(project) else [PROJECT_CONFIG_NAME]
+    changed += [
+        name
+        for name, path in _files(project)
+        if name != PROJECT_CONFIG_NAME and not _file_matches(path, recorded.get(name))
+    ]
+    fonts = [Path(entry[0]) for entry in recorded.get(FONTS, [])]
+    # 記録に無い入力（形式を変えたときなど）も、変わったものとして扱う
+    if _font_values(fonts) != recorded.get(FONTS):
+        changed.append(FONTS)
+    return changed
+
+
+def _file_matches(path: Path, record: Any) -> bool:
+    """記録と実際のファイルを比べる。size・mtime_ns が一致すれば読まずに済ませ、違えば中身で確かめる。"""
+    if not isinstance(record, dict):
+        return False
+    if _stamp(path) == [record.get("size"), record.get("mtime_ns")]:
+        return True
+    return record.get("sha256") == _file_digest(path)
 
 
 def _read_record(project: Project) -> dict[str, Any] | None:

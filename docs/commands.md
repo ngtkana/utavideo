@@ -4,7 +4,7 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`vertical-ass` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`vertical-ass`・`status` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
 - `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
 - 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - `inst` はさらに rubberband 付きの ffmpeg が必要です（[inst](#inst)）
@@ -346,6 +346,24 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 - 1文字（コードポイント）の重みは 2 です。U+0000–U+10FF・U+2000–U+200D・U+2010–U+201F・U+2032–U+2037 だけ 1 です（`»` と改行は 1、`【】『』・…` と全角空白は 2）
 - URL は長さによらず 23 です。`https://`・`http://` で始まるものと、`example.com` のようなスキームの無いドメインを URL とみなします。スキームの無いものは、TLD が twitter-text の一覧にあるときだけ URL とみなします（`Mr.Children`・`feat.Ado` は URL ではない）。`text` に手で書いた URL も数えます。URL の形の細かい判定（使える文字・パスの終わり）は twitter-text より簡易です
 - X は ZWJ でつないだ絵文字や肌の色の付いた絵文字を1つで 2 と数えますが、utavideo は部品ごとに数えるので多めになります（上限を超えない側に倒れます）
+
+## status
+
+```sh
+utavideo status [-C <曲フォルダ>]
+```
+
+`build/main.mp4`・[description](#description)・[announce](#announce)・[release](#release) の今の状態を一覧します。`check` が「今書き出しても大丈夫か」を検査するのに対し、`status` は「前回書き出したときから何が変わったか」を見ます。差分の無い項目は何も表示せず、変わっている項目だけを並べます。すべて差分が無ければ「クリーンです（差分はありません）」とだけ表示します。
+
+| 項目 | 表示する条件 |
+|---|---|
+| main | `build/main.mp4` が無い（未生成）。または [release](#release) と同じ基準で、書き出した後に入力が変わっている（古い） |
+| 概要欄 | `build/title.txt`・`build/description.txt` のどちらかが無い（有無だけを見ます。中身が古いかは見ません） |
+| 告知文 | `build/announce.txt` が無い（有無だけを見ます） |
+| release | 音源のバージョン（`vX.Y`）が `audio.file` の名前から分からない。まだ release していない。`build/main.mp4` と release 済みの内容が違う（次に release したときのファイル名を表示します） |
+
+- main が未生成・古いときは release の行を表示しません（先に `build` を促します）
+- ffmpeg は使いません
 
 ## 検査項目
 
