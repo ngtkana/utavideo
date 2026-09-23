@@ -786,6 +786,26 @@ def test_check_for_a_blur_section_uses_the_main_lyrics(project: Path) -> None:
     assert "「" + "A" * 20 + "」 が画面からはみ出しそうです" in output
 
 
+def test_check_requires_the_band_style_for_blur_when_overlay_text_is_enabled(project: Path) -> None:
+    """blur では曲名表示を帯（VerticalBand）に描くので、そのスタイルが無いとエラーになる。"""
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    config = project / "utavideo.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("enabled = false", "enabled = true"), encoding="utf-8"
+    )
+    vertical = project / "src/vertical.ass"
+    text = "\n".join(
+        line
+        for line in vertical.read_text(encoding="utf-8").splitlines()
+        if "Style: VerticalBand," not in line
+    )
+    vertical.write_text(text + "\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "VerticalBand" in result.output
+
+
 def test_check_does_not_repeat_a_warning_for_mixed_layouts(project: Path) -> None:
     """blur と reframe の両方の区間に入る行の警告は、1回だけ出す。"""
     _with_section(

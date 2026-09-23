@@ -121,7 +121,8 @@ def test_band_style_margin_v_fits_the_band_when_a_video_size_is_given() -> None:
     )
     band = conversion.script.styles["VerticalBand"]
     # 本編（1920x1080）を幅 1080 に縮めた高さは 608。上帯の高さは (1920 - 608) * 0.5 = 656
-    assert band.marginv == round((656 - band.fontsize) / 2)
+    # フォントサイズは Lyrics と同じ比で縮んだ 56.25（test_styles_shrink_by_the_width_ratio と同じ値）
+    assert band.marginv == round((656 - 56.25) / 2) == 300
 
 
 def test_band_style_margin_v_is_zero_when_the_band_is_thinner_than_the_font() -> None:
