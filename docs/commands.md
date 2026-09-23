@@ -7,7 +7,7 @@
 - `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`vertical-ass`・`status` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
 - `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
 - 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
-- `inst` はさらに rubberband 付きの ffmpeg が必要です（[inst](#inst)）
+- `inst` はキー変更に rubberband フィルタを使いますが、無い ffmpeg では代わりに `asetrate`+`atempo` を使います（[inst](#inst)）
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
@@ -216,7 +216,8 @@ utavideo inst [-C <曲フォルダ>] [--keys <キー>]
 |---|---|---|
 | `--keys` | `"0"` | 半音単位のキー。カンマ区切りで複数指定できる（例: `-1,-2,-3`）。キーごとに別ファイルを書き出す |
 
-- キーの変更には ffmpeg の `rubberband` フィルタを使います。使えない ffmpeg では止まります（Homebrew の `ffmpeg-full` 等）
+- キーの変更には ffmpeg の `rubberband` フィルタを使います。使えない ffmpeg では、代わりに `asetrate`+`atempo` で変えます（音質は劣ります。どちらを使ったかは実行時に表示します）
+- 音量は `loudnorm`（2パス）でそろえます（目標: 統合ラウドネス -16 LUFS、True Peak -1.5 dBTP、ラウドネスレンジ 11 LU）。計測は音源全体に対して1回だけ行い、`--keys` で複数指定したときも使い回します
 - 背景・音源は本編と同じです（`video.background`・`audio.file`）
 - 表示する文字は `[inst]` の `text`、スタイルは `[overlay_text]` の `style` です
 - 書き出す前に検査し、エラーがあれば1本も書き出しません
@@ -228,7 +229,7 @@ utavideo inst [-C <曲フォルダ>] [--keys <キー>]
 - `audio.file`・`video.background` のファイルが無い、背景の形式に対応していない、音源に音声が入っていない（[検査項目](#検査項目)の「素材」と同じ）
 - `lyrics.file` のファイルが無い（曲名表示のスタイルに使う）、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって縦横比が `PlayRes` と違う
 - `overlay_text.style` のスタイルが `lyrics.file` に無い、`[inst].text` の書式が不正
-- rubberband フィルタが使えない ffmpeg
+- 音量の計測に失敗した
 - ffmpeg が正常に終わっても何も書き出さなかった
 
 ## vertical-ass

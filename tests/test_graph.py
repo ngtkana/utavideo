@@ -3,14 +3,21 @@ from pathlib import Path
 
 import pytest
 
+from utavideo.ffmpeg import LoudnormMeasurement, LoudnormTarget
 from utavideo.graph import (
     Clip,
     Frame,
+    Loudnorm,
+    Pitch,
     RenderSpec,
     StillSpec,
     build_args,
     build_still_args,
     escape_filter_arg,
+)
+
+MEASURED = LoudnormMeasurement(
+    input_i="-23.71", input_tp="-2.3", input_lra="4.5", input_thresh="-34.1", target_offset="0.51"
 )
 
 SPEC = RenderSpec(
@@ -166,20 +173,76 @@ def test_pitch_none_keeps_audio_untouched() -> None:
     assert _contains(build_args(SPEC), ["-map", "1:a:0"])
 
 
-def test_pitch_shifts_the_audio() -> None:
-    audio = _filter(build_args(replace(SPEC, pitch=1.122462))).split(";")[1]
+def test_pitch_shifts_the_audio_with_rubberband() -> None:
+    pitch = Pitch(1.122462, "rubberband")
+    audio = _filter(build_args(replace(SPEC, pitch=pitch))).split(";")[1]
     assert audio == "[1:a]rubberband=pitch=1.122462[a]"
-    assert _contains(build_args(replace(SPEC, pitch=1.122462)), ["-map", "[a]"])
+    assert _contains(build_args(replace(SPEC, pitch=pitch)), ["-map", "[a]"])
 
 
 def test_pitch_is_rejected_in_overlay_mode() -> None:
     with pytest.raises(ValueError, match="overlay"):
-        build_args(replace(SPEC, mode="overlay", pitch=1.122462))
+        build_args(replace(SPEC, mode="overlay", pitch=Pitch(1.122462, "rubberband")))
 
 
 def test_pitch_and_clip_are_rejected_together() -> None:
     with pytest.raises(ValueError, match="pitch"):
-        build_args(replace(CLIP_SPEC, pitch=1.122462))
+        build_args(replace(CLIP_SPEC, pitch=Pitch(1.122462, "rubberband")))
+
+
+def test_atempo_method_builds_asetrate_and_atempo_chain() -> None:
+    # key=+2 相当（ratio が [0.5, 2.0] の範囲内）は atempo が1段だけになる
+    pitch = Pitch(1.122462, "atempo")
+    audio = _filter(build_args(replace(SPEC, pitch=pitch))).split(";")[1]
+    assert audio == "[1:a]aresample=48000,asetrate=48000*1.122462,aresample=48000,atempo=0.890899[a]"
+
+
+def test_atempo_chain_splits_extreme_ratios() -> None:
+    # 2オクターブ上（ratio=4.0）は tempo=0.25 になり、atempo の 0.5〜2.0 制約で2段に分かれる
+    audio = _filter(build_args(replace(SPEC, pitch=Pitch(4.0, "atempo")))).split(";")[1]
+    assert audio.count("atempo=") == 2
+    assert audio.endswith(",atempo=0.5,atempo=0.5[a]")
+
+    # 2オクターブ下（ratio=0.25）は tempo=4.0 になり、同じく2段
+    audio = _filter(build_args(replace(SPEC, pitch=Pitch(0.25, "atempo")))).split(";")[1]
+    assert audio.count("atempo=") == 2
+    assert audio.endswith(",atempo=2,atempo=2[a]")
+
+
+def test_atempo_chain_skips_atempo_when_ratio_is_one() -> None:
+    audio = _filter(build_args(replace(SPEC, pitch=Pitch(1.0, "atempo")))).split(";")[1]
+    assert "atempo" not in audio
+
+
+def test_loudnorm_filter_uses_measured_values() -> None:
+    loudnorm = Loudnorm(LoudnormTarget(), MEASURED)
+    audio = _filter(build_args(replace(SPEC, loudnorm=loudnorm))).split(";")[1]
+    assert audio == (
+        "[1:a]loudnorm=I=-16:TP=-1.5:LRA=11:measured_I=-23.71:measured_TP=-2.3:"
+        "measured_LRA=4.5:measured_thresh=-34.1:offset=0.51:linear=true[a]"
+    )
+    assert _contains(build_args(replace(SPEC, loudnorm=loudnorm)), ["-map", "[a]"])
+
+
+def test_pitch_and_loudnorm_are_chained_in_one_filter() -> None:
+    pitch = Pitch(1.122462, "rubberband")
+    loudnorm = Loudnorm(LoudnormTarget(), MEASURED)
+    audio = _filter(build_args(replace(SPEC, pitch=pitch, loudnorm=loudnorm))).split(";")[1]
+    assert audio.startswith("[1:a]rubberband=pitch=1.122462,loudnorm=")
+    assert audio.endswith("[a]")
+    assert audio.count("[1:a]") == 1
+
+
+def test_loudnorm_is_rejected_in_overlay_mode() -> None:
+    loudnorm = Loudnorm(LoudnormTarget(), MEASURED)
+    with pytest.raises(ValueError, match="overlay"):
+        build_args(replace(SPEC, mode="overlay", loudnorm=loudnorm))
+
+
+def test_loudnorm_and_clip_are_rejected_together() -> None:
+    loudnorm = Loudnorm(LoudnormTarget(), MEASURED)
+    with pytest.raises(ValueError, match="loudnorm"):
+        build_args(replace(CLIP_SPEC, loudnorm=loudnorm))
 
 
 BLUR_SPEC = replace(

@@ -10,9 +10,15 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
-from utavideo import analyze, graph
+from utavideo import analyze, cli, graph
 from utavideo.cli import app
-from utavideo.ffmpeg import rubberband_filter_error, subtitles_filter_error
+from utavideo.ffmpeg import (
+    LoudnormMeasurement,
+    LoudnormTarget,
+    measure_loudness,
+    rubberband_filter_error,
+    subtitles_filter_error,
+)
 from utavideo.project import scaffold
 
 pytestmark = pytest.mark.skipif(subtitles_filter_error() is not None, reason="libass 付きの ffmpeg が必要")
@@ -850,3 +856,43 @@ def test_inst_writes_one_video_per_key_without_lyrics(project: Path) -> None:
 def test_inst_defaults_to_key_zero(project: Path) -> None:
     invoke("inst", "-C", str(project))
     assert (project / "build/inst/key0.mp4").is_file()
+
+
+def test_inst_falls_back_to_atempo_when_rubberband_is_unavailable(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # asetrate/atempo は組み込みフィルタなので、rubberband の有無に関わらず実行できる
+    monkeypatch.setattr(cli, "rubberband_filter_error", lambda: "テスト用に無効化")
+
+    result = invoke("inst", "-C", str(project), "--keys", "-1,2")
+
+    assert "asetrate" in result.output or "atempo" in result.output
+    minus_one, plus_two = project / "build/inst/key-1.mp4", project / "build/inst/key+2.mp4"
+    assert minus_one.is_file() and plus_two.is_file()
+    assert float(_probe(minus_one)["format"]["duration"]) == pytest.approx(
+        float(_probe(plus_two)["format"]["duration"]), abs=0.05
+    )
+
+
+def test_inst_measures_loudness_once_for_all_keys(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = []
+    original = measure_loudness
+
+    def counting(audio: Path, target: LoudnormTarget | None = None) -> LoudnormMeasurement:
+        calls.append(audio)
+        return original(audio, target)
+
+    monkeypatch.setattr(cli, "measure_loudness", counting)
+    monkeypatch.setattr(cli, "rubberband_filter_error", lambda: "テスト用に無効化")
+
+    invoke("inst", "-C", str(project), "--keys", "-1,0,2")
+
+    assert len(calls) == 1
+
+
+@pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")
+def test_inst_normalizes_loudness_to_the_target(project: Path) -> None:
+    invoke("inst", "-C", str(project))
+
+    measured = measure_loudness(project / "build/inst/key0.mp4")
+    assert float(measured.input_i) == pytest.approx(-16.0, abs=1.0)

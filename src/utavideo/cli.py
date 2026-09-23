@@ -48,10 +48,13 @@ from utavideo.config import (
 from utavideo.console import console, err_console
 from utavideo.errors import UtavideoError
 from utavideo.ffmpeg import (
+    LoudnormTarget,
     NoOutputError,
+    measure_loudness,
     partial_path,
     replace_partial,
     require_tools,
+    rubberband_filter_error,
     run,
     subtitles_filter_error,
     write_text,
@@ -641,7 +644,7 @@ def inst_command(
     ] = "0",
 ) -> None:
     """歌唱練習用に、キーを変えた伴奏の動画を build/inst/key<N>.mp4 に書き出す。歌詞は描かない。"""
-    require_tools(rubberband=True)
+    require_tools()
     project = _load_project(project_dir)
     parsed_keys = inst.parse_keys(keys)
     search = FontSearch.load()
@@ -650,6 +653,15 @@ def inst_command(
     if not subs.ok(analysis.issues):
         raise typer.Exit(1)
     assert analysis.lyrics is not None and analysis.duration_s is not None and analysis.font_index is not None
+
+    method: graph.PitchMethod = "rubberband" if rubberband_filter_error() is None else "atempo"
+    if method == "atempo":
+        console.print(
+            "rubberband フィルタが使えないので、asetrate+atempo でキーを変えます（音質は劣ります）",
+            markup=False,
+        )
+    loudnorm_target = LoudnormTarget()
+    measured = measure_loudness(project.audio_path.absolute(), loudnorm_target)
 
     duration_ms = round(analysis.duration_s * 1000)
     video = project.config.video
@@ -663,7 +675,8 @@ def inst_command(
             inst.work_ass_path(project.work_dir, key),
             inst.output_path(project.build_dir, key),
             f"inst {label}",
-            pitch=inst.pitch_ratio(key),
+            pitch=graph.Pitch(inst.pitch_ratio(key), method),
+            loudnorm=graph.Loudnorm(loudnorm_target, measured),
         )
         write_video(project, script, target, analysis.duration_s, analysis.font_files, None)
 
