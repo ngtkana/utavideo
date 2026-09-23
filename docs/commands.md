@@ -207,19 +207,21 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 ## inst
 
 ```sh
-utavideo inst [-C <曲フォルダ>] [--keys <キー>]
+utavideo inst [-C <曲フォルダ>] [--keys <キー>] [--lyrics]
 ```
 
-歌唱練習用に、キーを変えた伴奏の動画を `build/inst/key<キー>.mp4`（例: `key-1.mp4`、`key+2.mp4`、`key0.mp4`）に書き出します（[config-reference.md](config-reference.md#inst)）。歌詞は描かず、曲名・アーティスト・キーだけを表示します。
+歌唱練習用に、キーを変えた伴奏の動画を `build/inst/key<キー>.mp4`（例: `key-1.mp4`、`key+2.mp4`、`key0.mp4`）に書き出します（[config-reference.md](config-reference.md#inst)）。既定では歌詞は描かず、曲名・アーティスト・キーだけを表示します。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
 | `--keys` | `"0"` | 半音単位のキー。カンマ区切りで複数指定できる（例: `-1,-2,-3`）。キーごとに別ファイルを書き出す |
+| `--lyrics` | 付けない | 本編と同じ歌詞も焼き込む（既定では曲名・アーティスト・キーだけ） |
 
 - キーの変更には ffmpeg の `rubberband` フィルタを使います。使えない ffmpeg では、代わりに `asetrate`+`atempo` で変えます（音質は劣ります。どちらを使ったかは実行時に表示します）
 - 音量は `loudnorm`（2パス）でそろえます（目標: 統合ラウドネス -16 LUFS、True Peak -1.5 dBTP、ラウドネスレンジ 11 LU）。計測は音源全体に対して1回だけ行い、`--keys` で複数指定したときも使い回します
 - 背景・音源は本編と同じです（`video.background`・`audio.file`）
 - 表示する文字は `[inst]` の `text`、スタイルは `[overlay_text]` の `style` です
+- `--lyrics` を付けると、`lyrics.file` の歌詞行も本編と同じ基準（[検査項目](#検査項目)のフォント・はみ出し・重なり等）で検査し、フェード（`lyrics.fade_ms`）も本編と同じように入れます。付けないときは歌詞の中身を問わず、曲名表示のスタイルがあるかだけを確かめます
 - 書き出す前に検査し、エラーがあれば1本も書き出しません
 - 描画に使った .ass を `build/.work/inst/key<キー>.ass` に書きます
 
@@ -229,6 +231,7 @@ utavideo inst [-C <曲フォルダ>] [--keys <キー>]
 - `audio.file`・`video.background` のファイルが無い、背景の形式に対応していない、音源に音声が入っていない（[検査項目](#検査項目)の「素材」と同じ）
 - `lyrics.file` のファイルが無い（曲名表示のスタイルに使う）、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって縦横比が `PlayRes` と違う
 - `overlay_text.style` のスタイルが `lyrics.file` に無い、`[inst].text` の書式が不正
+- `--lyrics` のときは、歌詞の行が未定義のスタイルを使っている、表示幅からはみ出しそう、など本編の check と同じ検査項目
 - 音量の計測に失敗した
 - ffmpeg が正常に終わっても何も書き出さなかった
 

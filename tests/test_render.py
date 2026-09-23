@@ -896,3 +896,46 @@ def test_inst_normalizes_loudness_to_the_target(project: Path) -> None:
 
     measured = measure_loudness(project / "build/inst/key0.mp4")
     assert float(measured.input_i) == pytest.approx(-16.0, abs=1.0)
+
+
+def test_inst_with_lyrics_option_includes_the_lyrics_line(project: Path) -> None:
+    invoke("inst", "-C", str(project), "--lyrics")
+
+    ass = (project / "build/.work/inst/key0.ass").read_text(encoding="utf-8")
+    assert "AAAA" in ass  # 歌詞の行が含まれる
+    assert "Key: 0" in ass  # 曲名表示も共存する
+    assert r"\fad(150,150)" in ass  # 本編と同じ自動フェードが入る（既定の config.lyrics.fade_ms）
+
+
+def test_inst_with_lyrics_and_multiple_keys_keeps_duration(project: Path) -> None:
+    invoke("inst", "-C", str(project), "--lyrics", "--keys", "-1,2")
+
+    minus_one, plus_two = project / "build/inst/key-1.mp4", project / "build/inst/key+2.mp4"
+    assert minus_one.is_file() and plus_two.is_file()
+    assert float(_probe(minus_one)["format"]["duration"]) == pytest.approx(
+        float(_probe(plus_two)["format"]["duration"]), abs=0.05
+    )
+
+
+def test_inst_with_lyrics_reports_undefined_style_error(project: Path) -> None:
+    lyrics = LYRICS.format(font="Test Sans").replace("Lyrics,,0,0,0,,AAAA", "Nope,,0,0,0,,AAAA")
+    (project / "src/lyrics.ass").write_text(lyrics, encoding="utf-8")
+
+    result = runner.invoke(app, ["inst", "-C", str(project), "--lyrics"])
+    assert result.exit_code == 1
+    assert "未定義のスタイル" in result.output
+
+    # --lyrics を付けなければ歌詞の中身は見ないので、同じ .ass でも通る
+    assert invoke("inst", "-C", str(project)).exit_code == 0
+
+
+def test_inst_with_lyrics_reports_overflowing_line(project: Path) -> None:
+    long_line = "Dialogue: 0,0:00:00.20,0:00:01.50,Lyrics,,0,0,0,," + "A" * 20
+    lyrics = LYRICS.format(font="Test Sans") + long_line + "\n"
+    (project / "src/lyrics.ass").write_text(lyrics, encoding="utf-8")
+
+    result = runner.invoke(app, ["inst", "-C", str(project), "--lyrics"])
+    assert "「" + "A" * 20 + "」 が画面からはみ出しそうです" in result.output
+
+    # --lyrics を付けなければ、はみ出しの検査もしない
+    assert "はみ出しそう" not in invoke("inst", "-C", str(project)).output

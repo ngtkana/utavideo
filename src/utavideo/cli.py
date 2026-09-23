@@ -642,13 +642,20 @@ def inst_command(
     keys: Annotated[
         str, typer.Option("--keys", help="半音単位のキー。カンマ区切りで複数指定できる（例: -1,-2,-3）")
     ] = "0",
+    include_lyrics: Annotated[
+        bool,
+        typer.Option("--lyrics", help="本編と同じ歌詞も焼き込む（既定では曲名・アーティスト・キーだけ）"),
+    ] = False,
 ) -> None:
-    """歌唱練習用に、キーを変えた伴奏の動画を build/inst/key<N>.mp4 に書き出す。歌詞は描かない。"""
+    """歌唱練習用に、キーを変えた伴奏の動画を build/inst/key<N>.mp4 に書き出す。
+
+    既定では歌詞を描かない（--lyrics で本編と同じ歌詞も焼き込む）。
+    """
     require_tools()
     project = _load_project(project_dir)
     parsed_keys = inst.parse_keys(keys)
     search = FontSearch.load()
-    analysis = analyze_inst(project, parsed_keys, search)
+    analysis = analyze_inst(project, parsed_keys, include_lyrics=include_lyrics, search=search)
     _print_issues(analysis.issues)
     if not subs.ok(analysis.issues):
         raise typer.Exit(1)
@@ -667,7 +674,9 @@ def inst_command(
     video = project.config.video
     for key in parsed_keys:
         label = inst.key_label(key)
-        script = compose_inst(project, analysis.lyrics, duration_ms, analysis.font_index, label)
+        script = compose_inst(
+            project, analysis.lyrics, duration_ms, analysis.font_index, label, include_lyrics=include_lyrics
+        )
         target = VideoTarget(
             "final",
             video.size,
