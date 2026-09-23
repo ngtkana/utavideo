@@ -17,12 +17,12 @@ Style: Title,$font,$title_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Comment: 0,0:00:00.00,0:00:00.00,Comment,,0,0,0,,コメント行は書き出しに入らない
-Dialogue: 0,0:00:00.50,0:00:03.50,Comment,,0,0,0,,Comment スタイルの行（歌詞以外の説明）
-Dialogue: 0,0:00:04.00,0:00:07.50,Lyrics,,0,0,0,,見本のうた、はじまり
-Dialogue: 0,0:00:08.00,0:00:11.50,Lyrics,,0,0,0,,ここで改行します\Nここは2行目です
-Dialogue: 0,0:00:12.00,0:00:15.50,Lyrics,,0,0,0,,この行は空白も改行も無いのでとても長く画面からはみ出します
-Dialogue: 0,0:00:16.00,0:00:19.50,Lyrics,,0,0,0,,{\move($move_x1,$move_y,$move_x2,$move_y)}左から右へ動く行
-Dialogue: 0,0:00:20.00,0:00:23.50,Lyrics,,0,0,0,,{\pos($pos_x,$pos_y)}位置を指定した行
-Dialogue: 0,0:00:24.00,0:00:27.50,Lyrics,,0,0,0,,{\fad(600,600)}フェードを長くした行
-Dialogue: 0,0:00:28.00,0:00:31.50,Lyrics,,0,0,0,,背景の箱の位置で
-Dialogue: 0,0:00:32.00,0:00:35.50,Lyrics,,0,0,0,,ループが分かります
+Dialogue: 0,0:00:00.50,0:00:03.33,Comment,,0,0,0,,Comment スタイルの行（歌詞以外の説明）
+Dialogue: 0,0:00:03.80,0:00:07.10,Lyrics,,0,0,0,,見本のうた、はじまり
+Dialogue: 0,0:00:07.57,0:00:10.87,Lyrics,,0,0,0,,ここで改行します\Nここは2行目です
+Dialogue: 0,0:00:11.34,0:00:14.64,Lyrics,,0,0,0,,この行は空白も改行も無いのでとても長く画面からはみ出します
+Dialogue: 0,0:00:15.11,0:00:18.41,Lyrics,,0,0,0,,{\move($move_x1,$move_y,$move_x2,$move_y)}左から右へ動く行
+Dialogue: 0,0:00:18.89,0:00:22.19,Lyrics,,0,0,0,,{\pos($pos_x,$pos_y)}位置を指定した行
+Dialogue: 0,0:00:22.66,0:00:25.96,Lyrics,,0,0,0,,{\fad(600,600)}フェードを長くした行
+Dialogue: 0,0:00:26.43,0:00:29.73,Lyrics,,0,0,0,,背景の箱の位置で
+Dialogue: 0,0:00:30.20,0:00:33.50,Lyrics,,0,0,0,,ループが分かります
