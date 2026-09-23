@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import scaffold_named_project
-from utavideo import inputs
+from utavideo import inputs, inst
 from utavideo import project as project_module
 from utavideo.cli import app
 from utavideo.project import Project, scaffold
@@ -126,6 +126,51 @@ def test_writing_the_outputs_clears_the_description_and_announce_lines(project: 
     output = _status(project)
     assert "概要欄" not in output
     assert "告知文: 未生成です" in output
+
+
+def _record_inst_build(project: Path, key: int) -> None:
+    """build/inst/key<N>.mp4 が書き出し終えたときの記録を、ffmpeg を使わずに作る。"""
+    loaded = Project.load(project)
+    target = inputs.inst_target(loaded, key)
+    target.output.parent.mkdir(parents=True, exist_ok=True)
+    target.output.write_bytes(b"video")
+    record = inputs.record_text(target, inputs.snapshot(target))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
+
+
+def test_never_built_inst_shows_nothing(project: Path) -> None:
+    """一度も inst していなければ、事前宣言された個数を持たないので何も出ない（"inst " で始まる行が無い）。"""
+    assert "inst " not in _status(project)
+
+
+def test_recorded_inst_key_is_clean(project: Path) -> None:
+    _record_inst_build(project, -1)
+    assert "inst " not in _status(project)
+
+
+def test_editing_lyrics_marks_only_the_built_key_stale(project: Path) -> None:
+    _record_inst_build(project, -1)
+    lyrics = project / "src/lyrics.ass"
+    lyrics.write_text(lyrics.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    later = inst.output_path(Project.load(project).build_dir, -1).stat().st_mtime + 10
+    os.utime(lyrics, (later, later))
+
+    output = _status(project)
+    assert "inst -1:" in output and "（lyrics.file）" in output
+
+
+def test_other_keys_are_unaffected_by_one_key_going_stale(project: Path) -> None:
+    _record_inst_build(project, -1)
+    _record_inst_build(project, 2)
+    lyrics = project / "src/lyrics.ass"
+    lyrics.write_text(lyrics.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    later = inst.output_path(Project.load(project).build_dir, -1).stat().st_mtime + 10
+    os.utime(lyrics, (later, later))
+
+    output = _status(project)
+    assert "inst -1:" in output
+    assert "inst +2:" in output  # 両方とも同じ lyrics.file に依存するので、両方 stale になる
 
 
 NAMED_TOML = """

@@ -673,6 +673,11 @@ def inst_command(
     project = _load_project(project_dir)
     parsed_keys = inst.parse_keys(keys)
     search = FontSearch.load()
+    # analyze が素材を読む前に、キーごとの記録の元になる snapshot を取る
+    records = {}
+    for key in parsed_keys:
+        record_target = inputs.inst_target(project, key)
+        records[key] = inputs.Record(record_target, inputs.snapshot(record_target))
     analysis = analyze_inst(project, parsed_keys, include_lyrics=include_lyrics, search=search)
     _print_issues(analysis.issues)
     if not subs.ok(analysis.issues):
@@ -705,7 +710,7 @@ def inst_command(
             pitch=graph.Pitch(inst.pitch_ratio(key), method),
             loudnorm=graph.Loudnorm(loudnorm_target, measured),
         )
-        write_video(project, script, target, analysis.duration_s, analysis.font_files, None)
+        write_video(project, script, target, analysis.duration_s, analysis.font_files, records[key])
 
 
 @app.command("vertical-ass")

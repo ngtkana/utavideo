@@ -31,6 +31,24 @@ def work_ass_path(work_dir: Path, key: int) -> Path:
     return work_dir / "inst" / f"key{key_label(key)}.ass"
 
 
+def keys_in_build(build_dir: Path) -> list[int]:
+    """build/inst/ に実在する key<N>.mp4 のキーを一覧する（昇順）。
+
+    inst は --keys で任意のキーを指定でき、[[shorts]] のような事前宣言された個数を
+    持たないので、status はここでディレクトリを実スキャンして対象を決める（issue #80）。
+    """
+    directory_ = directory(build_dir)
+    if not directory_.is_dir():
+        return []
+    keys = []
+    for path in directory_.glob("key*.mp4"):
+        try:
+            keys.append(int(path.stem.removeprefix("key")))
+        except ValueError:
+            continue
+    return sorted(keys)
+
+
 def pitch_ratio(key: int) -> float:
     """半音単位のキーを周波数の比に変換する（rubberband・atempo のどちらでも使う）。"""
     return 2 ** (key / 12)
