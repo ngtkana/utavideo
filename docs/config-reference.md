@@ -113,7 +113,7 @@
 | 項目 | 型 | 既定値 | 説明 |
 |---|---|---|---|
 | `size` | `[幅, 高さ]` | `[1080, 1920]` | 縦の解像度（偶数）。縦用 .ass の PlayRes と同じにする。`utavideo vertical-ass` はこの大きさに変換する |
-| `layout` | `"reframe"` / `"blur"` | `"reframe"` | 画面の作り方（[commands.md](commands.md#shorts)）。`reframe` は背景を縦に切り取って縦用 .ass の行を重ね、`blur` は本編の映像をぼかした帯の上に置く。`utavideo vertical-ass` が歌詞の行を写すかと、`preview-bg --vertical` の画面は、`[[shorts]]` があればそちらの `layout` で決まる |
+| `layout` | `"reframe"` / `"blur"` | `"blur"` | 画面の作り方（[commands.md](commands.md#shorts)）。`reframe` は背景を縦に切り取って縦用 .ass の行を重ね、`blur` は本編の映像をぼかした帯の上に置く。`utavideo vertical-ass` が歌詞の行を写すかと、`preview-bg --vertical` の画面は、`[[shorts]]` があればそちらの `layout` で決まる |
 | `lyrics` | パス | `"src/vertical.ass"` | 縦用 .ass。`utavideo vertical-ass` がここに作る。ショートの区間もここに書く（[`[[shorts]]`](#shorts)） |
 | `focus` | `[x, y]`（0〜1 の数） | `video.focus` | 背景を縦に合わせるとき、どこを基準にするか（意味は `[video]` の `focus` と同じ）。`preview-bg --vertical` と `shorts` に使う（`blur` では上下の帯の切り取りに使う） |
 | `frame_y` | 0〜1 の数 | `0.5` | `blur` で本編の映像を置く高さ。本編の上端が `(縦の高さ - 本編の高さ) × frame_y` になる（`0` で上端、`1` で下端、`0.5` で中央） |

@@ -254,7 +254,7 @@ def test_negative_audio_fade_is_rejected(tmp_path: Path) -> None:
 
 def test_layout_and_frame_y(tmp_path: Path) -> None:
     config = load_project_config(_write(tmp_path, MINIMAL))
-    assert (config.vertical.layout, config.vertical.frame_y) == ("reframe", 0.5)
+    assert (config.vertical.layout, config.vertical.frame_y) == ("blur", 0.5)
     text = MINIMAL + '[vertical]\nlayout = "blur"\nframe_y = 0\n[[shorts]]\nname = "chorus"\n'
     text += '[[shorts]]\nname = "intro"\nlayout = "reframe"\n'
     project = Project(tmp_path, load_project_config(_write(tmp_path, text)))

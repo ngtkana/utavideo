@@ -442,11 +442,12 @@ def _add_vertical_lines(project: Path, *lines: str) -> None:
 
 
 def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Path) -> None:
-    _with_shorts(project, shorts="")
+    # 本編との突き合わせ（歌詞を縦用 .ass に写す reframe）を見るテストなので layout を明示する
+    _with_shorts(project, shorts="", extra='layout = "reframe"')
     invoke("vertical-ass", "-C", str(project))
     assert "縦用 .ass" not in invoke("check", "-C", str(project)).output
 
-    _with_shorts(project)
+    _with_shorts(project, extra='layout = "reframe"')
     _add_vertical_lines(project, "Comment: 0,0:00:00.00,0:00:01.80,Short,,0,0,0,,chorus")
     output = invoke("check", "-C", str(project)).output
     assert "縦用 .ass: src/vertical.ass（180x320）" in output
@@ -491,7 +492,8 @@ def test_check_reports_a_missing_vertical_ass_and_sections(project: Path) -> Non
 
 
 def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
-    _with_shorts(project)
+    # 縦用 .ass の歌詞の行（reframe）のはみ出し・突き合わせを見るテストなので layout を明示する
+    _with_shorts(project, extra='layout = "reframe"')
     invoke("vertical-ass", "-C", str(project))
     long_line = "A" * 20
     _add_vertical_lines(
@@ -627,7 +629,8 @@ def test_shorts_fades_the_audio_at_both_edges(project: Path) -> None:
 
 
 def test_shorts_draw_only_the_section_lines_and_can_drop_the_vertical_title(project: Path) -> None:
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n')
+    # 縦用 .ass の歌詞・曲名表示（Title）を直接扱う reframe のテストなので layout を明示する
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n', extra='layout = "reframe"')
     config = project / "utavideo.toml"
     config.write_text(
         config.read_text(encoding="utf-8")
