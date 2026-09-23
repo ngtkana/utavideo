@@ -94,6 +94,9 @@ class Project:
     def thumbnail_inputs_record(self, name: str) -> Path:
         return self.work_dir / f"thumbnail-{name}-inputs.json"
 
+    def inst_inputs_record(self, key_label: str) -> Path:
+        return self.work_dir / f"inst-key{key_label}-inputs.json"
+
     @property
     def release_match_record(self) -> Path:
         """release が最後に確かめた、build/main.mp4 と release 済みファイルの一致の記録（issue #82）。"""
