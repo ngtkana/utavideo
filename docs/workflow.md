@@ -2,6 +2,8 @@
 
 1本の動画を作る手順です。素材を用意する前に動かしてみたいときは、`utavideo sample <パス>` で見本の曲フォルダを作れます（[commands.md](commands.md#sample)）。やりたいこと別の設定方法は [customization.md](customization.md)、設定とコマンドの詳細は [config-reference.md](config-reference.md)・[commands.md](commands.md)、フォルダの構成は [project-layout.md](project-layout.md) を参照してください。
 
+素材を一通り置いた後は、下の 6・7・9・サムネイルの書き出しは `utavideo build-all` でまとめて実行できます。既にできているものはスキップし、Aegisub での作業が要るもの（区間の指定など）は「要対応」として教えてくれます（[commands.md](commands.md#build-all)）。
+
 ## 0. 準備（最初に一度だけ）
 
 Aegisub の字幕の描画エンジンを **libass** にします。utavideo も libass で描画するので、Aegisub で見た位置・折り返し・縁取りがそのまま書き出し結果になります。

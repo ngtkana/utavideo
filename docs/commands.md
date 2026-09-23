@@ -4,9 +4,9 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`vertical-ass`・`status` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
-- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`vertical-ass`・`status`・`build-all` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
+- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - `inst` はキー変更に rubberband フィルタを使いますが、無い ffmpeg では代わりに `asetrate`+`atempo` を使います（[inst](#inst)）
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
@@ -368,6 +368,29 @@ utavideo status [-C <曲フォルダ>]
 
 - main が未生成・古いときは release の行を表示しません（先に `build` を促します）
 - ffmpeg は使いません
+
+## build-all
+
+```sh
+utavideo build-all [-C <曲フォルダ>]
+```
+
+[build](#preview-bg--build--overlay)・[description](#description)・[announce](#announce)・[thumbnail](#thumbnail)（`shorts`・`vertical-ass`・`inst`・`preview-bg`・`overlay`・`release` は対象外）について、今作れるものをまとめて作ります。対象ごとに、次のいずれかに分類します。
+
+| 状態 | 意味 | 表示 |
+|---|---|---|
+| 対象外 | この曲では使っていない（`[[thumbnails]]` が無い） | 何も出しません |
+| 要対応 | 書き出す前の[検査](#検査項目)でエラーがある。多くは Aegisub 等での作業待ちです | 対象名とエラーの内容を表示し、書き出しません |
+| 済み（build・thumbnail のみ） | 既に最新の出力があります（`build` は[status](#status)の main と同じ基準、`thumbnail` は出力の PNG の有無だけを見る簡易版です） | 対象名だけを表示します |
+| 実行 | 上記のいずれでもありません | 対象名と出力先を表示して書き出します |
+
+`description`・`announce` は生成コストが低く ffmpeg も使わないため、済み判定をせず、要対応でなければ毎回実行し直します（`[[uploads]]` が無いことは、既存の `announce` コマンドと同じく警告どまりとし、要対応にはしません）。
+
+すべて「済み・対象外」なら「クリーンです（作るものはありません）」とだけ表示します。
+
+- 要対応の対象があっても終了コード 0 です（利用者への案内であり、`build-all` 自体の失敗ではありません）。実行しようとした対象が想定外のエラーで失敗したときだけ、終了コード 1 で止まります
+- `build` は既存の `build` コマンドと同じ処理をそのまま呼ぶので、検査を2回行います（`status` の判定と、書き出し前の検査）
+- `thumbnail` の実行は `--bg-only` を付けない `thumbnail` コマンドと同じです
 
 ## 検査項目
 
