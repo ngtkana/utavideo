@@ -14,6 +14,7 @@ from utavideo.project import (
     scaffold,
     to_windows_path,
 )
+from utavideo.schema import schema_path
 
 
 @pytest.mark.parametrize(
@@ -77,6 +78,15 @@ def test_scaffold_creates_layout(tmp_path: Path) -> None:
     # 曲名は utavideo.toml にだけ書く（直すときに、どれが元なのかわからなくなるため）
     assert "新曲" not in (root / "src/lyrics.ass").read_text(encoding="utf-8")
     assert "新曲" not in (root / "README.md").read_text(encoding="utf-8")
+
+
+def test_scaffold_writes_the_editor_schema_directive(tmp_path: Path) -> None:
+    """taplo 対応のエディタが補完に使う #:schema が、TOML として読める形で1行目にある。"""
+    root = tmp_path / "曲"
+    scaffold(root, "曲", "x")
+    first_line = (root / "utavideo.toml").read_text(encoding="utf-8").splitlines()[0]
+    assert first_line == f"#:schema {schema_path().as_uri()}"
+    assert schema_path().is_file()
 
 
 def test_scaffold_keeps_existing_files_and_detects_media(tmp_path: Path) -> None:

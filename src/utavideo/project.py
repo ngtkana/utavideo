@@ -20,6 +20,7 @@ from utavideo.config import (
 from utavideo.ffmpeg import write_text
 from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
 from utavideo.names import legacy_name_from_title, slug_error, slug_from_title
+from utavideo.schema import schema_path
 from utavideo.subs import escape_text
 
 SCAFFOLD_DIRS = ("src/mix", "src/bg", "src/avatar", "src/ref", "build", "release", "share")
@@ -283,6 +284,7 @@ def scaffold(
     files = {
         PROJECT_CONFIG_NAME: render_template(
             "utavideo.toml",
+            schema=schema_path().as_uri(),
             title=_toml_string(title),
             slug=_toml_string(slug),
             artist=_toml_string(artist),

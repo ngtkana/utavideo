@@ -26,7 +26,8 @@
 - `inputs.py`：`build` の入力（素材の中身・印の無い設定・フォントの stat）を記録し、`release` で比べる
 - `graph.py`：ffmpeg の引数（動画と、サムネイルの1枚の PNG）を組み立てる純粋関数。`ffmpeg.py` が実行する
 - `render.py`：検査を通った歌詞を合成し、ffmpeg で動画に書き出す
-- `templates/`：`new` / `init` が書き出す雛形と、`sample` が書き出す見本（`sample*`）
+- `schema.py`：`ProjectConfig` から `utavideo.toml` の JSON Schema（エディタ補完用）を作る。`$ref` は taplo の検証が効くようにインライン展開する
+- `templates/`：`new` / `init` が書き出す雛形と、`sample` が書き出す見本（`sample*`）。`project-config.schema.json` は `schema.py` の生成物で、`scripts/generate_schema.py` で再生成する
 
 ## 約束
 

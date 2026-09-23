@@ -14,6 +14,7 @@ from utavideo.analyze import analyze
 from utavideo.cli import app
 from utavideo.errors import UtavideoError
 from utavideo.project import Project
+from utavideo.schema import schema_path
 
 pytestmark = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
 
@@ -54,6 +55,11 @@ def test_the_warnings_do_not_change_with_the_user_config(
     monkeypatch.setenv("XDG_CONFIG_HOME", str(config.parent))
 
     assert "警告 2 件" in invoke("check", "-C", str(sample)).output
+
+
+def test_sample_writes_the_editor_schema_directive(sample: Path) -> None:
+    first_line = (sample / "utavideo.toml").read_text(encoding="utf-8").splitlines()[0]
+    assert first_line == f"#:schema {schema_path().as_uri()}"
 
 
 def test_the_bundled_font_has_a_glyph_for_the_song_name_overlay(sample: Path) -> None:
