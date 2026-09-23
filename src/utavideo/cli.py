@@ -72,6 +72,7 @@ from utavideo.project import (
     find_matching_release,
     find_project_root,
     next_revision,
+    record_release_match,
     require_usable_slug,
     scaffold,
     to_windows_path,
@@ -538,6 +539,7 @@ def release(
     # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
     same, dest, _ = find_matching_release(project, version, source)
     if same is not None:
+        record_release_match(project, version, source, same)
         _fail(f"同じ内容が既にあります: {same}（コピーしません）")
 
     if dest.exists():
@@ -546,6 +548,7 @@ def release(
     tmp = partial_path(dest)
     shutil.copy2(source, tmp)
     replace_partial(tmp, dest)
+    record_release_match(project, version, source, dest)
     console.print(f"コピーしました: {dest}", markup=False)
 
 
@@ -670,6 +673,11 @@ def inst_command(
     project = _load_project(project_dir)
     parsed_keys = inst.parse_keys(keys)
     search = FontSearch.load()
+    # analyze が素材を読む前に、キーごとの記録の元になる snapshot を取る
+    records = {}
+    for key in parsed_keys:
+        record_target = inputs.inst_target(project, key)
+        records[key] = inputs.Record(record_target, inputs.snapshot(record_target))
     analysis = analyze_inst(project, parsed_keys, include_lyrics=include_lyrics, search=search)
     _print_issues(analysis.issues)
     if not subs.ok(analysis.issues):
@@ -702,7 +710,7 @@ def inst_command(
             pitch=graph.Pitch(inst.pitch_ratio(key), method),
             loudnorm=graph.Loudnorm(loudnorm_target, measured),
         )
-        write_video(project, script, target, analysis.duration_s, analysis.font_files, None)
+        write_video(project, script, target, analysis.duration_s, analysis.font_files, records[key])
 
 
 @app.command("vertical-ass")

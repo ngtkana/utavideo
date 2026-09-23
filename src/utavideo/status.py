@@ -1,4 +1,5 @@
-"""曲フォルダの今の状態（build・概要欄・告知文・ショート・サムネイル・release）を git status 風に一覧する。
+"""曲フォルダの今の状態（build・概要欄・告知文・ショート・サムネイル・inst・release）を
+git status 風に一覧する。
 
 check（analyze.py）は「今書き出しても大丈夫か」という正しさの検査で、時間軸を持たない。
 ここでは逆に「前回書き出した時から何が変わったか」を見る。状態を集める処理（collect）と、
@@ -8,7 +9,7 @@ check（analyze.py）は「今書き出しても大丈夫か」という正し�
 from dataclasses import dataclass
 from pathlib import Path
 
-from utavideo import inputs
+from utavideo import inputs, inst
 from utavideo.project import Project, find_matching_release
 
 
@@ -40,6 +41,15 @@ class NamedStatus:
 
 
 @dataclass(frozen=True)
+class InstKeyStatus:
+    """build/inst/key<N>.mp4 が実在するキー1本分の状態。"""
+
+    key: int
+    output: Path
+    stale: str | None  # inputs.stale_inputs() の説明
+
+
+@dataclass(frozen=True)
 class ReleaseStatus:
     version: str | None  # audio.file の名前から分からなければ None（next_path も None）
     matched: bool  # main.output と同じ内容の release 済みファイルがあるか
@@ -54,6 +64,9 @@ class Status:
     announce: ArtifactStatus
     shorts: tuple[NamedStatus, ...]
     thumbnails: tuple[NamedStatus, ...]
+    # inst は --keys で任意のキーを指定でき、[[shorts]] のような事前宣言された個数を持たないので、
+    # build/inst/ に実在するものだけを対象にする（一度も inst していなければ空）
+    inst: tuple[InstKeyStatus, ...]
     # main が未生成・古いときは None（先に build を促すので release の判定に意味が無い）
     release: ReleaseStatus | None
 
@@ -72,6 +85,7 @@ def collect(project: Project) -> Status:
             _named_status("サムネイル", "utavideo thumbnail", inputs.thumbnail_target(project, t), t.name)
             for t in project.config.thumbnails
         ),
+        inst=tuple(_inst_key_status(project, key) for key in inst.keys_in_build(project.build_dir)),
         release=None if not main.exists or main.stale else _release_status(project, main.output),
     )
 
@@ -91,6 +105,11 @@ def _named_status(label: str, command: str, target: inputs.RecordTarget, name: s
     return NamedStatus(label, command, name, target.output, exists, stale)
 
 
+def _inst_key_status(project: Project, key: int) -> InstKeyStatus:
+    target = inputs.inst_target(project, key)
+    return InstKeyStatus(key, target.output, inputs.stale_inputs(target))
+
+
 def _release_status(project: Project, main_output: Path) -> ReleaseStatus:
     version = project.version
     if version is None:
@@ -108,6 +127,7 @@ def render(status: Status) -> str:
             _format_artifact(status.announce),
             *(_format_named(s) for s in status.shorts),
             *(_format_named(t) for t in status.thumbnails),
+            *(_format_inst_key(k) for k in status.inst),
             _format_release(status.release),
         )
         if line is not None
@@ -135,6 +155,10 @@ def _format_named(status: NamedStatus) -> str | None:
             f"（{status.command} --name {status.name} で {status.output} を書き出してください）"
         )
     return f"{status.label} {status.name}: {status.stale}" if status.stale else None
+
+
+def _format_inst_key(status: InstKeyStatus) -> str | None:
+    return f"inst {inst.key_label(status.key)}: {status.stale}" if status.stale else None
 
 
 def _format_release(release: ReleaseStatus | None) -> str | None:

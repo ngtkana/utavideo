@@ -7,7 +7,8 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import scaffold_named_project
-from utavideo import inputs
+from utavideo import inputs, inst
+from utavideo import project as project_module
 from utavideo.cli import app
 from utavideo.project import Project, scaffold
 
@@ -103,6 +104,20 @@ def test_needs_release_when_main_differs_from_the_released_copy(project: Path) -
     assert "曲-v1.2.1.mp4" in output
 
 
+def test_status_reuses_the_match_recorded_by_release(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _record_build(project)
+    (project / "build/title.txt").write_text("タイトル", encoding="utf-8")
+    (project / "build/description.txt").write_text("概要", encoding="utf-8")
+    (project / "build/announce.txt").write_text("告知", encoding="utf-8")
+    assert runner.invoke(app, ["release", "-C", str(project)]).exit_code == 0
+
+    def fail_if_called(*args: object, **kwargs: object) -> bool:
+        raise AssertionError("記録を使わず release/ を読み直した")
+
+    monkeypatch.setattr(project_module.filecmp, "cmp", fail_if_called)
+    assert _status(project) == "クリーンです（差分はありません）\n"
+
+
 def test_writing_the_outputs_clears_the_description_and_announce_lines(project: Path) -> None:
     _record_build(project)
     (project / "build/title.txt").write_text("タイトル", encoding="utf-8")
@@ -111,6 +126,51 @@ def test_writing_the_outputs_clears_the_description_and_announce_lines(project: 
     output = _status(project)
     assert "概要欄" not in output
     assert "告知文: 未生成です" in output
+
+
+def _record_inst_build(project: Path, key: int) -> None:
+    """build/inst/key<N>.mp4 が書き出し終えたときの記録を、ffmpeg を使わずに作る。"""
+    loaded = Project.load(project)
+    target = inputs.inst_target(loaded, key)
+    target.output.parent.mkdir(parents=True, exist_ok=True)
+    target.output.write_bytes(b"video")
+    record = inputs.record_text(target, inputs.snapshot(target))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
+
+
+def test_never_built_inst_shows_nothing(project: Path) -> None:
+    """一度も inst していなければ、事前宣言された個数を持たないので何も出ない（"inst " で始まる行が無い）。"""
+    assert "inst " not in _status(project)
+
+
+def test_recorded_inst_key_is_clean(project: Path) -> None:
+    _record_inst_build(project, -1)
+    assert "inst " not in _status(project)
+
+
+def test_editing_lyrics_marks_only_the_built_key_stale(project: Path) -> None:
+    _record_inst_build(project, -1)
+    lyrics = project / "src/lyrics.ass"
+    lyrics.write_text(lyrics.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    later = inst.output_path(Project.load(project).build_dir, -1).stat().st_mtime + 10
+    os.utime(lyrics, (later, later))
+
+    output = _status(project)
+    assert "inst -1:" in output and "（lyrics.file）" in output
+
+
+def test_all_keys_sharing_the_same_lyrics_file_go_stale_together(project: Path) -> None:
+    _record_inst_build(project, -1)
+    _record_inst_build(project, 2)
+    lyrics = project / "src/lyrics.ass"
+    lyrics.write_text(lyrics.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    later = inst.output_path(Project.load(project).build_dir, -1).stat().st_mtime + 10
+    os.utime(lyrics, (later, later))
+
+    output = _status(project)
+    assert "inst -1:" in output
+    assert "inst +2:" in output  # 両方とも同じ lyrics.file に依存するので、両方 stale になる
 
 
 NAMED_TOML = """

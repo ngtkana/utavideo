@@ -878,6 +878,15 @@ def test_inst_defaults_to_key_zero(project: Path) -> None:
     assert (project / "build/inst/key0.mp4").is_file()
 
 
+@pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")
+def test_inst_records_inputs_per_key_and_status_shows_them_as_clean(project: Path) -> None:
+    invoke("inst", "-C", str(project), "--keys", "-1,2")
+
+    assert (project / "build/.work/inst-key-1-inputs.json").is_file()
+    assert (project / "build/.work/inst-key+2-inputs.json").is_file()
+    assert "inst " not in invoke("status", "-C", str(project)).output
+
+
 def test_inst_falls_back_to_atempo_when_rubberband_is_unavailable(
     project: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
