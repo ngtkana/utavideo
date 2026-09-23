@@ -129,8 +129,15 @@ def vertical_inputs(project: Project, search: FontSearch, *, draws_main: bool) -
     return Analysis(issues, duration_s, lyrics, ())
 
 
-def analyze_inst(project: Project, keys: list[int], search: FontSearch | None = None) -> Analysis:
-    """歌唱練習用の動画（inst）に要るものの検査。歌詞の中身は問わず、曲名表示のスタイルだけ見る。"""
+def analyze_inst(
+    project: Project, keys: list[int], *, include_lyrics: bool, search: FontSearch | None = None
+) -> Analysis:
+    """歌唱練習用の動画（inst）に要るものの検査。
+
+    include_lyrics なら、歌詞の中身も本編の check と同じ基準で検査する。False（既定）なら、
+    歌詞は描かないので中身は問わない（without_events で歌詞行を取り除いてから検査する。
+    analyze() の preview と同じやり方）。
+    """
     config = project.config
     issues, duration_s = audio_issues(project)
     issues += background_issues(project)
@@ -140,17 +147,22 @@ def analyze_inst(project: Project, keys: list[int], search: FontSearch | None = 
         return Analysis(issues, duration_s, None, ())
 
     lyrics = subs.load(project.lyrics_path)
-    overlay = inst.overlay_text(config.overlay_text, config.inst)
-    issues += subs.lint_inst(lyrics, size=config.video.size, overlay=overlay)
     if duration_s is None:
         return Analysis(issues, duration_s, lyrics, ())
+
+    duration_ms = round(duration_s * 1000)
+    overlay = inst.overlay_text(config.overlay_text, config.inst)
+    target = lyrics if include_lyrics else subs.without_events(lyrics)
+    issues += subs.lint(target, size=config.video.size, duration_ms=duration_ms, overlay=overlay)
 
     search = search or FontSearch.load()
     # はみ出しは表示する文字数（key の桁数）で変わるので、--keys のうち最も長くなるキーで検査する。
     # overlay の1行しか描かないので、はみ出しの検査もここで行う（vertical/shorts と違い、
     # ほかで検査される行が無い）
     widest_key = max(keys, key=lambda key: len(inst.key_label(key)))
-    script = compose_inst(project, lyrics, round(duration_s * 1000), search.index, inst.key_label(widest_key))
+    script = compose_inst(
+        project, lyrics, duration_ms, search.index, inst.key_label(widest_key), include_lyrics=include_lyrics
+    )
     font_issues, font_files = check_fonts(script, search)
     return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index)
 
