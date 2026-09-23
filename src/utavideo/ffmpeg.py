@@ -120,7 +120,10 @@ def measure_loudness(audio: Path, target: LoudnormTarget | None = None) -> Loudn
     match = re.search(r"\{.*\}", out.stderr + out.stdout, re.S)
     if match is None:
         raise FFmpegError("loudnorm の計測結果を読めませんでした")
-    data = json.loads(match.group())
+    try:
+        data = json.loads(match.group())
+    except json.JSONDecodeError as e:
+        raise FFmpegError(f"loudnorm の計測結果を読めませんでした: {e}") from e
     try:
         return LoudnormMeasurement(
             input_i=data["input_i"],
