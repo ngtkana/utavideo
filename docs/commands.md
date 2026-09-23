@@ -4,9 +4,9 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`vertical-ass`・`status` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
-- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`vertical-ass`・`status`・`build-all` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
+- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - `inst` はキー変更に rubberband フィルタを使いますが、無い ffmpeg では代わりに `asetrate`+`atempo` を使います（[inst](#inst)）
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
@@ -207,19 +207,21 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 ## inst
 
 ```sh
-utavideo inst [-C <曲フォルダ>] [--keys <キー>]
+utavideo inst [-C <曲フォルダ>] [--keys <キー>] [--lyrics]
 ```
 
-歌唱練習用に、キーを変えた伴奏の動画を `build/inst/key<キー>.mp4`（例: `key-1.mp4`、`key+2.mp4`、`key0.mp4`）に書き出します（[config-reference.md](config-reference.md#inst)）。歌詞は描かず、曲名・アーティスト・キーだけを表示します。
+歌唱練習用に、キーを変えた伴奏の動画を `build/inst/key<キー>.mp4`（例: `key-1.mp4`、`key+2.mp4`、`key0.mp4`）に書き出します（[config-reference.md](config-reference.md#inst)）。既定では歌詞は描かず、曲名・アーティスト・キーだけを表示します。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
 | `--keys` | `"0"` | 半音単位のキー。カンマ区切りで複数指定できる（例: `-1,-2,-3`）。キーごとに別ファイルを書き出す |
+| `--lyrics` | 付けない | 本編と同じ歌詞も焼き込む（既定では曲名・アーティスト・キーだけ） |
 
 - キーの変更には ffmpeg の `rubberband` フィルタを使います。使えない ffmpeg では、代わりに `asetrate`+`atempo` で変えます（音質は劣ります。どちらを使ったかは実行時に表示します）
 - 音量は `loudnorm`（2パス）でそろえます（目標: 統合ラウドネス -16 LUFS、True Peak -1.5 dBTP、ラウドネスレンジ 11 LU）。計測は音源全体に対して1回だけ行い、`--keys` で複数指定したときも使い回します
 - 背景・音源は本編と同じです（`video.background`・`audio.file`）
 - 表示する文字は `[inst]` の `text`、スタイルは `[overlay_text]` の `style` です
+- `--lyrics` を付けると、`lyrics.file` の歌詞行も本編と同じ基準（[検査項目](#検査項目)のフォント・はみ出し・重なり等）で検査し、フェード（`lyrics.fade_ms`）も本編と同じように入れます。付けないときは歌詞の中身を問わず、曲名表示のスタイルがあるかだけを確かめます
 - 書き出す前に検査し、エラーがあれば1本も書き出しません
 - 描画に使った .ass を `build/.work/inst/key<キー>.ass` に書きます
 
@@ -229,6 +231,7 @@ utavideo inst [-C <曲フォルダ>] [--keys <キー>]
 - `audio.file`・`video.background` のファイルが無い、背景の形式に対応していない、音源に音声が入っていない（[検査項目](#検査項目)の「素材」と同じ）
 - `lyrics.file` のファイルが無い（曲名表示のスタイルに使う）、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって縦横比が `PlayRes` と違う
 - `overlay_text.style` のスタイルが `lyrics.file` に無い、`[inst].text` の書式が不正
+- `--lyrics` のときは、歌詞の行が未定義のスタイルを使っている、表示幅からはみ出しそう、など本編の check と同じ検査項目
 - 音量の計測に失敗した
 - ffmpeg が正常に終わっても何も書き出さなかった
 
@@ -365,6 +368,30 @@ utavideo status [-C <曲フォルダ>]
 
 - main が未生成・古いときは release の行を表示しません（先に `build` を促します）
 - ffmpeg は使いません
+
+## build-all
+
+```sh
+utavideo build-all [-C <曲フォルダ>]
+```
+
+[build](#preview-bg--build--overlay)・[description](#description)・[announce](#announce)・[thumbnail](#thumbnail)（`shorts`・`vertical-ass`・`inst`・`preview-bg`・`overlay`・`release` は対象外）について、今作れるものをまとめて作ります。対象ごとに、次のいずれかに分類します。
+
+| 状態 | 意味 | 表示 |
+|---|---|---|
+| 対象外 | この曲では使っていない（`[[thumbnails]]` が無い） | 何も出しません |
+| 要対応 | 書き出す前の[検査](#検査項目)でエラーがある。多くは Aegisub 等での作業待ちです | 対象名とエラーの内容を表示し、書き出しません |
+| 済み（build・thumbnail のみ） | 既に最新の出力があります（`build` は[status](#status)の main と同じ基準、`thumbnail` は出力の PNG の有無だけを見る簡易版です） | 対象名だけを表示します |
+| 実行 | 上記のいずれでもありません | 対象名と出力先を表示して書き出します |
+
+`description`・`announce` は生成コストが低く ffmpeg も使わないため、済み判定をせず、要対応でなければ毎回実行し直します（`[[uploads]]` が無いことは、既存の `announce` コマンドと同じく警告どまりとし、要対応にはしません）。
+
+すべて「済み・対象外」なら「クリーンです（作るものはありません）」とだけ表示します。
+
+- 要対応の対象があっても終了コード 0 です（利用者への案内であり、`build-all` 自体の失敗ではありません）。実行しようとした対象が想定外のエラーで失敗したときだけ、終了コード 1 で止まります
+- 書き出す対象は、それぞれのコマンド（`build`・`description`・`announce`・`thumbnail`）と同じ検査をもう一度行い、警告もあわせて表示します（分類の時点ではエラーの有無しか見ていないため）。分類してから書き出すまでの間に状態が変わり、announce・thumbnail でエラーになったときは、書き出さずに終了コード 1 で止まります（`description` は元のコマンドと同じく、エラーがあっても書き出します）
+- `build` は既存の `build` コマンドと同じ処理をそのまま呼ぶので、検査を2回行います（`status` の判定と、書き出し前の検査）
+- `thumbnail` の実行は `--bg-only` を付けない `thumbnail` コマンドと同じです
 
 ## 検査項目
 

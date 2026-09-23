@@ -371,17 +371,6 @@ def lint_vertical(subs: pysubs2.SSAFile, *, size: tuple[int, int], overlay: Over
     )
 
 
-def lint_inst(subs: pysubs2.SSAFile, *, size: tuple[int, int], overlay: OverlayText) -> list[Issue]:
-    """歌唱練習用の動画に使う .ass の検査。
-
-    inst の書き出しは without_events（include_lyrics=False）で歌詞の行を取り除き、描画にも
-    使わないので、行ごとの検査（lint_lines）も、歌詞の行が使うスタイルの検査
-    （_undefined_style_issues）も行わない。実際に描くのは overlay の1行だけなので、
-    そのスタイルがあるかだけを確かめる。
-    """
-    return _play_res_issues(subs, size, "動画サイズ") + _overlay_style_issues(subs, overlay)
-
-
 # 曲名などを .ass の行に埋めるとき、{ } はタグとして読まれる。libass は \{ \} を括弧そのものとして描く。
 # \ に続く N n h はエスケープできないので、間に幅の無い WORD JOINER を挟む
 # （docs/verification/20260917-thumbnail.md）

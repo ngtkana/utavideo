@@ -14,6 +14,7 @@ import typer
 
 from utavideo import (
     announce,
+    build_all,
     description,
     fonts,
     graph,
@@ -42,6 +43,7 @@ from utavideo.config import (
     Layout,
     Short,
     Thumbnail,
+    Video,
     cache_dir,
     load_user_config,
 )
@@ -642,13 +644,20 @@ def inst_command(
     keys: Annotated[
         str, typer.Option("--keys", help="半音単位のキー。カンマ区切りで複数指定できる（例: -1,-2,-3）")
     ] = "0",
+    include_lyrics: Annotated[
+        bool,
+        typer.Option("--lyrics", help="本編と同じ歌詞も焼き込む（既定では曲名・アーティスト・キーだけ）"),
+    ] = False,
 ) -> None:
-    """歌唱練習用に、キーを変えた伴奏の動画を build/inst/key<N>.mp4 に書き出す。歌詞は描かない。"""
+    """歌唱練習用に、キーを変えた伴奏の動画を build/inst/key<N>.mp4 に書き出す。
+
+    既定では歌詞を描かない（--lyrics で本編と同じ歌詞も焼き込む）。
+    """
     require_tools()
     project = _load_project(project_dir)
     parsed_keys = inst.parse_keys(keys)
     search = FontSearch.load()
-    analysis = analyze_inst(project, parsed_keys, search)
+    analysis = analyze_inst(project, parsed_keys, include_lyrics=include_lyrics, search=search)
     _print_issues(analysis.issues)
     if not subs.ok(analysis.issues):
         raise typer.Exit(1)
@@ -667,7 +676,9 @@ def inst_command(
     video = project.config.video
     for key in parsed_keys:
         label = inst.key_label(key)
-        script = compose_inst(project, analysis.lyrics, duration_ms, analysis.font_index, label)
+        script = compose_inst(
+            project, analysis.lyrics, duration_ms, analysis.font_index, label, include_lyrics=include_lyrics
+        )
         target = VideoTarget(
             "final",
             video.size,
@@ -771,31 +782,96 @@ def thumbnail_command(
 
     video = project.config.video
     for thumb in thumbnails:
-        if bg_only:
-            subtitles = fontsdir = None
-            output = thumbnail.bg_output_path(project.build_dir, thumb)
-        else:
-            # .ass は加工せずにそのまま描く（自動のフェードと曲名表示は入れない）
-            subtitles = thumbnail.file_path(project.root, thumb).absolute()
-            fontsdir = fonts.prepare_fontsdir(analysis.font_files[thumb.name], cache_dir() / "fontsets")
-            output = thumbnail.output_path(project.build_dir, thumb)
-        spec = graph.StillSpec(
-            size=thumbnail.size(thumb, video.size),
-            background=project.background_path.absolute(),
-            at=thumb.at,
-            subtitles=subtitles,
-            fontsdir=fontsdir,
-            fit=video.fit,
-            focus=thumbnail.focus(thumb, video.focus),
-            scale_flags=video.scale_flags,
-            pad_color=video.pad_color,
-        )
-        try:
-            run(graph.build_still_args(spec), output, total_s=0)
-        except NoOutputError as e:
-            raise NoOutputError(
-                f"{e}。背景の終わり近くの at では、その時刻以降のフレームが無いことがあります"
-            ) from e
+        font_files = analysis.font_files.get(thumb.name, ())
+        output = _write_thumbnail(project, thumb, video, font_files, bg_only=bg_only)
         console.print(f"書き出しました: {output}（{output.stat().st_size:,} バイト）", markup=False)
         if windows_path := to_windows_path(output):
             console.print(f"  Windows: {windows_path}", markup=False)
+
+
+def _write_thumbnail(
+    project: Project, thumb: Thumbnail, video: Video, font_files: tuple[Path, ...], *, bg_only: bool
+) -> Path:
+    """背景のフレームに1本のサムネイルを書き出し、出力先を返す。
+
+    thumbnail_command と build-all の両方から呼ぶ（画面への表示はそれぞれの呼び出し側が行う）。
+    """
+    if bg_only:
+        subtitles = fontsdir = None
+        output = thumbnail.bg_output_path(project.build_dir, thumb)
+    else:
+        # .ass は加工せずにそのまま描く（自動のフェードと曲名表示は入れない）
+        subtitles = thumbnail.file_path(project.root, thumb).absolute()
+        fontsdir = fonts.prepare_fontsdir(font_files, cache_dir() / "fontsets")
+        output = thumbnail.output_path(project.build_dir, thumb)
+    spec = graph.StillSpec(
+        size=thumbnail.size(thumb, video.size),
+        background=project.background_path.absolute(),
+        at=thumb.at,
+        subtitles=subtitles,
+        fontsdir=fontsdir,
+        fit=video.fit,
+        focus=thumbnail.focus(thumb, video.focus),
+        scale_flags=video.scale_flags,
+        pad_color=video.pad_color,
+    )
+    try:
+        run(graph.build_still_args(spec), output, total_s=0)
+    except NoOutputError as e:
+        raise NoOutputError(
+            f"{e}。背景の終わり近くの at では、その時刻以降のフレームが無いことがあります"
+        ) from e
+    return output
+
+
+@app.command("build-all")
+@_handle_errors
+def build_all_command(project_dir: ProjectOption = None) -> None:
+    """曲フォルダで今作れるものをまとめて作る（build・description・announce・thumbnail）。"""
+    require_tools()
+    project = _load_project(project_dir)
+    search = FontSearch.load()
+    plan = build_all.collect(project, search)
+    for target in plan.targets:
+        if target.state == "run":
+            _run_build_all_target(project, search, target.name)
+    console.print(build_all.render(plan), markup=False)
+
+
+def _run_build_all_target(project: Project, search: FontSearch, name: str) -> None:
+    """build-all の「実行」対象を1つ実際に書き出す。
+
+    build_all.collect はエラーの有無しか見ていないので、それぞれのコマンドと同じく警告も表示する。
+    collect から実行までの間に状態が変わっていないかも、書き出す前にもう一度確かめる
+    （announce・thumbnail はエラーがあれば typer.Exit で止める。description は元のコマンドと同じく
+    警告があっても書き出す）。
+    """
+    if name == "build":
+        _render(project.root, "final", "build")
+    elif name == "description":
+        fmt = load_user_config().description
+        if project.config.description is not None:
+            _print_issues(description.lint(project, fmt))
+        write_text(project.title_output, description.render_title(project.config, fmt))
+        write_text(project.description_output, description.render_body(project.config, fmt))
+    elif name == "announce":
+        user_config = load_user_config()
+        issues = announce.lint(
+            project.config, user_config.announce, user_config.description, warn_no_uploads=True
+        )
+        _print_issues(issues)
+        if not subs.ok(issues):
+            raise typer.Exit(1)
+        text = announce.render(project.config, user_config.announce, user_config.description)
+        write_text(project.announce_output, text)
+    else:
+        thumb_name = name.removeprefix("thumbnail:")
+        thumb = next(t for t in project.config.thumbnails if t.name == thumb_name)
+        issues = background_issues(project)
+        analysis = analyze_thumbnails(project, (thumb,), bg_only=False, search=search)
+        issues += analysis.issues
+        _print_issues(issues)
+        if not subs.ok(issues):
+            raise typer.Exit(1)
+        font_files = analysis.font_files.get(thumb_name, ())
+        _write_thumbnail(project, thumb, project.config.video, font_files, bg_only=False)

@@ -10,9 +10,9 @@ PlayResY: $height
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Lyrics,$font,$lyrics_size,&H00FFFFFF,&H000000FF,&H00403030,&H80000000,-1,0,0,0,100,100,$lyrics_spacing,0,1,$lyrics_outline,0,2,$lyrics_margin,$lyrics_margin,$lyrics_marginv,1
-Style: Comment,$font,$comment_size,&H00FFFFFF,&H000000FF,&H00403030,&H80000000,0,0,0,0,100,100,0,0,1,$outline,0,1,$comment_margin,$comment_margin,$comment_margin,1
-Style: Title,$font,$title_size,&H00FFFFFF,&H000000FF,&H00403030,&H80000000,-1,0,0,0,100,100,0,0,1,$outline,0,9,$title_margin,$title_margin,$title_marginv,1
+Style: Lyrics,$font,$lyrics_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,$lyrics_spacing,0,1,$lyrics_outline,0,2,$lyrics_margin,$lyrics_margin,$lyrics_marginv,1
+Style: Comment,$font,$comment_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,$outline,0,1,$comment_margin,$comment_margin,$comment_margin,1
+Style: Title,$font,$title_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,$outline,0,9,$title_margin,$title_margin,$title_marginv,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text

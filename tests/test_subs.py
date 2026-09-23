@@ -437,16 +437,17 @@ def test_lint_vertical_checks_the_whole_file_but_not_each_line() -> None:
     assert "'Nope'" in errors[2]
 
 
-def test_lint_inst_checks_play_res_and_overlay_style_but_not_lines() -> None:
+def test_lint_of_without_events_checks_play_res_and_overlay_style_but_not_lines() -> None:
+    # inst の歌詞なし（compose_inst の include_lyrics=False）は、この組み合わせで検査する
     script = _make(
         [
             _line("0:00:01.00", "0:00:05.00", r"{\pos(10,10)}\pos も重なりも見ない"),
-            # 歌詞の行は compose_inst が without_events で取り除くので、未定義のスタイルでもよい
+            # 歌詞の行は without_events で取り除くので、未定義のスタイルでもよい
             _line("0:00:02.00", "0:00:03.00", "描かれない行", style="Nope"),
         ],
         styles=[_style("Lyrics")],
     )
-    issues = subs.lint_inst(script, size=(1080, 1920), overlay=OVERLAY)
+    issues = subs.lint(subs.without_events(script), size=(1080, 1920), duration_ms=5000, overlay=OVERLAY)
     assert _messages(issues, "warning") == []
     errors = _messages(issues, "error")
     assert len(errors) == 2

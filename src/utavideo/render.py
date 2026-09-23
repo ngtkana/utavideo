@@ -55,18 +55,29 @@ def frame_script(
 
 
 def compose_inst(
-    project: Project, lyrics: pysubs2.SSAFile, duration_ms: int, font_index: fonts.FontIndex, key: str
+    project: Project,
+    lyrics: pysubs2.SSAFile,
+    duration_ms: int,
+    font_index: fonts.FontIndex,
+    key: str,
+    *,
+    include_lyrics: bool,
 ) -> pysubs2.SSAFile:
-    """歌唱練習用の動画に焼き込む、曲名・アーティスト・キーだけの .ass（歌詞は含めない）。"""
+    """歌唱練習用の動画に焼き込む .ass。include_lyrics なら本編と同じ歌詞行も含める
+    （含めないときは曲名・アーティスト・キーだけ）。
+
+    fade_ms は本編と同じ config.lyrics.fade_ms を渡す。歌詞を含めないときは
+    Dialogue 行が無く add_fades は何もしないので、この値は無害。
+    """
     config = project.config
     overlay = inst.overlay_text(config.overlay_text, config.inst)
     return subs.compose(
         lyrics,
         song=config.song,
         overlay=overlay,
-        fade_ms=(0, 0),
+        fade_ms=config.lyrics.fade_ms,
         duration_ms=duration_ms,
-        include_lyrics=False,
+        include_lyrics=include_lyrics,
         font_index=font_index,
         overlay_setting="inst.text",
         key=key,
