@@ -72,6 +72,7 @@ from utavideo.project import (
     find_matching_release,
     find_project_root,
     next_revision,
+    record_release_match,
     require_usable_slug,
     scaffold,
     to_windows_path,
@@ -538,6 +539,7 @@ def release(
     # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
     same, dest, _ = find_matching_release(project, version, source)
     if same is not None:
+        record_release_match(project, version, source, same)
         _fail(f"同じ内容が既にあります: {same}（コピーしません）")
 
     if dest.exists():
@@ -546,6 +548,7 @@ def release(
     tmp = partial_path(dest)
     shutil.copy2(source, tmp)
     replace_partial(tmp, dest)
+    record_release_match(project, version, source, dest)
     console.print(f"コピーしました: {dest}", markup=False)
 
 

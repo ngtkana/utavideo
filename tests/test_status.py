@@ -8,6 +8,7 @@ from typer.testing import CliRunner
 
 from tests.conftest import scaffold_named_project
 from utavideo import inputs
+from utavideo import project as project_module
 from utavideo.cli import app
 from utavideo.project import Project, scaffold
 
@@ -101,6 +102,20 @@ def test_needs_release_when_main_differs_from_the_released_copy(project: Path) -
     output = _status(project)
     assert "release: 内容が変わっています" in output
     assert "曲-v1.2.1.mp4" in output
+
+
+def test_status_reuses_the_match_recorded_by_release(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _record_build(project)
+    (project / "build/title.txt").write_text("タイトル", encoding="utf-8")
+    (project / "build/description.txt").write_text("概要", encoding="utf-8")
+    (project / "build/announce.txt").write_text("告知", encoding="utf-8")
+    assert runner.invoke(app, ["release", "-C", str(project)]).exit_code == 0
+
+    def fail_if_called(*args: object, **kwargs: object) -> bool:
+        raise AssertionError("記録を使わず release/ を読み直した")
+
+    monkeypatch.setattr(project_module.filecmp, "cmp", fail_if_called)
+    assert _status(project) == "クリーンです（差分はありません）\n"
 
 
 def test_writing_the_outputs_clears_the_description_and_announce_lines(project: Path) -> None:
