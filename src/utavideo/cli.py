@@ -1,6 +1,5 @@
 """utavideo コマンド。"""
 
-import filecmp
 import functools
 import os
 import re
@@ -22,6 +21,7 @@ from utavideo import (
     inst,
     sample,
     shorts,
+    status,
     subs,
     thumbnail,
     vertical,
@@ -64,6 +64,7 @@ from utavideo.project import (
     VERSION_PATTERN,
     Project,
     ScaffoldResult,
+    find_matching_release,
     find_project_root,
     next_revision,
     require_usable_slug,
@@ -527,13 +528,10 @@ def release(
         _fail(f"{stale}。build し直すか --allow-stale を付けてください")
 
     # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
-    # （同じ入力からの build はバイト単位で一致する。docs/verification/20260916-release-revision.md）
-    released = project.released(version)
-    same = next((p for _, p in released if filecmp.cmp(source, p, shallow=False)), None)
+    same, dest, _ = find_matching_release(project, version, source)
     if same is not None:
         _fail(f"同じ内容が既にあります: {same}（コピーしません）")
 
-    dest = project.release_path(version, next_revision(released))
     if dest.exists():
         _fail(f"既にあります: {dest}（上書きはしません）")
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -541,6 +539,14 @@ def release(
     shutil.copy2(source, tmp)
     replace_partial(tmp, dest)
     console.print(f"コピーしました: {dest}", markup=False)
+
+
+@app.command("status")
+@_handle_errors
+def status_command(project_dir: ProjectOption = None) -> None:
+    """build・概要欄・告知文・release の状態を一覧する（git status 風）。"""
+    project = _load_project(project_dir)
+    console.print(status.render(status.collect(project)), markup=False)
 
 
 @app.command("shorts")

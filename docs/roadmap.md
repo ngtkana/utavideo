@@ -4,7 +4,7 @@
 
 背景（画像・GIF・動画）＋ 歌詞 ＋ 曲名表示 ＋ 音声の動画を書き出す。
 
-- コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `thumbnail` / `description` / `release` / `announce` / `fonts`
+- コマンド: `new` / `init` / `preview-bg` / `check` / `build` / `overlay` / `thumbnail` / `description` / `release` / `announce` / `fonts` / `status`
 - `check`: 設定・素材・スタイル・フォントの検査、行の重なり・`\pos`・はみ出しの警告
 - 概要欄: `utavideo.toml` のクレジット・素材から概要欄とタイトルを作る（書式はユーザー設定）
 - 告知文: 投稿した動画の URL（`[[uploads]]`）と曲の情報から SNS（X）の告知文を作り、URL の形・ハッシュタグ・X での長さを検査する
@@ -16,6 +16,7 @@
 - 縦型のショート（4段目）: `utavideo shorts` で区間を書き出す（`build/shorts/<name>.mp4`、`wide = true` の 16:9 版、区間のフレームの丸め、区間の端の音声のフェード、`shorts[].focus`、`vertical.overlay_text`、投稿先の長さの上限の警告）
 - 縦型のショート（5段目）: 画面の作り方 `vertical.layout`（`shorts[].layout` で上書き）。`"blur"` は本編の映像を `vertical.frame_y` の高さに置き、上下を背景だけをぼかした帯で埋める（`preview-bg --vertical` の下敷きも同じ画面にする）
 - 歌唱練習用のカラオケ動画（issue #69・#70）: `utavideo inst --keys -1,-2,-3` で、ffmpeg の `rubberband` によりキーを変えた伴奏動画を、キーごとに別ファイルで書き出す（`build/inst/key<キー>.mp4`）。画面には曲名・アーティスト・キーだけを表示する（YouTube 限定公開／非公開で自分が聴く用途なので、クレジット画面は作らない）
+- 曲フォルダの状態の一覧（issue #77・#78）: `utavideo status` で、`build`・概要欄・告知文・release の状態を git status 風に一覧する。`check`（今書き出しても大丈夫か）とは別に「前回書き出したときから何が変わったか」を見る。入力の比較は size・mtime_ns が一致すれば読まずに済ませ、違うときだけ中身で確かめる二層判定にした
 
 ## 予定
 

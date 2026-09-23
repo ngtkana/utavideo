@@ -1,5 +1,6 @@
 """曲フォルダの規約（パス・バージョン名）と、雛形からの作成。"""
 
+import filecmp
 import json
 import re
 import string
@@ -163,6 +164,16 @@ def extract_version(stem: str) -> str | None:
 def next_revision(released: list[tuple[int, Path]]) -> int:
     """次に公開する動画が何本目か。数ではなく最大値から決めるので、消しても番号がぶつからない。"""
     return max((revision for revision, _ in released), default=-1) + 1
+
+
+def find_matching_release(project: Project, version: str, source: Path) -> tuple[Path | None, Path, bool]:
+    """source と同じ内容の release 済みファイル、次に release したらできるファイル、release 済みの有無。
+
+    同じ入力からの build はバイト単位で一致する（docs/verification/20260916-release-revision.md）。
+    """
+    released = project.released(version)
+    matched = next((path for _, path in released if filecmp.cmp(source, path, shallow=False)), None)
+    return matched, project.release_path(version, next_revision(released)), bool(released)
 
 
 def require_usable_slug(slug: str) -> None:

@@ -60,6 +60,7 @@ utavideo announce     # SNS の告知文 → build/announce.txt
 | `description` | クレジット・素材から、タイトルと概要欄を書き出す |
 | `release` | 書き出した動画を、バージョン付きの名前で `release/` にコピーする |
 | `announce` | 投稿した動画の URL と曲の情報から、SNS の告知文を書き出す |
+| `status` | build・概要欄・告知文・release の状態を一覧する（git status 風） |
 
 `new`・`init`・`sample`・`fonts` 以外は曲フォルダの中で実行します（`-C <曲フォルダ>` でも指定できます）。
 
