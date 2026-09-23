@@ -157,8 +157,9 @@ def analyze_inst(
 
     search = search or FontSearch.load()
     # はみ出しは表示する文字数（key の桁数）で変わるので、--keys のうち最も長くなるキーで検査する。
-    # overlay の1行しか描かないので、はみ出しの検査もここで行う（vertical/shorts と違い、
-    # ほかで検査される行が無い）
+    # include_lyrics=False では overlay の1行しか描かないので、はみ出しの検査もここで行う
+    # （vertical/shorts と違い、ほかで検査される行が無い）。include_lyrics=True では歌詞の行も
+    # 描くので、その分のはみ出しもここで一緒に検査する
     widest_key = max(keys, key=lambda key: len(inst.key_label(key)))
     script = compose_inst(
         project, lyrics, duration_ms, search.index, inst.key_label(widest_key), include_lyrics=include_lyrics
