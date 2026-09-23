@@ -574,7 +574,7 @@ def shorts_command(
     # wide は本編と同じ画面、blur は真ん中に本編の映像を置くので、どちらも本編の .ass を描く
     draws_main = any_blur or any_wide
     # 縦用.ass・本編歌詞を読む前に、ショートごとの記録の元になる snapshot を取る
-    records = {}
+    records: dict[str, inputs.Record] = {}
     for short in selected:
         target = inputs.shorts_target(project, short)
         records[short.name] = inputs.Record(target, inputs.snapshot(target))
