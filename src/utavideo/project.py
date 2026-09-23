@@ -17,6 +17,7 @@ from utavideo.config import (
     ProjectConfig,
     load_project_config,
 )
+from utavideo.ffmpeg import write_text
 from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
 from utavideo.names import legacy_name_from_title, slug_error, slug_from_title
 from utavideo.subs import escape_text
@@ -221,8 +222,7 @@ def record_release_match(project: Project, version: str, source: Path, matched: 
         "source": _stamp(source),
         "matched": matched.name,
     }
-    project.work_dir.mkdir(parents=True, exist_ok=True)
-    project.release_match_record.write_text(json.dumps(data, ensure_ascii=False) + "\n", encoding="utf-8")
+    write_text(project.release_match_record, json.dumps(data, ensure_ascii=False) + "\n")
 
 
 def _stamp(path: Path) -> list[int | None]:
