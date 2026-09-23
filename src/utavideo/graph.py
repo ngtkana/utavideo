@@ -1,8 +1,11 @@
 """ffmpeg の引数（入力・filtergraph・エンコード設定）を組み立てる。実行は ffmpeg.py が行う。"""
 
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
+
+from utavideo.ffmpeg import LoudnormMeasurement, LoudnormTarget
 
 IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp"})
 ANIMATED_EXTS = frozenset({".gif", ".mp4", ".mov", ".webm", ".mkv", ".m4v", ".avi"})
@@ -12,6 +15,7 @@ AUDIO_EXTS = frozenset({".wav", ".flac", ".mp3", ".m4a", ".aac", ".ogg", ".opus"
 PREVIEW_GOP = 15
 
 type Mode = Literal["final", "preview", "overlay"]
+type PitchMethod = Literal["rubberband", "atempo"]
 type Fit = Literal["cover", "contain"]
 type ScaleFlags = Literal["lanczos", "bicubic", "bilinear", "area", "neighbor"]
 type Preset = Literal[
@@ -66,6 +70,23 @@ class Frame:
 
 
 @dataclass(frozen=True)
+class Pitch:
+    """inst のキー変更。ratio は周波数の比（1.0 が変化なし）。method は既定値を置かない
+
+    （渡し忘れると rubberband と atempo のどちらで変えたか黙って決まってしまうため、focus と同じ理由）。
+    """
+
+    ratio: float
+    method: PitchMethod
+
+
+@dataclass(frozen=True)
+class Loudnorm:
+    target: LoudnormTarget
+    measured: LoudnormMeasurement
+
+
+@dataclass(frozen=True)
 class RenderSpec:
     mode: Mode
     size: tuple[int, int]
@@ -85,7 +106,8 @@ class RenderSpec:
     clip: Clip | None = None  # None なら曲全体
     # None なら背景を size に合わせる画面（reframe）。あれば blur の画面で、size は縦の解像度
     frame: Frame | None = None
-    pitch: float | None = None  # rubberband に渡す音程の比（1.0 が変化なし）。None なら音声はそのまま
+    pitch: Pitch | None = None  # None なら音声はそのまま（inst のキー変更）
+    loudnorm: Loudnorm | None = None  # None なら音量はそのまま（inst の正規化）
 
 
 def escape_filter_arg(value: str) -> str:
@@ -162,6 +184,8 @@ def build_args(spec: RenderSpec) -> list[str]:
             raise ValueError("mode=overlay では区間を切り出せません")
         if spec.pitch is not None:
             raise ValueError("mode=overlay ではキーを変えられません")
+        if spec.loudnorm is not None:
+            raise ValueError("mode=overlay では音量をそろえられません")
         inputs = ["-f", "lavfi", "-i", f"color=c=black@0:s={w}x{h}:r={spec.fps},format=rgba"]
         subtitles = subtitles_filter(spec.subtitles, spec.fontsdir, alpha=True)
         video = f"[0:v]{subtitles},{_TO_BT709},format=yuva444p10le[v]"
@@ -192,12 +216,9 @@ def build_args(spec: RenderSpec) -> list[str]:
 
     if clip is not None and spec.pitch is not None:
         raise ValueError("clip と pitch は同時に指定できません")
-    if clip:
-        audio_filter = _clip_audio(clip, spec.fps)
-    elif spec.pitch is not None:
-        audio_filter = _pitch_audio(spec.pitch)
-    else:
-        audio_filter = None
+    if clip is not None and spec.loudnorm is not None:
+        raise ValueError("clip と loudnorm は同時に指定できません")
+    audio_filter = _clip_audio(clip, spec.fps) if clip else _audio_filter(spec.pitch, spec.loudnorm)
 
     return [
         "ffmpeg",
@@ -310,9 +331,51 @@ def _clip_audio(clip: Clip, fps: int) -> str:
     return audio + "[a]"
 
 
-def _pitch_audio(pitch: float) -> str:
-    """音程だけ変える filtergraph（[1:a]...[a]）。pitch は rubberband に渡す周波数の比。"""
-    return f"[1:a]rubberband=pitch={_ratio(pitch)}[a]"
+_SAMPLE_RATE = 48000  # 出力の -ar 48000 と合わせる
+
+
+def _audio_filter(pitch: Pitch | None, loudnorm: Loudnorm | None) -> str | None:
+    """pitch・loudnorm を1本につないだ filtergraph（[1:a]...[a]）。どちらも無ければ None。"""
+    parts = [_pitch_filter(pitch)] if pitch is not None else []
+    if loudnorm is not None:
+        parts.append(_loudnorm_filter(loudnorm))
+    return f"[1:a]{','.join(parts)}[a]" if parts else None
+
+
+def _pitch_filter(pitch: Pitch) -> str:
+    if pitch.method == "rubberband":
+        return f"rubberband=pitch={_ratio(pitch.ratio)}"
+    return _atempo_pitch_filter(pitch.ratio)
+
+
+def _atempo_pitch_filter(ratio: float) -> str:
+    """rubberband が無い環境向け：asetrate でピッチを変え、atempo で速度だけ戻す。"""
+    filt = f"aresample={_SAMPLE_RATE},asetrate={_SAMPLE_RATE}*{_ratio(ratio)},aresample={_SAMPLE_RATE}"
+    chain = _atempo_chain(1 / ratio)
+    return filt + "".join(f",atempo={_ratio(t)}" for t in chain)
+
+
+def _atempo_chain(tempo: float) -> list[float]:
+    """atempo は 0.5〜2.0 しか受け付けないため、範囲外の値を複数の atempo に分解する。"""
+    if math.isclose(tempo, 1.0):
+        return []
+    parts: list[float] = []
+    t = tempo
+    while t > 2.0 or t < 0.5:
+        step = 2.0 if t > 1.0 else 0.5
+        parts.append(step)
+        t /= step
+    parts.append(t)
+    return parts
+
+
+def _loudnorm_filter(loudnorm: Loudnorm) -> str:
+    t, m = loudnorm.target, loudnorm.measured
+    return (
+        f"loudnorm=I={_ratio(t.i)}:TP={_ratio(t.tp)}:LRA={_ratio(t.lra)}:"
+        f"measured_I={m.input_i}:measured_TP={m.input_tp}:measured_LRA={m.input_lra}:"
+        f"measured_thresh={m.input_thresh}:offset={m.target_offset}:linear=true"
+    )
 
 
 @dataclass(frozen=True)

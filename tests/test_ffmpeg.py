@@ -1,5 +1,7 @@
 """ffmpeg の用意ができているかの検査。"""
 
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -7,7 +9,7 @@ from typer.testing import CliRunner
 
 from tests.conftest import use_fake_ffmpeg
 from utavideo.cli import app
-from utavideo.ffmpeg import FFmpegError, require_tools
+from utavideo.ffmpeg import FFmpegError, measure_loudness, require_tools, rubberband_filter_error
 
 runner = CliRunner()
 
@@ -70,32 +72,47 @@ def test_require_tools_skips_the_libass_check_when_subtitles_are_not_drawn(
     require_tools(subtitles=False)
 
 
-def test_require_tools_says_what_to_install_when_ffmpeg_has_no_rubberband(
+def test_rubberband_filter_error_says_what_to_install_when_missing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use_fake_ffmpeg(tmp_path, monkeypatch, reply=RUBBERBAND_UNKNOWN, filter="rubberband")
 
-    with pytest.raises(FFmpegError) as e:
-        require_tools(subtitles=False, rubberband=True)
+    error = rubberband_filter_error()
 
-    assert "librubberband" in str(e.value)
-    assert "ffmpeg-full" in str(e.value)
+    assert error is not None
+    assert "librubberband" in error
+    assert "ffmpeg-full" in error
 
 
-def test_require_tools_passes_when_the_rubberband_filter_is_available(
+def test_rubberband_filter_error_is_none_when_available(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     use_fake_ffmpeg(tmp_path, monkeypatch, reply=RUBBERBAND_HELP, filter="rubberband")
 
-    require_tools(subtitles=False, rubberband=True)
+    assert rubberband_filter_error() is None
 
 
-def test_require_tools_skips_the_rubberband_check_by_default(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    use_fake_ffmpeg(tmp_path, monkeypatch, reply=RUBBERBAND_UNKNOWN, filter="rubberband")
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+def test_measure_loudness_raises_when_the_file_does_not_exist(tmp_path: Path) -> None:
+    with pytest.raises(FFmpegError) as e:
+        measure_loudness(tmp_path / "no-such-file.wav")
 
-    require_tools(subtitles=False)
+    assert "音量の計測に失敗しました" in str(e.value)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+def test_measure_loudness_reads_the_json_block(tmp_path: Path) -> None:
+    audio = tmp_path / "tone.wav"
+    subprocess.run(
+        ["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-f", "lavfi",
+         "-i", "sine=frequency=1000:duration=1", str(audio)],
+        check=True,
+    )  # fmt: skip
+
+    measured = measure_loudness(audio)
+
+    assert float(measured.input_i) < 0  # LUFS は負の値
+    assert measured.target_offset != ""
 
 
 def test_build_stops_with_the_same_message_before_it_looks_at_the_project(

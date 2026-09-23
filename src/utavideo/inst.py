@@ -32,7 +32,7 @@ def work_ass_path(work_dir: Path, key: int) -> Path:
 
 
 def pitch_ratio(key: int) -> float:
-    """半音単位のキーを rubberband の pitch（周波数の比）に変換する。"""
+    """半音単位のキーを周波数の比に変換する（rubberband・atempo のどちらでも使う）。"""
     return 2 ** (key / 12)
 
 
