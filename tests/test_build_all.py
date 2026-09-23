@@ -9,11 +9,15 @@ from typer.testing import CliRunner
 
 from tests.conftest import MakeFont
 from utavideo import build_all, inputs
-from utavideo.analyze import Analysis, FontSearch
+from utavideo.analyze import Analysis, FontSearch, ThumbnailAnalysis
 from utavideo.build_all import Plan, TargetStatus
 from utavideo.cli import app
 from utavideo.ffmpeg import subtitles_filter_error
 from utavideo.project import Project, scaffold
+
+requires_libass = pytest.mark.skipif(
+    subtitles_filter_error() is not None, reason="libass 付きの ffmpeg が必要"
+)
 
 runner = CliRunner()
 
@@ -224,7 +228,7 @@ def test_render_is_clean_when_there_is_nothing_left() -> None:
     assert build_all.render(Plan(())) == "クリーンです（作るものはありません）"
 
 
-@pytest.mark.skipif(subtitles_filter_error() is not None, reason="libass 付きの ffmpeg が必要")
+@requires_libass
 def test_build_all_command_writes_everything_and_skips_on_the_second_run(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
 ) -> None:
@@ -281,3 +285,62 @@ enabled = false
     # description・announce は済み判定が無いので、毎回「実行しました」に載る
     assert "実行しました" in second.output
     assert "description: " in second.output.split("実行しました")[1].split("スキップ")[0]
+
+
+@requires_libass
+def test_build_all_prints_warnings_when_writing_description_and_announce(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # collect() はエラーの有無しか見ないので、警告（materials.files が無い・uploads が無い）は
+    # 実際に書き出すとき（_run_build_all_target）にもう一度検査して表示する必要がある
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+    root = tmp_path / "song"
+    scaffold(root, "テスト", "test")
+    (root / "utavideo.toml").write_text(
+        """
+[song]
+title = "テスト"
+slug = "test"
+[audio]
+file = "src/mix/missing.wav"
+[video]
+background = "src/bg/missing.png"
+
+[description]
+text = "本文"
+
+[[materials]]
+section = "素材"
+files = ["missing.png"]
+""",
+        encoding="utf-8",
+    )
+
+    result = runner.invoke(app, ["build-all", "-C", str(root)])
+    assert result.exit_code == 0, result.output
+    # build は audio.file が無いので要対応（実行しない）
+    assert "audio.file のファイルがありません" in result.output
+    assert "materials.files のファイルがありません" in result.output
+    assert "リンクがありません" in result.output
+
+
+@requires_libass
+def test_thumbnail_execution_stops_build_all_if_a_recheck_finds_a_real_error(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # collect() の判定と、実際に書き出す直前のもう一度の検査の間に対象が壊れる（今回はテストのため
+    # collect 側だけ偽装する）ケースの回帰テスト。書き出さずに exit code 1 で止まるべき
+    config = TOML + '[[thumbnails]]\nname = "main"\nfile = "src/thumbnail-missing.ass"\nsize = [90, 90]\n'
+    (project / "utavideo.toml").write_text(config, encoding="utf-8")
+    monkeypatch.setattr(build_all, "analyze_thumbnails", lambda *a, **k: ThumbnailAnalysis([], {}))
+
+    loaded = Project.load(project)
+    plan = build_all.collect(loaded, _search())
+    thumb = next(t for t in plan.targets if t.name == "thumbnail:main")
+    assert thumb.state == "run"  # 偽装により「問題なし」に見えている
+
+    result = runner.invoke(app, ["build-all", "-C", str(project)])
+    assert result.exit_code == 1, result.output
+    assert "file のファイルがありません" in result.output
+    assert not (loaded.build_dir / "thumbnail" / "main.png").exists()

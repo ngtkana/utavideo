@@ -839,20 +839,39 @@ def build_all_command(project_dir: ProjectOption = None) -> None:
 
 
 def _run_build_all_target(project: Project, search: FontSearch, name: str) -> None:
-    """build-all の「実行」対象を1つ実際に書き出す。判定は build_all.collect が済ませている。"""
+    """build-all の「実行」対象を1つ実際に書き出す。
+
+    build_all.collect はエラーの有無しか見ていないので、それぞれのコマンドと同じく警告も表示する。
+    collect から実行までの間に状態が変わっていないかも、書き出す前にもう一度確かめる
+    （announce・thumbnail はエラーがあれば typer.Exit で止める。description は元のコマンドと同じく
+    警告があっても書き出す）。
+    """
     if name == "build":
         _render(project.root, "final", "build")
     elif name == "description":
         fmt = load_user_config().description
+        if project.config.description is not None:
+            _print_issues(description.lint(project, fmt))
         write_text(project.title_output, description.render_title(project.config, fmt))
         write_text(project.description_output, description.render_body(project.config, fmt))
     elif name == "announce":
         user_config = load_user_config()
+        issues = announce.lint(
+            project.config, user_config.announce, user_config.description, warn_no_uploads=True
+        )
+        _print_issues(issues)
+        if not subs.ok(issues):
+            raise typer.Exit(1)
         text = announce.render(project.config, user_config.announce, user_config.description)
         write_text(project.announce_output, text)
     else:
         thumb_name = name.removeprefix("thumbnail:")
         thumb = next(t for t in project.config.thumbnails if t.name == thumb_name)
+        issues = background_issues(project)
         analysis = analyze_thumbnails(project, (thumb,), bg_only=False, search=search)
+        issues += analysis.issues
+        _print_issues(issues)
+        if not subs.ok(issues):
+            raise typer.Exit(1)
         font_files = analysis.font_files.get(thumb_name, ())
         _write_thumbnail(project, thumb, project.config.video, font_files, bg_only=False)
