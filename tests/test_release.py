@@ -1,5 +1,6 @@
 """release の採番と入力の比較。動画の中身は問わないので ffmpeg は要らない。"""
 
+import json
 import os
 from pathlib import Path
 
@@ -7,6 +8,7 @@ import pytest
 from typer.testing import CliRunner
 
 from utavideo import inputs
+from utavideo import project as project_module
 from utavideo.cli import app
 from utavideo.project import Project, scaffold
 
@@ -84,6 +86,58 @@ def test_stops_when_an_older_number_has_the_same_content(project: Path) -> None:
     result = _release(project)
     assert result.exit_code == 1
     assert "同じ内容が既にあります" in result.output
+
+
+def test_records_the_match_after_creating_a_release(project: Path) -> None:
+    assert _release(project).exit_code == 0
+
+    record = json.loads((project / "build/.work/release-match.json").read_text(encoding="utf-8"))
+    assert record["version"] == "v1.2"
+    assert record["matched"] == "曲-v1.2.0.mp4"
+
+
+def test_records_the_match_when_stopping_for_the_same_content(project: Path) -> None:
+    (project / "release/曲-v1.2.0.mp4").write_bytes(b"video")
+
+    result = _release(project)
+    assert result.exit_code == 1
+    record = json.loads((project / "build/.work/release-match.json").read_text(encoding="utf-8"))
+    assert record["matched"] == "曲-v1.2.0.mp4"
+
+
+def test_later_calls_use_the_recorded_match_instead_of_rereading_release(
+    project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    assert _release(project).exit_code == 0
+
+    def fail_if_called(*args: object, **kwargs: object) -> bool:
+        raise AssertionError("記録を使わず release/ を読み直した")
+
+    monkeypatch.setattr(project_module.filecmp, "cmp", fail_if_called)
+    result = _release(project)
+    assert result.exit_code == 1
+    assert "同じ内容が既にあります" in result.output
+
+
+def test_rereads_release_after_main_changes(project: Path) -> None:
+    assert _release(project).exit_code == 0
+
+    main = project / "build/main.mp4"
+    main.write_bytes(b"different content")
+    later = main.stat().st_mtime + 10
+    os.utime(main, (later, later))
+
+    assert _release(project).exit_code == 0
+    assert _released(project) == ["曲-v1.2.0.mp4", "曲-v1.2.1.mp4"]
+
+
+def test_ignores_the_recorded_match_if_that_file_was_removed(project: Path) -> None:
+    assert _release(project).exit_code == 0
+    (project / "release/曲-v1.2.0.mp4").unlink()
+
+    result = _release(project)
+    assert result.exit_code == 0
+    assert _released(project) == ["曲-v1.2.0.mp4"]
 
 
 def test_counts_uppercase_extension(project: Path) -> None:

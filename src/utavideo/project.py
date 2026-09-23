@@ -17,6 +17,7 @@ from utavideo.config import (
     ProjectConfig,
     load_project_config,
 )
+from utavideo.ffmpeg import write_text
 from utavideo.graph import ANIMATED_EXTS, AUDIO_EXTS, IMAGE_EXTS
 from utavideo.names import legacy_name_from_title, slug_error, slug_from_title
 from utavideo.subs import escape_text
@@ -92,6 +93,11 @@ class Project:
 
     def thumbnail_inputs_record(self, name: str) -> Path:
         return self.work_dir / f"thumbnail-{name}-inputs.json"
+
+    @property
+    def release_match_record(self) -> Path:
+        """release が最後に確かめた、build/main.mp4 と release 済みファイルの一致の記録（issue #82）。"""
+        return self.work_dir / "release-match.json"
 
     @property
     def overlay_output(self) -> Path:
@@ -172,14 +178,60 @@ def next_revision(released: list[tuple[int, Path]]) -> int:
     return max((revision for revision, _ in released), default=-1) + 1
 
 
+_RELEASE_MATCH_FORMAT = 1
+
+
 def find_matching_release(project: Project, version: str, source: Path) -> tuple[Path | None, Path, bool]:
     """source と同じ内容の release 済みファイル、次に release したらできるファイル、release 済みの有無。
 
     同じ入力からの build はバイト単位で一致する（docs/verification/20260916-release-revision.md）。
+    release 済みファイルは上書きしない約束なので、release が最後に確かめた一致（record_release_match）を
+    source の size・mtime_ns が変わっていない間は信じ、release/ を読み直さずに済ませる（issue #82）。
     """
     released = project.released(version)
-    matched = next((path for _, path in released if filecmp.cmp(source, path, shallow=False)), None)
+    matched = _cached_match(project, version, source, released)
+    if matched is None:
+        matched = next((path for _, path in released if filecmp.cmp(source, path, shallow=False)), None)
     return matched, project.release_path(version, next_revision(released)), bool(released)
+
+
+def _cached_match(
+    project: Project, version: str, source: Path, released: list[tuple[int, Path]]
+) -> Path | None:
+    try:
+        data = json.loads(project.release_match_record.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if (
+        not isinstance(data, dict)
+        or data.get("format") != _RELEASE_MATCH_FORMAT
+        or data.get("version") != version
+    ):
+        return None
+    if data.get("source") != _stamp(source):
+        return None
+    matched_name = data.get("matched")
+    return next((path for _, path in released if path.name == matched_name), None)
+
+
+def record_release_match(project: Project, version: str, source: Path, matched: Path) -> None:
+    """release が source と matched の一致を確かめたことを記録する（次回は読み直さずに済む）。"""
+    data = {
+        "format": _RELEASE_MATCH_FORMAT,
+        "version": version,
+        "source": _stamp(source),
+        "matched": matched.name,
+    }
+    write_text(project.release_match_record, json.dumps(data, ensure_ascii=False) + "\n")
+
+
+def _stamp(path: Path) -> list[int | None]:
+    """大きさと更新時刻。ファイルが無ければ None の組。"""
+    try:
+        stat = path.stat()
+    except OSError:
+        return [None, None]
+    return [stat.st_size, stat.st_mtime_ns]
 
 
 def require_usable_slug(slug: str) -> None:
