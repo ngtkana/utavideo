@@ -154,6 +154,7 @@ utavideo thumbnail [-C <曲フォルダ>] [--name <name>] [--bg-only]
 - .ass は加工せずに、**0 秒**の状態を描きます。`lyrics.fade_ms` の自動フェードと `[overlay_text]` の曲名表示は入りません。`\t`・`\move`・`\k` なども 0 秒の状態になります
 - 書き出したら、パスとバイト数を表示します
 - 書き出す前に[検査](#検査項目)し、エラーがあれば1枚も書き出しません。`--bg-only` では、背景と `at` だけを検査します（.ass はまだ無くてよい）
+- `--bg-only` でなければ、書き出しに成功した後、使った入力の記録を `build/.work/thumbnail-<name>-inputs.json` に書きます（[status](#status)が比べます）。`--bg-only` では記録しません
 
 次のときは止まります。
 
@@ -197,6 +198,7 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 - fps・crf・preset・`video.fit` は `[video]` と同じです。出力の形式は `build/main.mp4` と同じです
 - 描画に使った .ass を `build/.work/shorts/<name>.ass`（`wide` は `build/.work/shorts/wide/<name>.ass`）に書きます
 - 書き出す前に[検査](#ショートの検査)し、エラーがあれば1本も書き出しません。`--name` を渡すと、そのショートだけを検査します（ほかのショートのエラーでは止まりません）
+- 書き出しに成功した後、使った入力の記録を `build/.work/shorts-<name>-inputs.json` に書きます（[status](#status)が比べます。`wide` の版は個別の記録を持たず、この1本の記録で代表します）
 
 次のときは止まります。
 
@@ -357,16 +359,19 @@ X（twitter-text）でハッシュタグとしてつながる文字は、文字�
 utavideo status [-C <曲フォルダ>]
 ```
 
-`build/main.mp4`・[description](#description)・[announce](#announce)・[release](#release) の今の状態を一覧します。`check` が「今書き出しても大丈夫か」を検査するのに対し、`status` は「前回書き出したときから何が変わったか」を見ます。差分の無い項目は何も表示せず、変わっている項目だけを並べます。すべて差分が無ければ「クリーンです（差分はありません）」とだけ表示します。
+`build/main.mp4`・[description](#description)・[announce](#announce)・`[[shorts]]`・`[[thumbnails]]`・[release](#release) の今の状態を一覧します。`check` が「今書き出しても大丈夫か」を検査するのに対し、`status` は「前回書き出したときから何が変わったか」を見ます。差分の無い項目は何も表示せず、変わっている項目だけを並べます。すべて差分が無ければ「クリーンです（差分はありません）」とだけ表示します。
 
 | 項目 | 表示する条件 |
 |---|---|
 | main | `build/main.mp4` が無い（未生成）。または [release](#release) と同じ基準で、書き出した後に入力が変わっている（古い） |
 | 概要欄 | `build/title.txt`・`build/description.txt` のどちらかが無い（有無だけを見ます。中身が古いかは見ません） |
 | 告知文 | `build/announce.txt` が無い（有無だけを見ます） |
+| ショート（`[[shorts]]` があるとき、1本ごと） | 出力（`build/shorts/<name>.mp4`）が無い。または縦用 .ass・本編歌詞・音源・背景・設定のいずれかが、書き出した後に変わっている |
+| サムネイル（`[[thumbnails]]` があるとき、1本ごと） | 出力（`build/thumbnail/<name>.png`）が無い（`--bg-only` の実行だけでは生成済みになりません）。またはサムネイルの .ass・背景・設定のいずれかが、書き出した後に変わっている |
 | release | 音源のバージョン（`vX.Y`）が `audio.file` の名前から分からない。まだ release していない。`build/main.mp4` と release 済みの内容が違う（次に release したときのファイル名を表示します） |
 
 - main が未生成・古いときは release の行を表示しません（先に `build` を促します）
+- ショート・サムネイルの「変わった」判定は、歌詞・設定ファイル自体の変化だけを見ます。フォントファイル単体の差し替えは検出しません
 - ffmpeg は使いません
 
 ## build-all
@@ -381,7 +386,7 @@ utavideo build-all [-C <曲フォルダ>]
 |---|---|---|
 | 対象外 | この曲では使っていない（`[[thumbnails]]` が無い） | 何も出しません |
 | 要対応 | 書き出す前の[検査](#検査項目)でエラーがある。多くは Aegisub 等での作業待ちです | 対象名とエラーの内容を表示し、書き出しません |
-| 済み（build・thumbnail のみ） | 既に最新の出力があります（`build` は[status](#status)の main と同じ基準、`thumbnail` は出力の PNG の有無だけを見る簡易版です） | 対象名だけを表示します |
+| 済み（build・thumbnail のみ） | 既に最新の出力があります（[status](#status)の main・サムネイルと同じ基準） | 対象名だけを表示します |
 | 実行 | 上記のいずれでもありません | 対象名と出力先を表示して書き出します |
 
 `description`・`announce` は生成コストが低く ffmpeg も使わないため、済み判定をせず、要対応でなければ毎回実行し直します（`[[uploads]]` が無いことは、既存の `announce` コマンドと同じく警告どまりとし、要対応にはしません）。

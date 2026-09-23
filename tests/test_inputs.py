@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.conftest import scaffold_named_project
 from utavideo import inputs
 from utavideo.project import Project, scaffold
 
@@ -31,9 +32,10 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _record_build(project: Path) -> None:
     loaded = Project.load(project)
-    record = inputs.record_text(loaded, inputs.with_fonts(inputs.snapshot(loaded), ()))
-    loaded.inputs_record.parent.mkdir(parents=True, exist_ok=True)
-    loaded.inputs_record.write_text(record, encoding="utf-8")
+    target = inputs.main_target(loaded)
+    record = inputs.record_text(target, inputs.with_fonts(inputs.snapshot(target), ()))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
 
 
 def test_unchanged_files_are_not_read_again(project: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -49,7 +51,7 @@ def test_unchanged_files_are_not_read_again(project: Path, monkeypatch: pytest.M
     monkeypatch.setattr(inputs, "_file_digest", counting)
 
     loaded = Project.load(project)
-    assert inputs.stale_inputs(loaded) is None
+    assert inputs.stale_inputs(inputs.main_target(loaded)) is None
     assert calls == []
 
 
@@ -71,15 +73,169 @@ def test_resaved_file_with_the_same_content_reads_once_and_is_not_stale(
     monkeypatch.setattr(inputs, "_file_digest", counting)
 
     loaded = Project.load(project)
-    assert inputs.stale_inputs(loaded) is None
+    assert inputs.stale_inputs(inputs.main_target(loaded)) is None
     assert calls == [lyrics]
 
 
 def test_old_format_record_is_ignored(project: Path) -> None:
     """format が古い記録は使わない（移行処理なしで安全に無視される）。"""
     loaded = Project.load(project)
-    old_record = {"format": 1, "video": inputs._stamp(loaded.main_output), "inputs": {}}
-    loaded.inputs_record.parent.mkdir(parents=True, exist_ok=True)
-    loaded.inputs_record.write_text(json.dumps(old_record), encoding="utf-8")
+    target = inputs.main_target(loaded)
+    old_record = {"format": 1, "video": inputs._stamp(target.output), "inputs": {}}
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(json.dumps(old_record), encoding="utf-8")
 
-    assert inputs._read_record(loaded) is None
+    assert inputs._read_record(target) is None
+
+
+NAMED_TOML = """
+[song]
+title = "曲"
+[audio]
+file = "src/mix/曲 v1.2.wav"
+[video]
+background = "src/bg/bg.png"
+
+[[shorts]]
+name = "chorus"
+
+[[shorts]]
+name = "verse"
+
+[[thumbnails]]
+name = "main"
+file = "src/thumbnail.ass"
+"""
+
+
+@pytest.fixture
+def named_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """[[shorts]]・[[thumbnails]] を持つ曲フォルダ。ffmpeg は要らない。"""
+    return scaffold_named_project(tmp_path, monkeypatch, NAMED_TOML)
+
+
+def _record_shorts_build(project: Path, name: str) -> None:
+    loaded = Project.load(project)
+    short = next(s for s in loaded.config.shorts if s.name == name)
+    target = inputs.shorts_target(loaded, short)
+    target.output.parent.mkdir(parents=True, exist_ok=True)
+    target.output.write_bytes(b"video")
+    record = inputs.record_text(target, inputs.snapshot(target))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
+
+
+def test_shorts_target_uses_a_name_specific_record_path(named_project: Path) -> None:
+    loaded = Project.load(named_project)
+    short = next(s for s in loaded.config.shorts if s.name == "chorus")
+    target = inputs.shorts_target(loaded, short)
+    assert target.record_path == loaded.work_dir / "shorts-chorus-inputs.json"
+
+
+def test_thumbnail_target_uses_a_name_specific_record_path(named_project: Path) -> None:
+    loaded = Project.load(named_project)
+    thumb = loaded.config.thumbnails[0]
+    target = inputs.thumbnail_target(loaded, thumb)
+    assert target.record_path == loaded.work_dir / "thumbnail-main-inputs.json"
+
+
+def test_shorts_snapshot_has_no_font_key(named_project: Path) -> None:
+    """shorts・thumbnail はフォント依存を見ない簡略版（issue #79）。"""
+    loaded = Project.load(named_project)
+    short = next(s for s in loaded.config.shorts if s.name == "chorus")
+    target = inputs.shorts_target(loaded, short)
+    assert inputs.FONTS not in inputs.snapshot(target)
+
+
+def test_shorts_stale_detects_vertical_ass_changes(named_project: Path) -> None:
+    _record_shorts_build(named_project, "chorus")
+    (named_project / "src/vertical.ass").write_text("変えた", encoding="utf-8")
+
+    loaded = Project.load(named_project)
+    short = next(s for s in loaded.config.shorts if s.name == "chorus")
+    target = inputs.shorts_target(loaded, short)
+    stale = inputs.stale_inputs(target)
+    assert stale is not None
+    assert "vertical.lyrics" in stale
+
+
+def test_shorts_stale_ignores_font_file_changes(named_project: Path, tmp_path: Path) -> None:
+    """フォントファイル単体の差し替えは検出対象外（歌詞・config ファイル自体の変化だけを見る）。"""
+    _record_shorts_build(named_project, "chorus")
+
+    loaded = Project.load(named_project)
+    short = next(s for s in loaded.config.shorts if s.name == "chorus")
+    target = inputs.shorts_target(loaded, short)
+    # フォントに関する変化を伝える手段（with_fonts）自体を使っていないので、
+    # フォントファイルがどう変わっても stale_inputs の結果には現れない
+    assert inputs.stale_inputs(target) is None
+
+
+def test_shorts_config_entry_change_is_detected(named_project: Path) -> None:
+    _record_shorts_build(named_project, "chorus")
+    toml = (named_project / "utavideo.toml").read_text(encoding="utf-8")
+    (named_project / "utavideo.toml").write_text(
+        toml.replace('name = "chorus"', 'name = "chorus"\nwide = true'), encoding="utf-8"
+    )
+
+    loaded = Project.load(named_project)
+    short = next(s for s in loaded.config.shorts if s.name == "chorus")
+    target = inputs.shorts_target(loaded, short)
+    stale = inputs.stale_inputs(target)
+    assert stale is not None
+    assert "utavideo.toml" in stale
+
+
+def test_two_shorts_have_independent_records(named_project: Path) -> None:
+    _record_shorts_build(named_project, "chorus")
+    _record_shorts_build(named_project, "verse")
+    (named_project / "src/vertical.ass").write_text("変えた", encoding="utf-8")
+
+    loaded = Project.load(named_project)
+    chorus = next(s for s in loaded.config.shorts if s.name == "chorus")
+    verse = next(s for s in loaded.config.shorts if s.name == "verse")
+    chorus_target = inputs.shorts_target(loaded, chorus)
+    verse_target = inputs.shorts_target(loaded, verse)
+
+    # 両方とも同じ vertical.ass に依存するので、両方 stale になる（記録自体は別ファイル）
+    assert chorus_target.record_path != verse_target.record_path
+    assert inputs.stale_inputs(chorus_target) is not None
+    assert inputs.stale_inputs(verse_target) is not None
+
+
+def test_a_file_shared_by_multiple_targets_is_hashed_once(
+    named_project: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """main とショートは同じ audio.file を見る。保存し直して stamp が変わっても、中身の確認は1回で済む。"""
+    loaded = Project.load(named_project)
+    short = next(s for s in loaded.config.shorts if s.name == "chorus")
+    main_target = inputs.main_target(loaded)
+    shorts_target = inputs.shorts_target(loaded, short)
+
+    audio = named_project / "src/mix/曲 v1.2.wav"
+    audio.parent.mkdir(parents=True, exist_ok=True)
+    audio.write_bytes(b"audio")
+    for target in (main_target, shorts_target):
+        target.output.parent.mkdir(parents=True, exist_ok=True)
+        target.output.write_bytes(b"video")
+        values = inputs.snapshot(target)
+        if target.track_fonts:
+            values = inputs.with_fonts(values, ())
+        record = inputs.record_text(target, values)
+        target.record_path.parent.mkdir(parents=True, exist_ok=True)
+        target.record_path.write_text(record, encoding="utf-8")
+
+    audio.write_bytes(b"audio")  # 保存し直しただけ（中身は同じ、mtime だけ変わる）
+
+    calls: list[Path] = []
+    original = inputs._read_file_digest
+
+    def counting(path: Path) -> str | None:
+        calls.append(path)
+        return original(path)
+
+    monkeypatch.setattr(inputs, "_read_file_digest", counting)
+
+    assert inputs.stale_inputs(main_target) is None
+    assert inputs.stale_inputs(shorts_target) is None
+    assert calls == [audio]

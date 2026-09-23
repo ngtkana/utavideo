@@ -31,7 +31,7 @@
 │   ├── inst/            # utavideo inst（歌唱練習用のカラオケ動画）
 │   │   └── key-1.mp4    # --keys のキーごと
 │   ├── announce.txt     # utavideo announce
-│   └── .work/           # 書き出しに使った中間ファイル（描画に使った .ass など）と、build の入力の記録（main-inputs.json）
+│   └── .work/           # 書き出しに使った中間ファイル（描画に使った .ass など）と、入力の記録（main-inputs.json・shorts-<name>-inputs.json・thumbnail-<name>-inputs.json）
 ├── release/             # 公開した動画（概要欄を残すなら自分でコピー）。消さない
 └── share/               # 人とやり取りしたファイル
     └── YYYYMMDD-相手/

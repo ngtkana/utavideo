@@ -158,9 +158,10 @@ def _record_build(project: Path) -> None:
     (project / "build").mkdir(exist_ok=True)
     (project / "build/main.mp4").write_bytes(b"video")
     loaded = Project.load(project)
-    record = inputs.record_text(loaded, inputs.with_fonts(inputs.snapshot(loaded), ()))
-    loaded.inputs_record.parent.mkdir(parents=True, exist_ok=True)
-    loaded.inputs_record.write_text(record, encoding="utf-8")
+    target = inputs.main_target(loaded)
+    record = inputs.record_text(target, inputs.with_fonts(inputs.snapshot(target), ()))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
 
 
 def _no_issues_analysis(*_: object, **__: object) -> Analysis:

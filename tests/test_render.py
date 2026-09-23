@@ -339,6 +339,18 @@ def test_thumbnail_draws_ass_over_background(project: Path) -> None:
     assert not (project / "build/thumbnail/main.partial.png").exists()
 
 
+def test_thumbnail_records_inputs_only_when_not_bg_only(project: Path) -> None:
+    _with_thumbnail(project)
+    record = project / "build/.work/thumbnail-main-inputs.json"
+
+    invoke("thumbnail", "-C", str(project), "--bg-only")
+    assert not record.exists()
+
+    invoke("thumbnail", "-C", str(project))
+    assert record.is_file()
+    assert "サムネイル" not in invoke("status", "-C", str(project)).output
+
+
 def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
     _with_thumbnail(project)
     (project / "src/thumbnail.ass").unlink()
@@ -591,6 +603,14 @@ def test_shorts_writes_the_section_and_the_wide_version_matches_main(project: Pa
     assert main[4:17] != wide  # 1 フレームずれていない
     assert (project / "build/.work/shorts/chorus.ass").is_file()
     assert (project / "build/.work/shorts/wide/chorus.ass").is_file()
+
+
+def test_shorts_records_inputs_and_status_shows_it_as_clean(project: Path) -> None:
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n')
+    invoke("shorts", "-C", str(project))
+
+    assert (project / "build/.work/shorts-chorus-inputs.json").is_file()
+    assert "ショート" not in invoke("status", "-C", str(project)).output
 
 
 def test_shorts_fades_the_audio_at_both_edges(project: Path) -> None:

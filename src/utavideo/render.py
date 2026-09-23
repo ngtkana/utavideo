@@ -2,7 +2,6 @@
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import pysubs2
 from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeRemainingColumn
@@ -114,7 +113,7 @@ def write_video(
     target: VideoTarget,
     duration_s: float,
     font_files: tuple[Path, ...],
-    built_inputs: dict[str, Any] | None,
+    record: inputs.Record | None,
 ) -> Path:
     """合成したスクリプトを target.subtitles_path に書き、動画を target.output に書き出す。"""
     subtitles_path, output = target.subtitles_path, target.output
@@ -151,11 +150,7 @@ def write_video(
         pitch=target.pitch,
         loudnorm=target.loudnorm,
     )
-    if built_inputs is not None:
-        # フォントは ffmpeg が書き出し中に読むので、その前に stat を取る
-        built_inputs = inputs.with_fonts(built_inputs, font_files)
-        # 書き出しが途中で終わったとき、前の記録が新しい動画のものに見えないように先に消す
-        project.inputs_record.unlink(missing_ok=True)
+    inputs.unlink_stale_record(record)
 
     with Progress(
         TextColumn("{task.description}"),
@@ -171,8 +166,8 @@ def write_video(
             total_s=duration_s,
             on_progress=lambda fraction: progress.update(task, completed=fraction),
         )
-    if built_inputs is not None:
-        write_text(project.inputs_record, inputs.record_text(project, built_inputs))
+    # フォントは ffmpeg が書き出し中に読むので、その前に stat を取っている（record 組み立て時点）
+    inputs.save_record(record, font_files)
     console.print(f"書き出しました: {output}", markup=False)
     if windows_path := to_windows_path(output):
         console.print(f"  Windows: {windows_path}", markup=False)
