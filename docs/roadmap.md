@@ -15,7 +15,7 @@
 - 縦型のショート（3段目）: `check` で、区間に入る縦用 .ass の歌詞を本編の歌詞と突き合わせる（本編を直して縦を直し忘れたら警告する）
 - 縦型のショート（4段目）: `utavideo shorts` で区間を書き出す（`build/shorts/<name>.mp4`、`wide = true` の 16:9 版、区間のフレームの丸め、区間の端の音声のフェード、`shorts[].focus`、`vertical.overlay_text`、投稿先の長さの上限の警告）
 - 縦型のショート（5段目）: 画面の作り方 `vertical.layout`（`shorts[].layout` で上書き）。`"blur"` は本編の映像を `vertical.frame_y` の高さに置き、上下を背景だけをぼかした帯で埋める（`preview-bg` の下敷きも同じ画面にする）
-- 歌唱練習用のカラオケ動画（issue #69・#70・#71・#72）: `utavideo inst --keys -1,-2,-3` で、ffmpeg の `rubberband`（無ければ `asetrate`+`atempo`）によりキーを変えた伴奏動画を、キーごとに別ファイルで書き出す（`build/inst/key<キー>.mp4`）。`loudnorm`（2パス）で音量をそろえる。画面には既定で曲名・アーティスト・キーだけを表示する（YouTube 限定公開／非公開で自分が聴く用途なので、クレジット画面は作らない）。`--lyrics` を付けると本編と同じ歌詞も焼き込める（`--keys` によるキー変更と両立）
+- 歌唱練習用のカラオケ動画（issue #69・#70・#71・#72）: `utavideo inst --keys -1,-2,-3` で、ffmpeg の `rubberband`（無ければ `asetrate`+`atempo`）によりキーを変えた伴奏動画を、キーごとに別ファイルで書き出す（`build/inst/<slug>-key<キー>.mp4`）。`loudnorm`（2パス）で音量をそろえる。画面には既定で曲名・アーティスト・キーだけを表示する（YouTube 限定公開／非公開で自分が聴く用途なので、クレジット画面は作らない）。`--lyrics` を付けると本編と同じ歌詞も焼き込める（`--keys` によるキー変更と両立）
 - 曲フォルダの状態の一覧（issue #77・#78・#79）: `utavideo status` で、`build`・概要欄・告知文・`[[shorts]]`・`[[thumbnails]]`・release の状態を git status 風に一覧する。`check`（今書き出しても大丈夫か）とは別に「前回書き出したときから何が変わったか」を見る。入力の比較は size・mtime_ns が一致すれば読まずに済ませ、違うときだけ中身で確かめる二層判定にした（ショート・サムネイルはフォント依存の検出を簡略化し、歌詞・設定ファイル自体の変化だけを見る）
 - 今作れるものをまとめて作る（issue #85）: `utavideo build-all` で、`build`・`description`・`announce`・`thumbnail` について、既に済んでいるものはスキップし、書き出し前の検査（`analyze.py`）でエラーがあるものは「要対応」として案内し、それ以外を書き出す
 

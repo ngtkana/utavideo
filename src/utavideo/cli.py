@@ -660,7 +660,7 @@ def inst_command(
         typer.Option("--lyrics", help="本編と同じ歌詞も焼き込む（既定では曲名・アーティスト・キーだけ）"),
     ] = False,
 ) -> None:
-    """歌唱練習用に、キーを変えた伴奏の動画を build/inst/key<N>.mp4 に書き出す。
+    """歌唱練習用に、キーを変えた伴奏の動画を build/inst/<slug>-key<N>.mp4 に書き出す。
 
     既定では歌詞を描かない（--lyrics で本編と同じ歌詞も焼き込む）。
     """
@@ -700,7 +700,7 @@ def inst_command(
             video.size,
             video.focus,
             inst.work_ass_path(project.work_dir, key),
-            inst.output_path(project.build_dir, key),
+            inst.output_path(project.build_dir, project.slug, key),
             f"inst {label}",
             pitch=graph.Pitch(inst.pitch_ratio(key), method),
             loudnorm=graph.Loudnorm(loudnorm_target, measured),
