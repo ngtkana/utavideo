@@ -134,6 +134,30 @@ def test_project_paths_and_release_name(tmp_path: Path) -> None:
     assert project.main_output == root / "build" / "main.mp4"
 
 
+def test_inst_audio_path_resolves_relative_to_root(tmp_path: Path) -> None:
+    root = tmp_path / "曲"
+    scaffold(root, "曲", "曲")
+    (root / "utavideo.toml").write_text(
+        '[song]\ntitle = "曲"\n[audio]\nfile = "src/mix/曲.wav"\n[video]\nbackground = "src/bg/a.png"\n'
+        '[inst]\naudio = "src/mix/inst.wav"\n',
+        encoding="utf-8",
+    )
+    project = Project.load(root)
+    assert project.inst_audio_path == root / "src/mix/inst.wav"
+
+
+def test_inst_audio_path_asserts_when_unset(tmp_path: Path) -> None:
+    root = tmp_path / "曲"
+    scaffold(root, "曲", "曲")
+    (root / "utavideo.toml").write_text(
+        '[song]\ntitle = "曲"\n[audio]\nfile = "src/mix/曲.wav"\n[video]\nbackground = "src/bg/a.png"\n',
+        encoding="utf-8",
+    )
+    project = Project.load(root)
+    with pytest.raises(AssertionError):
+        _ = project.inst_audio_path
+
+
 def test_next_revision_counts_released_videos(tmp_path: Path) -> None:
     root = tmp_path / "20260814 サンプル"
     scaffold(root, "サンプル", "sample")

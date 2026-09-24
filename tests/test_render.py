@@ -32,6 +32,8 @@ slug = "test"
 artist = "テスター"
 [audio]
 file = "src/mix/テスト v1.2.wav"
+[inst]
+audio = "src/mix/inst.wav"
 [video]
 background = "src/bg/{background}"
 size = [320, 180]
@@ -91,6 +93,19 @@ def _max_alpha(path: Path, at: float) -> int:
     return max(out.stdout)
 
 
+def _mean_volume_db(path: Path, *, band: tuple[int, int]) -> float:
+    """band（Hz）に絞ったときの平均音量。周波数の違う2つの音源を聞き分けるのに使う。"""
+    low, high = band
+    out = subprocess.run(
+        ["ffmpeg", "-v", "info", "-i", str(path),
+         "-af", f"highpass=f={low},lowpass=f={high},volumedetect", "-f", "null", "-"],
+        capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    match = re.search(r"mean_volume: (-?[\d.]+) dB", out.stderr)
+    assert match is not None, out.stderr
+    return float(match[1])
+
+
 @pytest.fixture
 def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont) -> Path:
     make_font(tmp_path / "fonts" / "TestSans.ttf", "Test Sans")
@@ -102,6 +117,8 @@ def project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, make_font: MakeFont
     root = tmp_path / "20260101 it's [テスト], 曲"
     scaffold(root, "テスト", "test")
     _ffmpeg("-f", "lavfi", "-i", "sine=frequency=440:duration=2", str(root / "src/mix/テスト v1.2.wav"))
+    # inst 用の音源は本編と別ファイル（issue #106）。周波数を変えて聞き分けられるようにする
+    _ffmpeg("-f", "lavfi", "-i", "sine=frequency=220:duration=2", str(root / "src/mix/inst.wav"))
     _ffmpeg("-f", "lavfi", "-i", "testsrc=size=640x360", "-frames:v", "1", str(root / "src/bg/bg.png"))
     _ffmpeg("-f", "lavfi", "-i", "testsrc=size=640x360:rate=4:duration=0.5", str(root / "src/bg/loop.gif"))
     (root / "utavideo.toml").write_text(TOML.format(background="bg.png"), encoding="utf-8")
@@ -940,6 +957,30 @@ def test_inst_writes_one_video_per_key_without_lyrics(project: Path) -> None:
 def test_inst_defaults_to_key_zero(project: Path) -> None:
     invoke("inst", "-C", str(project))
     assert (project / "build/inst/key0.mp4").is_file()
+
+
+def test_inst_requires_its_own_audio_setting(project: Path) -> None:
+    config = (project / "utavideo.toml").read_text(encoding="utf-8")
+    (project / "utavideo.toml").write_text(
+        config.replace('[inst]\naudio = "src/mix/inst.wav"\n', ""), encoding="utf-8"
+    )
+
+    result = runner.invoke(app, ["inst", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "inst.audio が設定されていません" in result.output
+    assert not (project / "build/inst").exists()
+
+
+@pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")
+def test_inst_uses_its_own_audio_not_the_main_track(project: Path) -> None:
+    """本編は 440Hz、inst.audio は 220Hz のサイン波（project フィクスチャ）。音を聞き分けて確かめる。"""
+    invoke("inst", "-C", str(project))
+    output = project / "build/inst/key0.mp4"
+
+    near_220 = _mean_volume_db(output, band=(190, 260))
+    near_440 = _mean_volume_db(output, band=(410, 470))
+    # 本編（440Hz）を使っていれば near_440 の方が大きいはずだが、inst.audio（220Hz）を使うので逆になる
+    assert near_220 > near_440 + 5
 
 
 @pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")

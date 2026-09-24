@@ -212,8 +212,10 @@ def test_vertical_defaults_and_values(tmp_path: Path) -> None:
 def test_inst_defaults_and_values(tmp_path: Path) -> None:
     default = load_project_config(_write(tmp_path, MINIMAL)).inst
     assert default.text == "{title} / {artist}（Key: {key}）"
-    text = MINIMAL + '[inst]\ntext = "{title} Key:{key}"\n'
-    assert load_project_config(_write(tmp_path, text)).inst.text == "{title} Key:{key}"
+    assert default.audio is None
+    text = MINIMAL + '[inst]\ntext = "{title} Key:{key}"\naudio = "src/mix/inst.wav"\n'
+    inst = load_project_config(_write(tmp_path, text)).inst
+    assert (inst.text, inst.audio) == ("{title} Key:{key}", Path("src/mix/inst.wav"))
 
 
 def test_odd_vertical_size_is_rejected(tmp_path: Path) -> None:

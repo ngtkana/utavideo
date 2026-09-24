@@ -243,9 +243,10 @@ class Announce(_Model):
 
 
 class Inst(_Model):
-    """歌唱練習用の動画（inst）に描く、曲名・キーの表示。"""
+    """歌唱練習用の動画（inst）に描く、曲名・キーの表示と、使う音源。"""
 
     text: str = "{title} / {artist}（Key: {key}）"
+    audio: Path | None = None
 
 
 class ProjectConfig(_Model):

@@ -105,6 +105,7 @@ class VideoTarget:
     frame: Frame | None = None  # None なら背景を size に合わせる画面（reframe）
     pitch: graph.Pitch | None = None  # inst のキー変更。None なら音声はそのまま
     loudnorm: graph.Loudnorm | None = None  # inst の音量正規化。None なら音量はそのまま
+    audio: Path | None = None  # None なら project.audio_path（inst は inst_audio_path を渡す）
 
 
 def write_video(
@@ -135,7 +136,7 @@ def write_video(
         size=target.size,
         fps=video.fps,
         duration_s=duration_s,
-        audio=project.audio_path.absolute(),
+        audio=(target.audio if target.audio is not None else project.audio_path).absolute(),
         subtitles=subtitles_path.absolute(),
         fontsdir=fonts.prepare_fontsdir(font_files, cache_dir() / "fontsets"),
         background=project.background_path.absolute(),

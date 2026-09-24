@@ -65,6 +65,16 @@ class Project:
         return self.resolve(self.config.audio.file)
 
     @property
+    def inst_audio_path(self) -> Path:
+        """inst（歌唱練習用の動画）に使う音源。inst.audio は audio.file とは別に必須。
+
+        呼ぶ前に inst.audio が設定されていることを確かめておくこと
+        （未設定なら analyze_inst がエラーを返し、write_video まで進まない）。
+        """
+        assert self.config.inst.audio is not None
+        return self.resolve(self.config.inst.audio)
+
+    @property
     def background_path(self) -> Path:
         return self.resolve(self.config.video.background)
 

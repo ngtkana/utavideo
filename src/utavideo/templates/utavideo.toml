@@ -91,5 +91,7 @@ ${credits}# [[credits]]
 # files = ["src/bg/background.png"]
 
 # [inst]
-# 歌唱練習用の動画（utavideo inst --keys -1,-2,-3）に表示する文字。{key} が使える
-# text = "{title} / {artist}（Key: {key}）"
+# 歌唱練習用の動画（utavideo inst --keys -1,-2,-3）。audio は声を抜いた伴奏など、
+# 本編（audio.file）とは別に用意する（inst を使うなら必須）
+# audio = "src/mix/inst.wav"
+# text = "{title} / {artist}（Key: {key}）"  # 画面に表示する文字。{key} が使える
