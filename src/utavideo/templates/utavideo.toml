@@ -45,7 +45,7 @@ file = "src/thumbnail.ass"  # 文字を組む .ass（Aegisub で編集）
 # focus = [0.5, 0.5]       # 省略時は video.focus
 
 # [vertical]
-# 縦型のショート（utavideo vertical-ass が本編の歌詞から縦用 .ass を作る）
+# 縦型のショート（utavideo preview-bg が無ければ本編の歌詞から縦用 .ass を作る）
 # size = [1080, 1920]
 # layout = "blur"          # blur（既定）: 本編をぼかした帯の上に置く / reframe: 縦に組み直す
 # lyrics = "src/vertical.ass"

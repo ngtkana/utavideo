@@ -4,7 +4,7 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`vertical-ass`・`status`・`build-all` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`status`・`build-all` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
 - `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
 - 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - `inst` はキー変更に rubberband フィルタを使いますが、無い ffmpeg では代わりに `asetrate`+`atempo` を使います（[inst](#inst)）
@@ -106,7 +106,7 @@ utavideo check [-C <曲フォルダ>]
 ## preview-bg / build / overlay
 
 ```sh
-utavideo preview-bg [-C <曲フォルダ>] [--vertical]
+utavideo preview-bg [-C <曲フォルダ>]
 utavideo build [-C <曲フォルダ>]
 utavideo overlay [-C <曲フォルダ>]
 ```
@@ -114,7 +114,6 @@ utavideo overlay [-C <曲フォルダ>]
 | コマンド | 出力 | 入るもの |
 |---|---|---|
 | `preview-bg` | `build/preview/bg.mp4` | 背景・曲名表示・音声（歌詞の行は入れない） |
-| `preview-bg --vertical` | `build/preview/vertical-bg.mp4` | 縦型のショートの下敷き。縦の画面（実際に使う `layout`）・曲名表示・音声（縦用 .ass の行は入れない） |
 | `build` | `build/main.mp4` | 背景・歌詞・曲名表示・音声 |
 | `overlay` | `build/overlay.mov` | 歌詞・曲名表示（背景は透明）・音声。背景のファイルは不要 |
 
@@ -124,14 +123,45 @@ utavideo overlay [-C <曲フォルダ>]
 - 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass`・`vertical-preview.ass` に書きます（自動のフェードと曲名表示が入ったもの）
 - `build` は、書き出しに成功した後、使った入力の記録を `build/.work/main-inputs.json` に書きます（[release](#release) が比べる）。書き出しを始める前に前の記録を消すので、途中で止まったときは記録が残りません
 
-`--vertical` は、Aegisub でショートの区間を置き、縦用 .ass を組むときに開く下敷きを、曲の頭から終わりまで書き出します。
+### 縦型のショートの下敷きと縦用 .ass
 
-- 画面は、実際に使う作り方（[shorts](#shorts) の表）で、曲の頭から終わりまで作ります。`[[shorts]]` に `blur` が1本でもあれば `blur`、無ければ `reframe`（`[[shorts]]` がまだ無ければ `vertical.layout`）です
+`utavideo.toml` に `[vertical]` があれば、`preview-bg` は本編の下敷きと一緒に、縦型のショートの下敷き（`build/preview/vertical-bg.mp4`）も、曲の頭から終わりまで書き出します。Aegisub でショートの区間を置き、縦用 .ass を組むときに使います。
+
+縦用 .ass（`vertical.lyrics`。既定は `src/vertical.ass`）がまだ無ければ、本編の歌詞 .ass（`lyrics.file`）から自動で作ります。作るのは最初の1回だけです。その後は Aegisub で直し、utavideo は書き換えません（上書きしないので、作り直すときは縦用 .ass を消してから実行します）。本編の .ass も書き換えません。
+
+縦用 .ass を作るときにするもの:
+
+- 本編の .ass の行を、コメント行も含めてすべて写す（使う `layout` が `blur` だけなら写さない。歌詞は本編の映像に入るので、写すと Aegisub で二重に見え、完成図と違ってしまう。`reframe` が1本でもあれば写す）
+- `[Script Info]` の `PlayResX`・`PlayResY` を `vertical.size` にする。`LayoutResX`・`LayoutResY` が2つともあれば、それぞれ x・y の比を掛けた値に書き直す（本編で PlayRes と同じなら `vertical.size` になる。片方だけなら `vertical.size`、無ければ足さない。理由は [検証記録](verification/20260917-vertical-ass.md)）
+- `[Aegisub Project Garbage]` の `Video File:` を、縦用 .ass から見た `build/preview/vertical-bg.mp4` の相対パスにする。`Audio File:` が本編の下敷きと同じなら、それも同じパスにする。そうでない `Audio File:` と `Keyframes File:`・`Timecodes File:` の相対パスは、本編の .ass と縦用 .ass のフォルダが違っても開けるよう、縦用 .ass から見たパスに付け替える（絶対パスと、`?video` などのパスでない値はそのまま）。`Video AR Mode`・`Video AR Value`・`Video Zoom Percent` は消す
+- スタイル `Short`・`VerticalBand` を足す（既にあれば足さない）。どちらも変換後の `Lyrics` の写しで、`VerticalBand` は上中央揃え。`Lyrics` が無ければ最初のスタイルを写す。`blur` を使うショートが1本でもあれば、`VerticalBand` の `MarginV` を、そのときの `vertical.frame_y` の帯にだいたい収まる値に計算し直す（`blur` を使わなければ `Lyrics` の `MarginV` のまま）
+
+大きさと座標の変換（x の比は `vertical.size` の幅 ÷ 本編の `PlayResX`、y の比は高さ ÷ `PlayResY`。「幅の比」は x の比）:
+
+| 種類 | 対象 | 変換 |
+|---|---|---|
+| 座標 | `\pos`・`\move`（5つ目・6つ目の時刻は変えない）・`\org`・矩形の `\clip`・`\iclip` | x・y をそれぞれの比で |
+| 大きさ（スタイル） | `Fontsize`・`MarginL`・`MarginR`・`MarginV`・`Outline`・`Shadow`・`Spacing` | 幅の比で |
+| 大きさ（行） | 行の `MarginL`・`MarginR`・`MarginV`、`\fs`・`\fsp`・`\bord`・`\xbord`・`\ybord`・`\shad`・`\xshad`・`\yshad`・`\blur` | 幅の比で |
+| ぼかしの回数 | `\be` | 幅の比の2乗を掛けて四捨五入する（ぼかしの幅が回数の平方根に比例するため）。1回以上なら1回以上に保つ |
+| 変えない | `\fs+N`・`\fs-N`（今の大きさからの相対指定）、`\fscx`・`\fscy` などの倍率、引数の数が合わないタグ | そのまま |
+| 変換しない | 図形（`\p1` など）の座標、ベクターの `\clip`・`\iclip` | そのまま。該当する行を警告で表示する |
+
+- 数は小数第2位で丸めます（余白は整数）
+- 文字も余白も幅の比で一様に縮むので、本編で画面に収まっていた行は縦でも収まり、文字は小さくなります
+- 縁取り・影は `ScaledBorderAndShadow` の値によらず、同じ比で縮めます
+
+縦の下敷きを書き出すとき:
+
+- 画面は、実際に使う作り方（[shorts](#shorts) の表）で作ります。`[[shorts]]` に `blur` が1本でもあれば `blur`、無ければ `reframe`（`[[shorts]]` がまだ無ければ `vertical.layout`）です
 - `reframe` では、背景を `[video]` の `fit`・`scale_flags`・`pad_color` と `vertical.focus` で `vertical.size` に合わせ、曲名表示を縦用 .ass の `overlay_text.style` のスタイルとフォントで描きます
-- `blur` では、本編の映像（本編の .ass の歌詞入り。曲名表示は入れません）を帯の上に置いた、完成図と同じ画面にします。曲名表示は帯（縦用 .ass の `VerticalBand` スタイル）に描きます。本編の合成とぼかしの分だけ、`preview-bg` より時間がかかります。描画に使った本編の .ass は `build/.work/vertical-preview-frame.ass` に書きます
-- 縦用 .ass が要るので、`vertical-ass` の後に実行します
-- `[[shorts]]` は無くてもかまいません（区間を置く前に使うため）。検査は[ショートの検査](#ショートの検査)の表の `preview-bg --vertical` の列のとおりです
+- `blur` では、本編の映像（本編の .ass の歌詞入り。曲名表示は入れません）を帯の上に置いた、完成図と同じ画面にします。曲名表示は帯（縦用 .ass の `VerticalBand` スタイル）に描きます。本編の合成とぼかしの分だけ、本編の下敷きより時間がかかります。描画に使った本編の .ass は `build/.work/vertical-preview-frame.ass` に書きます
+- `[[shorts]]` は無くてもかまいません（区間を置く前に使うため）。検査は[ショートの検査](#ショートの検査)の表の `preview-bg` の列のとおりです
 - 曲名表示は `vertical.overlay_text = false` で消せます（`shorts` と同じ）
+
+次のときは止まります（縦の下敷きの分。本編の下敷きは別に[検査項目](#検査項目)のとおり止まります）。
+
+- 縦用 .ass がまだ無いのに、`lyrics.file` のファイルが無い、読めない、`PlayResX`・`PlayResY` が無い
 
 ## thumbnail
 
@@ -186,7 +216,7 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 - 本編の映像は `build/main.mp4` と同じ画面（`video.size`・`video.focus`・`video.fit`）に本編の .ass を描いてから、縦の幅に縮めます。高さが奇数にならないよう、偶数に丸めます（1080x1920 では 607.5 → 608）
 - 上下の帯は、**背景だけ**をぼかした上に、縦用 .ass の縦だけの文字（曲名表示を含む）を重ねたものです。本編の歌詞は帯に写りません（本編の映像に入っています）
 - 帯は背景を `cover` で `vertical.size` の 1/4 の大きさに切り取り（`shorts[].focus`）、`gblur`（縦の幅 1080 で `sigma=40` 相当）を掛けてから、元の大きさに戻したものです。ぼかしの強さは設定で変えられません（[検証記録](verification/20260919-blur-band.md)）
-- 歌詞は本編の映像に入っているので、縦用 .ass の歌詞の行は描きません。帯に出す文字は、スタイル名を `Vertical` で始めます（`utavideo vertical-ass` が作る `VerticalBand` など）
+- 歌詞は本編の映像に入っているので、縦用 .ass の歌詞の行は描きません。帯に出す文字は、スタイル名を `Vertical` で始めます（`utavideo preview-bg` が作る `VerticalBand` など）
 - 曲名表示は帯（`VerticalBand` スタイル）に入ります。`vertical.overlay_text = false` なら、そこからも消します
 - 描画に使った本編の .ass は `build/.work/shorts/frame/<name>.ass` に書きます
 
@@ -238,41 +268,6 @@ utavideo inst [-C <曲フォルダ>] [--keys <キー>] [--lyrics]
 - `--lyrics` のときは、歌詞の行が未定義のスタイルを使っている、表示幅からはみ出しそう、など本編の check と同じ検査項目
 - 音量の計測に失敗した
 - ffmpeg が正常に終わっても何も書き出さなかった
-
-## vertical-ass
-
-```sh
-utavideo vertical-ass [-C <曲フォルダ>]
-```
-
-縦型のショートに使う縦用 .ass を、本編の歌詞 .ass（`lyrics.file`）から作り、`vertical.lyrics`（既定は `src/vertical.ass`）に書きます（[config-reference.md](config-reference.md#vertical)）。作るのは最初の1回だけです。その後は Aegisub で直し、utavideo は書き換えません。本編の .ass も書き換えません。
-
-作るもの:
-
-- 本編の .ass の行を、コメント行も含めてすべて写す（使う `layout` が `blur` だけなら写さない。歌詞は本編の映像に入るので、写すと Aegisub で二重に見え、完成図と違ってしまう。`reframe` が1本でもあれば写す）
-- `[Script Info]` の `PlayResX`・`PlayResY` を `vertical.size` にする。`LayoutResX`・`LayoutResY` が2つともあれば、それぞれ x・y の比を掛けた値に書き直す（本編で PlayRes と同じなら `vertical.size` になる。片方だけなら `vertical.size`、無ければ足さない。理由は [検証記録](verification/20260917-vertical-ass.md)）
-- `[Aegisub Project Garbage]` の `Video File:` を、縦用 .ass から見た `build/preview/vertical-bg.mp4` の相対パスにする。`Audio File:` が本編の下敷きと同じなら、それも同じパスにする。そうでない `Audio File:` と `Keyframes File:`・`Timecodes File:` の相対パスは、本編の .ass と縦用 .ass のフォルダが違っても開けるよう、縦用 .ass から見たパスに付け替える（絶対パスと、`?video` などのパスでない値はそのまま）。`Video AR Mode`・`Video AR Value`・`Video Zoom Percent` は消す
-- スタイル `Short`・`VerticalBand` を足す（既にあれば足さない）。どちらも変換後の `Lyrics` の写しで、`VerticalBand` は上中央揃え。`Lyrics` が無ければ最初のスタイルを写す。`blur` を使うショートが1本でもあれば、`VerticalBand` の `MarginV` を、そのときの `vertical.frame_y` の帯にだいたい収まる値に計算し直す（`blur` を使わなければ `Lyrics` の `MarginV` のまま）
-
-大きさと座標の変換（x の比は `vertical.size` の幅 ÷ 本編の `PlayResX`、y の比は高さ ÷ `PlayResY`。「幅の比」は x の比）:
-
-| 種類 | 対象 | 変換 |
-|---|---|---|
-| 座標 | `\pos`・`\move`（5つ目・6つ目の時刻は変えない）・`\org`・矩形の `\clip`・`\iclip` | x・y をそれぞれの比で |
-| 大きさ（スタイル） | `Fontsize`・`MarginL`・`MarginR`・`MarginV`・`Outline`・`Shadow`・`Spacing` | 幅の比で |
-| 大きさ（行） | 行の `MarginL`・`MarginR`・`MarginV`、`\fs`・`\fsp`・`\bord`・`\xbord`・`\ybord`・`\shad`・`\xshad`・`\yshad`・`\blur` | 幅の比で |
-| ぼかしの回数 | `\be` | 幅の比の2乗を掛けて四捨五入する（ぼかしの幅が回数の平方根に比例するため）。1回以上なら1回以上に保つ |
-| 変えない | `\fs+N`・`\fs-N`（今の大きさからの相対指定）、`\fscx`・`\fscy` などの倍率、引数の数が合わないタグ | そのまま |
-| 変換しない | 図形（`\p1` など）の座標、ベクターの `\clip`・`\iclip` | そのまま。該当する行を警告で表示する |
-
-- 数は小数第2位で丸めます（余白は整数）
-- 文字も余白も幅の比で一様に縮むので、本編で画面に収まっていた行は縦でも収まり、文字は小さくなります
-- 縁取り・影は `ScaledBorderAndShadow` の値によらず、同じ比で縮めます
-
-次のときは止まります。
-
-- `vertical.lyrics` のファイルが既にある（上書きしない。作り直すときは消してから実行する）
-- `lyrics.file` のファイルが無い、読めない、`PlayResX`・`PlayResY` が無い
 
 ## description
 
@@ -385,7 +380,7 @@ utavideo status [-C <曲フォルダ>]
 utavideo build-all [-C <曲フォルダ>]
 ```
 
-[build](#preview-bg--build--overlay)・[description](#description)・[announce](#announce)・[thumbnail](#thumbnail)（`shorts`・`vertical-ass`・`inst`・`preview-bg`・`overlay`・`release` は対象外）について、今作れるものをまとめて作ります。対象ごとに、次のいずれかに分類します。
+[build](#preview-bg--build--overlay)・[description](#description)・[announce](#announce)・[thumbnail](#thumbnail)（`shorts`・`inst`・`preview-bg`・`overlay`・`release` は対象外）について、今作れるものをまとめて作ります。対象ごとに、次のいずれかに分類します。
 
 | 状態 | 意味 | 表示 |
 |---|---|---|
@@ -439,10 +434,11 @@ utavideo build-all [-C <曲フォルダ>]
 
 縦用 .ass（`vertical.lyrics`）と、そこに置くショートの区間の検査です。縦用 .ass の誤りで本編の `build`・`preview-bg`・`overlay` は止めません。`check` は `[[shorts]]` があるときだけ行い、エラーがあれば終了コード 1 にします。`shorts` はエラーがあれば書き出しません。`--name X` を渡したときの「X だけ」は、そのショートについてだけ検査することです。
 
-| 条件 | 扱い | `check` | `shorts` | `shorts --name X` | `preview-bg --vertical` |
+| 条件 | 扱い | `check` | `shorts` | `shorts --name X` | `preview-bg` |
 |---|---|---|---|---|---|
 | 本編の .ass（`lyrics.file`）の `LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う | エラー | ○（[歌詞](#エラー書き出さない)の検査） | ○ | ○ | ○（本編の .ass があるとき） |
-| 縦用 .ass が無い（`utavideo vertical-ass` で作れる、と表示）・読めない | エラー | ○ | ○ | ○ | ○ |
+| 縦用 .ass が無い（`check`・`shorts` は utavideo preview-bg で作れる、と表示）・読めない | エラー | ○ | ○ | ○ | － |
+| 縦用 .ass が無いとき、本編の歌詞から自動で作れない（`lyrics.file` のファイルが無い、読めない、`PlayResX`・`PlayResY` が無い） | エラー | － | － | － | ○ |
 | 縦用 .ass の `PlayResX`・`PlayResY` が無い・`vertical.size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイル、曲名表示を出すのに使うスタイル（`reframe` は `overlay_text.style`、`blur` は `VerticalBand`）が無い、フォント（曲名表示を含む）が見つからない | エラー | ○ | ○ | ○ | ○ |
 | `blur` で、縦の幅に縮めた本編の映像が `vertical.size` の高さを超える（`video.size` が縦より縦長） | エラー | ○ | ○ | X が `blur` のとき | ○（`blur` のとき） |
 | `[[shorts]]` の `name` に対応する区間の行が無い・2つ以上ある | エラー | ○ | ○ | X だけ | － |
@@ -465,9 +461,9 @@ utavideo build-all [-C <曲フォルダ>]
     - 区間の端がかかる歌詞の行は、縦用 .ass ではなく**本編の .ass**の行で見ます
     - 本編との突き合わせはしません（縦用 .ass に歌詞を置かないため）。はみ出しは、描く行（帯の文字）について見ます
     - 区間に入る行の警告は、描く行（`Vertical` で始まるスタイル）だけを見ます
-    - 曲名表示は帯（縦用 .ass の `VerticalBand` スタイル）に描くので、`overlay_text.style` のスタイルは要りません。代わりに `VerticalBand` のスタイルとフォントが要ります（`vertical-ass` が自動で作ります）
-- 本編の映像を描くとき（`wide = true` か `layout = "blur"` のショート、`blur` の `preview-bg --vertical`）は、本編の .ass とフォントも `build` と同じ条件で検査します（同じ画面を描くため）
-- `layout` で変わる検査（曲名表示のスタイル、`blur` の大きさ）は、`check`・`shorts` では対象のショートの `layout`、`preview-bg --vertical` では `[[shorts]]` で使う `layout`（無ければ `vertical.layout`）で決まります。どのコマンドでも同じ結果になります
+    - 曲名表示は帯（縦用 .ass の `VerticalBand` スタイル）に描くので、`overlay_text.style` のスタイルは要りません。代わりに `VerticalBand` のスタイルとフォントが要ります（`preview-bg` が自動で作ります）
+- 本編の映像を描くとき（`wide = true` か `layout = "blur"` のショート、`blur` の `preview-bg`）は、本編の .ass とフォントも `build` と同じ条件で検査します（同じ画面を描くため）
+- `layout` で変わる検査（曲名表示のスタイル、`blur` の大きさ）は、`check`・`shorts` では対象のショートの `layout`、`preview-bg` では `[[shorts]]` で使う `layout`（無ければ `vertical.layout`）で決まります。どのコマンドでも同じ結果になります
 - 本編の .ass にスタイル `Short` の行があるときの警告は `check` だけです
 
 #### 本編との突き合わせ

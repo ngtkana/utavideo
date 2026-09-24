@@ -150,11 +150,10 @@ utavideo thumbnail              # build/thumbnail/main.png
 縦型のショート（YouTube Shorts など）に使う、縦に組み直した歌詞と、切り抜く区間を用意します。本編の歌詞を入れ終えてから作ります。
 
 ```sh
-utavideo vertical-ass           # src/vertical.ass（本編の src/lyrics.ass は変わらない）
-utavideo preview-bg --vertical  # build/preview/vertical-bg.mp4（縦の下敷き）
+utavideo preview-bg  # src/vertical.ass（無ければ自動で作る）・build/preview/vertical-bg.mp4（縦の下敷き）
 ```
 
-1. `utavideo.toml` に `[vertical]` を書いてから、上のコマンドを実行する。画面の作り方（`layout`）は `"blur"`（既定。本編の映像を上下のぼかした帯に置く）と `"reframe"`（背景を縦に切り取り、縦用 .ass の歌詞を重ねる）から選び（[commands.md](commands.md#shorts)）、背景の残す位置を縦で変えるなら `focus`、`blur` で本編を置く高さを変えるなら `frame_y` も書く
+1. `utavideo.toml` に `[vertical]` を書いてから、上のコマンドを実行する。画面の作り方（`layout`）は `"blur"`（既定。本編の映像を上下のぼかした帯に置く）と `"reframe"`（背景を縦に切り取り、縦用 .ass の歌詞を重ねる）から選び（[commands.md](commands.md#shorts)）、背景の残す位置を縦で変えるなら `focus`、`blur` で本編を置く高さを変えるなら `frame_y` も書く。`[vertical]` があると、`preview-bg` は本編の下敷き（`build/preview/bg.mp4`）と一緒に、縦用 .ass（無ければ本編の歌詞から自動で作る）と縦の下敷き（`build/preview/vertical-bg.mp4`）も書き出す
 2. Aegisub で `src/vertical.ass` を開く。下敷きの `build/preview/vertical-bg.mp4` は、縦用 .ass に書いてあるので開くと読み込まれることがあります。読み込まれなければ、[4.](#4-aegisub-で歌詞を入れる) と同じ手順で動画と音声を開く
 3. 波形を見ながら、切り抜く区間の行を置く（書き方は下の[区間の書き方（文法）](#区間の書き方文法)）
 4. `utavideo.toml` に、同じ名前の `[[shorts]]` を書く
@@ -174,9 +173,9 @@ utavideo shorts                 # build/shorts/<name>.mp4（wide なら build/sh
 utavideo shorts --name chorus   # 1本だけ書き出す
 ```
 
-- `vertical-ass` は、縦用 .ass が既にあると止まります。直した縦用 .ass を上書きしないためです。`layout` は `vertical-ass` を実行する前に決めてください（使う `layout` が `blur` だけなら歌詞の行を写しません）
-- 変換される大きさと座標、変換されない図形は [commands.md](commands.md#vertical-ass) を参照してください
-- 縦用 .ass の曲名表示のスタイル（`reframe` は `Title`、`blur` は `VerticalBand`）を変えたら、`preview-bg --vertical` を実行し直します
+- `preview-bg` は、縦用 .ass が既にあれば作り直しません。直した縦用 .ass を上書きしないためです。作り直すときは、縦用 .ass を消してから実行します。`layout` は、縦用 .ass がまだ無いときに実行する `preview-bg` より前に決めてください（使う `layout` が `blur` だけなら歌詞の行を写しません）
+- 変換される大きさと座標、変換されない図形は [commands.md](commands.md#preview-bg--build--overlay) を参照してください
+- 縦用 .ass の曲名表示のスタイル（`reframe` は `Title`、`blur` は `VerticalBand`）を変えたら、`preview-bg` を実行し直します
 - 後から本編の歌詞を直したら、縦用 .ass も同じように直します。直し忘れは `check` が警告します（[本編との突き合わせ](commands.md#本編との突き合わせ)）。縦での改行の変え方（1行を2行に分ける、2行を1行にまとめる）では警告しません。`blur` では縦に歌詞を置かないので、この警告は出ません
 - 区間の端の音声はフェードします（長さは [`vertical.audio_fade_ms`](config-reference.md#vertical)）。フェードインの間は音が小さいので、区間の頭は歌い出しの少し前に置きます
 - 16:9 版（SNS の告知に添える用）が要るときは、`[[shorts]]` に `wide = true` を書きます

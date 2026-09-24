@@ -394,7 +394,7 @@ def resolve_layout(short: Short, default_layout: Layout) -> Layout:
 def layouts(targets: Sequence[Short], default_layout: Layout) -> tuple[Layout, ...]:
     """縦用 .ass から実際に描く画面の作り方（[[shorts]] で使うもの）。
 
-    [[shorts]] を書く前（vertical-ass・preview-bg --vertical）は vertical.layout だけになる。
+    [[shorts]] を書く前（preview-bg が縦用 .ass や下敷きを作るとき）は vertical.layout だけになる。
     """
     if not targets:
         return (default_layout,)
