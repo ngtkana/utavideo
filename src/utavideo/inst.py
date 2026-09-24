@@ -40,9 +40,12 @@ def keys_in_build(build_dir: Path, slug: str) -> list[int]:
     directory_ = directory(build_dir)
     if not directory_.is_dir():
         return []
+    # slug は [ ] などの glob のメタ文字を含みうるので、glob ではなく startswith で絞り込む
     prefix = f"{slug}-key"
     keys = []
-    for path in directory_.glob(f"{prefix}*.mp4"):
+    for path in directory_.iterdir():
+        if path.suffix != ".mp4" or not path.stem.startswith(prefix):
+            continue
         try:
             keys.append(int(path.stem.removeprefix(prefix)))
         except ValueError:

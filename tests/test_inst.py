@@ -38,6 +38,16 @@ def test_keys_in_build_scans_existing_files_only(tmp_path: Path) -> None:
     assert inst.keys_in_build(build_dir, "song") == [-1, 0, 2]
 
 
+def test_keys_in_build_handles_slugs_with_glob_metacharacters(tmp_path: Path) -> None:
+    """slug は [ ] などの glob のメタ文字を含みうる（song.slug は禁止していない）。"""
+    build_dir = tmp_path / "build"
+    slug = "test[live]"
+    inst.output_path(build_dir, slug, -1).parent.mkdir(parents=True)
+    inst.output_path(build_dir, slug, -1).write_bytes(b"video")
+
+    assert inst.keys_in_build(build_dir, slug) == [-1]
+
+
 @pytest.mark.parametrize(("key", "ratio"), [(0, 1.0), (12, 2.0), (-12, 0.5), (24, 4.0)])
 def test_pitch_ratio(key: int, ratio: float) -> None:
     assert inst.pitch_ratio(key) == pytest.approx(ratio)

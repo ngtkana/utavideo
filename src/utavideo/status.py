@@ -42,7 +42,7 @@ class NamedStatus:
 
 @dataclass(frozen=True)
 class InstKeyStatus:
-    """build/inst/key<N>.mp4 が実在するキー1本分の状態。"""
+    """build/inst/<slug>-key<N>.mp4 が実在するキー1本分の状態。"""
 
     key: int
     output: Path
