@@ -244,7 +244,7 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 utavideo inst [-C <曲フォルダ>] [--keys <キー>] [--lyrics]
 ```
 
-歌唱練習用に、キーを変えた伴奏の動画を `build/inst/key<キー>.mp4`（例: `key-1.mp4`、`key+2.mp4`、`key0.mp4`）に書き出します（[config-reference.md](config-reference.md#inst)）。既定では歌詞は描かず、曲名・アーティスト・キーだけを表示します。
+歌唱練習用に、キーを変えた伴奏の動画を `build/inst/<slug>-key<キー>.mp4`（例: `<slug>-key-1.mp4`、`<slug>-key+2.mp4`、`<slug>-key0.mp4`）に書き出します（[config-reference.md](config-reference.md#inst)）。既定では歌詞は描かず、曲名・アーティスト・キーだけを表示します。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|

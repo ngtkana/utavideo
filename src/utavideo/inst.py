@@ -23,16 +23,16 @@ def key_label(key: int) -> str:
     return f"+{key}" if key > 0 else str(key)
 
 
-def output_path(build_dir: Path, key: int) -> Path:
-    return directory(build_dir) / f"key{key_label(key)}.mp4"
+def output_path(build_dir: Path, slug: str, key: int) -> Path:
+    return directory(build_dir) / f"{slug}-key{key_label(key)}.mp4"
 
 
 def work_ass_path(work_dir: Path, key: int) -> Path:
     return work_dir / "inst" / f"key{key_label(key)}.ass"
 
 
-def keys_in_build(build_dir: Path) -> list[int]:
-    """build/inst/ に実在する key<N>.mp4 のキーを一覧する（昇順）。
+def keys_in_build(build_dir: Path, slug: str) -> list[int]:
+    """build/inst/ に実在する <slug>-key<N>.mp4 のキーを一覧する（昇順）。
 
     inst は --keys で任意のキーを指定でき、[[shorts]] のような事前宣言された個数を
     持たないので、status はここでディレクトリを実スキャンして対象を決める（issue #80）。
@@ -40,10 +40,11 @@ def keys_in_build(build_dir: Path) -> list[int]:
     directory_ = directory(build_dir)
     if not directory_.is_dir():
         return []
+    prefix = f"{slug}-key"
     keys = []
-    for path in directory_.glob("key*.mp4"):
+    for path in directory_.glob(f"{prefix}*.mp4"):
         try:
-            keys.append(int(path.stem.removeprefix("key")))
+            keys.append(int(path.stem.removeprefix(prefix)))
         except ValueError:
             continue
     return sorted(keys)

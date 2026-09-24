@@ -85,7 +85,9 @@ def collect(project: Project) -> Status:
             _named_status("サムネイル", "utavideo thumbnail", inputs.thumbnail_target(project, t), t.name)
             for t in project.config.thumbnails
         ),
-        inst=tuple(_inst_key_status(project, key) for key in inst.keys_in_build(project.build_dir)),
+        inst=tuple(
+            _inst_key_status(project, key) for key in inst.keys_in_build(project.build_dir, project.slug)
+        ),
         release=None if not main.exists or main.stale else _release_status(project, main.output),
     )
 

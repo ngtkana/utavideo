@@ -112,7 +112,7 @@ def inst_target(project: Project, key: int) -> RecordTarget:
     files に含めない。
     """
     config = project.config
-    output = inst.output_path(project.build_dir, key)
+    output = inst.output_path(project.build_dir, project.slug, key)
     audio_file = (("inst.audio", project.inst_audio_path),) if config.inst.audio is not None else ()
     return RecordTarget(
         output,

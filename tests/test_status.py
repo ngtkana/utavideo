@@ -153,7 +153,8 @@ def test_editing_lyrics_marks_only_the_built_key_stale(project: Path) -> None:
     _record_inst_build(project, -1)
     lyrics = project / "src/lyrics.ass"
     lyrics.write_text(lyrics.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-    later = inst.output_path(Project.load(project).build_dir, -1).stat().st_mtime + 10
+    loaded = Project.load(project)
+    later = inst.output_path(loaded.build_dir, loaded.slug, -1).stat().st_mtime + 10
     os.utime(lyrics, (later, later))
 
     output = _status(project)
@@ -165,7 +166,8 @@ def test_all_keys_sharing_the_same_lyrics_file_go_stale_together(project: Path) 
     _record_inst_build(project, 2)
     lyrics = project / "src/lyrics.ass"
     lyrics.write_text(lyrics.read_text(encoding="utf-8") + "\n", encoding="utf-8")
-    later = inst.output_path(Project.load(project).build_dir, -1).stat().st_mtime + 10
+    loaded = Project.load(project)
+    later = inst.output_path(loaded.build_dir, loaded.slug, -1).stat().st_mtime + 10
     os.utime(lyrics, (later, later))
 
     output = _status(project)

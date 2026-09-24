@@ -937,7 +937,7 @@ def test_preview_bg_vertical_follows_the_layouts_the_shorts_use(project: Path) -
 def test_inst_writes_one_video_per_key_without_lyrics(project: Path) -> None:
     invoke("inst", "-C", str(project), "--keys", "-1,2")
 
-    minus_one, plus_two = project / "build/inst/key-1.mp4", project / "build/inst/key+2.mp4"
+    minus_one, plus_two = project / "build/inst/test-key-1.mp4", project / "build/inst/test-key+2.mp4"
     for output in (minus_one, plus_two):
         video, audio = _stream(_probe(output), "video"), _stream(_probe(output), "audio")
         assert (video["codec_name"], video["width"], video["height"]) == ("h264", 320, 180)
@@ -956,7 +956,7 @@ def test_inst_writes_one_video_per_key_without_lyrics(project: Path) -> None:
 @pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")
 def test_inst_defaults_to_key_zero(project: Path) -> None:
     invoke("inst", "-C", str(project))
-    assert (project / "build/inst/key0.mp4").is_file()
+    assert (project / "build/inst/test-key0.mp4").is_file()
 
 
 def test_inst_requires_its_own_audio_setting(project: Path) -> None:
@@ -975,7 +975,7 @@ def test_inst_requires_its_own_audio_setting(project: Path) -> None:
 def test_inst_uses_its_own_audio_not_the_main_track(project: Path) -> None:
     """本編は 440Hz、inst.audio は 220Hz のサイン波（project フィクスチャ）。音を聞き分けて確かめる。"""
     invoke("inst", "-C", str(project))
-    output = project / "build/inst/key0.mp4"
+    output = project / "build/inst/test-key0.mp4"
 
     near_220 = _mean_volume_db(output, band=(190, 260))
     near_440 = _mean_volume_db(output, band=(410, 470))
@@ -1001,7 +1001,7 @@ def test_inst_falls_back_to_atempo_when_rubberband_is_unavailable(
     result = invoke("inst", "-C", str(project), "--keys", "-1,2")
 
     assert "asetrate" in result.output or "atempo" in result.output
-    minus_one, plus_two = project / "build/inst/key-1.mp4", project / "build/inst/key+2.mp4"
+    minus_one, plus_two = project / "build/inst/test-key-1.mp4", project / "build/inst/test-key+2.mp4"
     assert minus_one.is_file() and plus_two.is_file()
     assert float(_probe(minus_one)["format"]["duration"]) == pytest.approx(
         float(_probe(plus_two)["format"]["duration"]), abs=0.05
@@ -1028,7 +1028,7 @@ def test_inst_measures_loudness_once_for_all_keys(project: Path, monkeypatch: py
 def test_inst_normalizes_loudness_to_the_target(project: Path) -> None:
     invoke("inst", "-C", str(project))
 
-    measured = measure_loudness(project / "build/inst/key0.mp4")
+    measured = measure_loudness(project / "build/inst/test-key0.mp4")
     assert float(measured.input_i) == pytest.approx(-16.0, abs=1.0)
 
 
@@ -1044,7 +1044,7 @@ def test_inst_with_lyrics_option_includes_the_lyrics_line(project: Path) -> None
 def test_inst_with_lyrics_and_multiple_keys_keeps_duration(project: Path) -> None:
     invoke("inst", "-C", str(project), "--lyrics", "--keys", "-1,2")
 
-    minus_one, plus_two = project / "build/inst/key-1.mp4", project / "build/inst/key+2.mp4"
+    minus_one, plus_two = project / "build/inst/test-key-1.mp4", project / "build/inst/test-key+2.mp4"
     assert minus_one.is_file() and plus_two.is_file()
     assert float(_probe(minus_one)["format"]["duration"]) == pytest.approx(
         float(_probe(plus_two)["format"]["duration"]), abs=0.05
