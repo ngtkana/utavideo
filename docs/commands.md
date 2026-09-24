@@ -437,7 +437,8 @@ utavideo build-all [-C <曲フォルダ>]
 | 条件 | 扱い | `check` | `shorts` | `shorts --name X` | `preview-bg` |
 |---|---|---|---|---|---|
 | 本編の .ass（`lyrics.file`）の `LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う | エラー | ○（[歌詞](#エラー書き出さない)の検査） | ○ | ○ | ○（本編の .ass があるとき） |
-| 縦用 .ass が無い（`check`・`shorts` は utavideo preview-bg で作れる、と表示）・読めない | エラー | ○ | ○ | ○ | － |
+| 縦用 .ass が無い（`check`・`shorts` は utavideo preview-bg で作れる、と表示。`preview-bg` は自動で作る） | エラー | ○ | ○ | ○ | － |
+| 縦用 .ass が読めない（無いのではなく、既にあるファイルが壊れているとき） | エラー | ○ | ○ | ○ | ○ |
 | 縦用 .ass が無いとき、本編の歌詞から自動で作れない（`lyrics.file` のファイルが無い、読めない、`PlayResX`・`PlayResY` が無い） | エラー | － | － | － | ○ |
 | 縦用 .ass の `PlayResX`・`PlayResY` が無い・`vertical.size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイル、曲名表示を出すのに使うスタイル（`reframe` は `overlay_text.style`、`blur` は `VerticalBand`）が無い、フォント（曲名表示を含む）が見つからない | エラー | ○ | ○ | ○ | ○ |
 | `blur` で、縦の幅に縮めた本編の映像が `vertical.size` の高さを超える（`video.size` が縦より縦長） | エラー | ○ | ○ | X が `blur` のとき | ○（`blur` のとき） |

@@ -548,6 +548,26 @@ def test_preview_bg_keeps_edits_to_an_existing_vertical_ass(project: Path) -> No
     assert vertical.read_text(encoding="utf-8") == edited
 
 
+def test_preview_bg_rebases_the_vertical_bg_path_for_a_vertical_ass_in_another_folder(
+    project: Path,
+) -> None:
+    """vertical.lyrics が本編の .ass と違うフォルダにあっても、下敷きへの相対パスを合わせる。"""
+    _with_shorts(project, shorts="", extra='lyrics = "src/shorts/vertical.ass"')
+    invoke("preview-bg", "-C", str(project))
+    text = (project / "src/shorts/vertical.ass").read_text(encoding="utf-8")
+    assert "Video File: ../../build/preview/vertical-bg.mp4" in text
+
+
+def test_preview_bg_needs_the_lyrics_before_creating_the_vertical_ass(project: Path) -> None:
+    """本編の歌詞が無ければ preview-bg 全体が止まり、縦用 .ass は作られない。"""
+    _with_shorts(project, shorts="")
+    (project / "src/lyrics.ass").unlink()
+    result = runner.invoke(app, ["preview-bg", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "lyrics.file" in result.output
+    assert not (project / "src/vertical.ass").exists()
+
+
 def test_preview_bg_for_blur_creates_a_vertical_ass_without_lyrics(project: Path) -> None:
     _with_shorts(project, shorts="", extra='layout = "blur"')
     output = invoke("preview-bg", "-C", str(project)).output
