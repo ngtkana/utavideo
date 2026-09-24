@@ -168,8 +168,8 @@ _NEXT_STEPS = """次にやること（詳しくは docs/workflow.md）:
   3. utavideo check → utavideo build → utavideo release
   4. utavideo thumbnail --bg-only → Aegisub で src/thumbnail.ass を開いて文字を組む → utavideo thumbnail
   5. 縦型のショートを作るなら、utavideo.toml に [vertical]（画面の作り方 layout）を書く →
-     utavideo vertical-ass → utavideo preview-bg --vertical → Aegisub で src/vertical.ass を組み、
-     区間を置く → utavideo.toml に [[shorts]] → utavideo shorts"""
+     utavideo preview-bg（縦用 .ass を自動で作り、下敷きも書き出す）→ Aegisub で src/vertical.ass を
+     組み、区間を置く → utavideo.toml に [[shorts]] → utavideo shorts"""
 
 
 @app.command()
@@ -375,7 +375,7 @@ def check(project_dir: ProjectOption = None) -> None:
     issues += analyze_thumbnails(project, config.thumbnails, bg_only=False, search=search).issues
     if analysis.lyrics is not None:
         issues += shorts.main_lyrics_issues(analysis.lyrics)
-    # ショートを作らない曲では縦用 .ass を見ない（vertical-ass を試しただけの曲で止めない）
+    # ショートを作らない曲では縦用 .ass を見ない（[vertical] だけ試しただけの曲で止めない）
     if config.shorts:
         size = config.vertical.size
         console.print(f"  縦用 .ass: {config.vertical.lyrics}（{size[0]}x{size[1]}）", markup=False)
@@ -397,26 +397,21 @@ def check(project_dir: ProjectOption = None) -> None:
 
 @app.command("preview-bg")
 @_handle_errors
-def preview_bg(
-    project_dir: ProjectOption = None,
-    vertical_: Annotated[
-        bool,
-        typer.Option(
-            "--vertical",
-            help="縦型のショートの下敷きを build/preview/vertical-bg.mp4 に書き出す（縦用 .ass を使う）",
-        ),
-    ] = False,
-) -> None:
-    """歌詞以外（背景・曲名表示・音声）を合成した、Aegisub 用のプレビュー動画を書き出す。"""
-    if vertical_:
-        _render_vertical_preview(project_dir)
-    else:
-        _render(project_dir, "preview", "preview-bg")
+def preview_bg(project_dir: ProjectOption = None) -> None:
+    """歌詞以外（背景・曲名表示・音声）を合成した、Aegisub 用のプレビュー動画を書き出す。
 
-
-def _render_vertical_preview(project_dir: Path | None) -> None:
-    require_tools()
+    utavideo.toml に [vertical] があれば、縦型のショートの下敷き（build/preview/vertical-bg.mp4）も
+    作る。縦用 .ass（vertical.lyrics）がまだ無ければ、本編の歌詞から自動で作る。
+    """
+    _render(project_dir, "preview", "preview-bg")
     project = _load_project(project_dir)
+    if "vertical" in project.config.model_fields_set:
+        _ensure_vertical_ass(project)
+        _render_vertical_preview(project)
+
+
+def _render_vertical_preview(project: Project) -> None:
+    require_tools()
     layouts = shorts.layouts(project.config.shorts, project.config.vertical.layout)
     # 下敷きは、実際に使う画面に合わせる。blur が1本でもあれば、真ん中に本編の映像を置く
     layout_: Layout = "blur" if "blur" in layouts else "reframe"
@@ -450,7 +445,7 @@ def _render_vertical_preview(project_dir: Path | None) -> None:
         vertical.focus(project.config.vertical, project.config.video.focus),
         project.work_dir / "vertical-preview.ass",
         vertical.preview_bg_output(project.build_dir),
-        "preview-bg --vertical",
+        "preview-bg（縦）",
         frame=frame,
     )
     write_video(project, script, target, duration_s, font_files, None)
@@ -713,18 +708,17 @@ def inst_command(
         write_video(project, script, target, analysis.duration_s, analysis.font_files, records[key])
 
 
-@app.command("vertical-ass")
-@_handle_errors
-def vertical_ass(project_dir: ProjectOption = None) -> None:
-    """本編の歌詞 .ass から、縦型のショート用の .ass（vertical.lyrics）を作る。既にあれば止まる。"""
-    project = _load_project(project_dir)
+def _ensure_vertical_ass(project: Project) -> None:
+    """本編の歌詞 .ass から、縦型のショート用の .ass（vertical.lyrics）を作る。既にあれば何もしない。
+
+    作り直すときは、消してから preview-bg を実行する（vertical.lyrics を上書きしない）。
+    """
     config = project.config
     dest = vertical.lyrics_path(project.root, config.vertical)
     if dest.exists():
-        _fail(f"既にあります: {dest}（上書きしません。作り直すときは、消してから実行します）")
+        return
+    # preview-bg が先に本編の歌詞（lyrics.file）の存在を検査しているので、ここでは検査しない
     source = project.lyrics_path
-    if not source.is_file():
-        _fail(f"lyrics.file のファイルがありません: {source}")
     size = config.vertical.size
     layouts = shorts.layouts(config.shorts, config.vertical.layout)
     # blur では歌詞が本編の映像に入るので、縦用 .ass には写さない（Aegisub で二重に見えないように）。

@@ -444,7 +444,7 @@ def _add_vertical_lines(project: Path, *lines: str) -> None:
 def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Path) -> None:
     # 本編との突き合わせ（歌詞を縦用 .ass に写す reframe）を見るテストなので layout を明示する
     _with_shorts(project, shorts="", extra='layout = "reframe"')
-    invoke("vertical-ass", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
     assert "縦用 .ass" not in invoke("check", "-C", str(project)).output
 
     _with_shorts(project, extra='layout = "reframe"')
@@ -452,7 +452,7 @@ def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Pat
     output = invoke("check", "-C", str(project)).output
     assert "縦用 .ass: src/vertical.ass（180x320）" in output
     assert "ショート: chorus" in output
-    assert "問題ありません" in output  # vertical-ass で写した歌詞は、本編と食い違わない
+    assert "問題ありません" in output  # 自動で写した歌詞は、本編と食い違わない
 
     lyrics = project / "src/lyrics.ass"
     lyrics.write_text(lyrics.read_text(encoding="utf-8").replace(",AAAA", ",AAAB"), encoding="utf-8")
@@ -476,9 +476,9 @@ def test_check_reports_a_missing_vertical_ass_and_sections(project: Path) -> Non
     _with_shorts(project)
     result = runner.invoke(app, ["check", "-C", str(project)])
     assert result.exit_code == 1
-    assert "utavideo vertical-ass で作れます" in result.output
+    assert "utavideo preview-bg で作れます" in result.output
 
-    invoke("vertical-ass", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
     result = runner.invoke(app, ["check", "-C", str(project)])
     assert result.exit_code == 1
     assert "ショート chorus: 区間の行" in result.output
@@ -494,7 +494,7 @@ def test_check_reports_a_missing_vertical_ass_and_sections(project: Path) -> Non
 def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
     # 縦用 .ass の歌詞の行（reframe）のはみ出し・突き合わせを見るテストなので layout を明示する
     _with_shorts(project, extra='layout = "reframe"')
-    invoke("vertical-ass", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
     long_line = "A" * 20
     _add_vertical_lines(
         project,
@@ -512,17 +512,17 @@ def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
     assert "本編との突き合わせ: 本編に時刻の重なる行がありません" in output
 
 
-def test_preview_bg_vertical_uses_the_vertical_size_and_focus(project: Path) -> None:
+def test_preview_bg_creates_the_vertical_ass_and_writes_both_previews(project: Path) -> None:
+    """[vertical] があれば、vertical.lyrics が無くても preview-bg が自動で作り、両方の下敷きを書き出す。"""
     _with_shorts(project, shorts="")
-    result = runner.invoke(app, ["preview-bg", "--vertical", "-C", str(project)])
-    assert result.exit_code == 1
-    assert "utavideo vertical-ass で作れます" in result.output
+    invoke("preview-bg", "-C", str(project))
+    assert (project / "src/vertical.ass").is_file()
+    assert (project / "build/preview/bg.mp4").is_file()  # 縦だけでなく本編の下敷きも作る
 
-    invoke("vertical-ass", "-C", str(project))
     frames = []
     for focus in ("[0, 0.5]", "[1, 0.5]"):
         _with_shorts(project, shorts="", extra=f"focus = {focus}")
-        invoke("preview-bg", "--vertical", "-C", str(project))
+        invoke("preview-bg", "-C", str(project))
         output = project / "build/preview/vertical-bg.mp4"
         info = _probe(output)
         video = _stream(info, "video")
@@ -531,7 +531,58 @@ def test_preview_bg_vertical_uses_the_vertical_size_and_focus(project: Path) -> 
         frames.append(_pixels(output))
     assert frames[0] != frames[1]
     assert (project / "build/.work/vertical-preview.ass").is_file()
-    assert not (project / "build/preview/bg.mp4").exists()
+
+
+def test_preview_bg_keeps_edits_to_an_existing_vertical_ass(project: Path) -> None:
+    _with_shorts(project, shorts="")
+    invoke("preview-bg", "-C", str(project))
+    vertical = project / "src/vertical.ass"
+    text = vertical.read_text(encoding="utf-8")
+    assert "PlayResX: 180" in text
+    assert "Video File: ../build/preview/vertical-bg.mp4" in text
+
+    # 利用者が直した縦用 .ass を、次の preview-bg で上書きしない
+    edited = text + "Dialogue: 0,0:00:00.00,0:00:01.00,VerticalBand,,0,0,0,,編集済み\n"
+    vertical.write_text(edited, encoding="utf-8")
+    invoke("preview-bg", "-C", str(project))
+    assert vertical.read_text(encoding="utf-8") == edited
+
+
+def test_preview_bg_rebases_the_vertical_bg_path_for_a_vertical_ass_in_another_folder(
+    project: Path,
+) -> None:
+    """vertical.lyrics が本編の .ass と違うフォルダにあっても、下敷きへの相対パスを合わせる。"""
+    _with_shorts(project, shorts="", extra='lyrics = "src/shorts/vertical.ass"')
+    invoke("preview-bg", "-C", str(project))
+    text = (project / "src/shorts/vertical.ass").read_text(encoding="utf-8")
+    assert "Video File: ../../build/preview/vertical-bg.mp4" in text
+
+
+def test_preview_bg_needs_the_lyrics_before_creating_the_vertical_ass(project: Path) -> None:
+    """本編の歌詞が無ければ preview-bg 全体が止まり、縦用 .ass は作られない。"""
+    _with_shorts(project, shorts="")
+    (project / "src/lyrics.ass").unlink()
+    result = runner.invoke(app, ["preview-bg", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "lyrics.file" in result.output
+    assert not (project / "src/vertical.ass").exists()
+
+
+def test_preview_bg_for_blur_creates_a_vertical_ass_without_lyrics(project: Path) -> None:
+    _with_shorts(project, shorts="", extra='layout = "blur"')
+    output = invoke("preview-bg", "-C", str(project)).output
+    assert "曲名表示は自動で帯に入る" in output
+    text = (project / "src/vertical.ass").read_text(encoding="utf-8")
+    # 歌詞は本編の映像に入るので写さない。スタイルは Aegisub で選べるように写す
+    assert "Dialogue:" not in text
+    assert "Style: VerticalBand," in text
+
+
+def test_preview_bg_vertical_ass_follows_the_layouts_the_shorts_use(project: Path) -> None:
+    """vertical.layout ではなく、[[shorts]] で実際に使う layout で決める。"""
+    _with_shorts(project, shorts='[[shorts]]\nname = "chorus"\nlayout = "blur"\n', extra='layout = "reframe"')
+    invoke("preview-bg", "-C", str(project))
+    assert "Dialogue:" not in (project / "src/vertical.ass").read_text(encoding="utf-8")
 
 
 def test_layout_res_that_squashes_the_lyrics_stops_the_build(project: Path) -> None:
@@ -577,7 +628,7 @@ def _with_section(
     background: str = "bg.png",
 ) -> None:
     _with_shorts(project, shorts=shorts, extra=extra, background=background)
-    invoke("vertical-ass", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
     _add_vertical_lines(project, line)
 
 
@@ -758,7 +809,7 @@ def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_ban
     work = (project / "build/.work/shorts/chorus.ass").read_text(encoding="utf-8")
     assert work.count("Dialogue:") == 2
     assert "VerticalBand,,0,0,0,,AA" in work
-    # 曲名表示は本編の映像ではなく、縦用 .ass の帯（vertical-ass が作るスタイル VerticalBand）に描く
+    # 曲名表示は本編の映像ではなく、縦用 .ass の帯（自動で作るスタイル VerticalBand）に描く
     assert "VerticalBand,,0,0,0,,テスト / テスター" in work
     frame = (project / "build/.work/shorts/frame/chorus.ass").read_text(encoding="utf-8")
     assert "テスト / テスター" not in frame and "AAAA" in frame
@@ -844,8 +895,7 @@ def test_check_rejects_a_video_size_taller_than_the_vertical_size(project: Path)
 
 def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> None:
     _with_shorts(project, shorts="", extra='layout = "blur"\nframe_y = 0')
-    invoke("vertical-ass", "-C", str(project))
-    invoke("preview-bg", "--vertical", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
 
     output = project / "build/preview/vertical-bg.mp4"
     video = _stream(_probe(output), "video")
@@ -860,7 +910,7 @@ def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> Non
 def test_preview_bg_vertical_follows_the_layouts_the_shorts_use(project: Path) -> None:
     """vertical.layout = "reframe" でも、blur のショートがあれば下敷きを blur の画面にする。"""
     _with_section(project, shorts='[[shorts]]\nname = "chorus"\nlayout = "blur"\n')
-    invoke("preview-bg", "--vertical", "-C", str(project))
+    invoke("preview-bg", "-C", str(project))
     # 完成図と同じく、真ん中に本編の映像（歌詞入り）を置く
     frame = (project / "build/.work/vertical-preview-frame.ass").read_text(encoding="utf-8")
     assert "AAAA" in frame

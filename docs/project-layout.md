@@ -9,7 +9,7 @@
 ├── src/                 # 動画の材料（自分で用意するもの）
 │   ├── lyrics.ass       # 歌詞・コメント（Aegisub で編集）
 │   ├── thumbnail.ass    # サムネイルの文字（Aegisub で編集。サイズ違いは thumbnail-square.ass など）
-│   ├── vertical.ass     # 縦型のショートの歌詞（utavideo vertical-ass で作り、Aegisub で編集）
+│   ├── vertical.ass     # 縦型のショートの歌詞（utavideo preview-bg が自動で作り、Aegisub で編集）
 │   ├── mix/             # 音源
 │   ├── bg/              # 背景の画像 / GIF / 動画
 │   ├── avatar/          # アバターなどの動画素材
@@ -19,7 +19,7 @@
 │   ├── overlay.mov
 │   ├── preview/
 │   │   ├── bg.mp4
-│   │   └── vertical-bg.mp4  # utavideo preview-bg --vertical（縦用 .ass の下敷き）
+│   │   └── vertical-bg.mp4  # utavideo preview-bg（縦用 .ass の下敷き。[vertical] があれば作る）
 │   ├── title.txt        # utavideo description
 │   ├── description.txt
 │   ├── thumbnail/       # utavideo thumbnail

@@ -216,7 +216,7 @@ class Vertical(_Model):
     """縦型のショートの共通設定。"""
 
     size: VideoSize = (1080, 1920)
-    layout: Layout = "blur"  # 画面の作り方（vertical-ass が歌詞を写すかもこれで決まる）
+    layout: Layout = "blur"  # 画面の作り方（縦用 .ass に歌詞を写すかもこれで決まる）
     lyrics: Path = Path("src/vertical.ass")
     focus: Focus | None = None  # None なら video.focus
     frame_y: Ratio = 0.5  # blur で本編の上端を (H - h) * frame_y に置く

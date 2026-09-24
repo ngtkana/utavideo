@@ -188,7 +188,7 @@ def analyze_vertical(
     path = vertical.lyrics_path(project.root, config.vertical)
     if not path.is_file():
         message = (
-            f"縦用 .ass（vertical.lyrics）のファイルがありません: {path}（utavideo vertical-ass で作れます）"
+            f"縦用 .ass（vertical.lyrics）のファイルがありません: {path}（utavideo preview-bg で作れます）"
         )
         return VerticalAnalysis([*sizing, subs.Issue("error", message)], None, ())
     try:
