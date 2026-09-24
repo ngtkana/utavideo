@@ -106,15 +106,20 @@ def thumbnail_target(project: Project, thumb: Thumbnail) -> RecordTarget:
 
 
 def inst_target(project: Project, key: int) -> RecordTarget:
-    """inst は --keys で任意のキーを指定でき、事前宣言された個数を持たないので、キーごとに作る。"""
+    """inst は --keys で任意のキーを指定でき、事前宣言された個数を持たないので、キーごとに作る。
+
+    inst.audio が未設定のとき（analyze_inst がエラーにして書き出しまで進まない）は、追う音源が無いので
+    files に含めない。
+    """
     config = project.config
     output = inst.output_path(project.build_dir, key)
+    audio_file = (("inst.audio", project.inst_audio_path),) if config.inst.audio is not None else ()
     return RecordTarget(
         output,
         project.inst_inputs_record(inst.key_label(key)),
         (
             (PROJECT_CONFIG_NAME, project.config_path),
-            ("audio.file", project.audio_path),
+            *audio_file,
             ("video.background", project.background_path),
             ("lyrics.file", project.lyrics_path),
         ),

@@ -686,7 +686,7 @@ def inst_command(
             markup=False,
         )
     loudnorm_target = LoudnormTarget()
-    measured = measure_loudness(project.audio_path.absolute(), loudnorm_target)
+    measured = measure_loudness(project.inst_audio_path.absolute(), loudnorm_target)
 
     duration_ms = round(analysis.duration_s * 1000)
     video = project.config.video
@@ -704,6 +704,7 @@ def inst_command(
             f"inst {label}",
             pitch=graph.Pitch(inst.pitch_ratio(key), method),
             loudnorm=graph.Loudnorm(loudnorm_target, measured),
+            audio=project.inst_audio_path,
         )
         write_video(project, script, target, analysis.duration_s, analysis.font_files, records[key])
 

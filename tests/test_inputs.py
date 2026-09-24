@@ -140,6 +140,27 @@ def test_inst_config_entry_change_is_detected(project: Path) -> None:
     assert "utavideo.toml" in stale
 
 
+def test_inst_target_omits_audio_file_when_inst_audio_is_unset(project: Path) -> None:
+    """inst.audio が無いときは、追う音源が無いので files に含めない（analyze_inst がエラーにする）。"""
+    loaded = Project.load(project)
+    names = [name for name, _ in inputs.inst_target(loaded, 0).files]
+    assert "inst.audio" not in names
+
+
+def test_inst_stale_detects_inst_audio_content_changes(project: Path) -> None:
+    (project / "src/mix/inst.wav").write_bytes(b"inst-audio")
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    (project / "utavideo.toml").write_text(toml + '\n[inst]\naudio = "src/mix/inst.wav"\n', encoding="utf-8")
+    _record_inst_build(project, -1)
+
+    (project / "src/mix/inst.wav").write_bytes(b"changed")
+
+    loaded = Project.load(project)
+    stale = inputs.stale_inputs(inputs.inst_target(loaded, -1))
+    assert stale is not None
+    assert "inst.audio" in stale
+
+
 def test_two_inst_keys_have_independent_records(project: Path) -> None:
     _record_inst_build(project, -1)
     _record_inst_build(project, 2)

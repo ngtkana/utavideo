@@ -156,11 +156,12 @@ SNS の告知文の中身です。この表があると、`check` が告知文�
 
 ## [inst]
 
-`utavideo inst` が書き出す、歌唱練習用の動画に表示する文字です。既定では歌詞は描かず、この文字だけを表示します（`inst --lyrics` を付けると本編と同じ歌詞も焼き込みます。[commands.md](commands.md#inst)）。
+`utavideo inst`（歌唱練習用の動画）が使う音源と、表示する文字です。既定では歌詞は描かず、この文字だけを表示します（`inst --lyrics` を付けると本編と同じ歌詞も焼き込みます。[commands.md](commands.md#inst)）。
 
 | 項目 | 型 | 既定値 | 説明 |
 |---|---|---|---|
 | `text` | 文字列 | `"{title} / {artist}（Key: {key}）"` | 表示する文字。`{title}`・`{artist}`・`{label}`・`{key}` が使える。スタイルは `[overlay_text]` の `style` を使う |
+| `audio` | パス | 必須（`inst` を使うとき） | inst に使う音源。声を抜いた伴奏など、本編の `audio.file` とは別のファイルを指定する |
 
 ## ユーザー設定（~/.config/utavideo/config.toml）
 

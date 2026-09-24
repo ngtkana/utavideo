@@ -27,7 +27,7 @@ class Analysis:
 def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = None) -> Analysis:
     """書き出しに必要なものが揃っているかを調べる。preview では歌詞の行の中身は問わない。"""
     config = project.config
-    issues, duration_s = audio_issues(project)
+    issues, duration_s = audio_issues(project.audio_path, label="audio.file")
     if not project.lyrics_path.is_file():
         issues.append(subs.Issue("error", f"lyrics.file のファイルがありません: {project.lyrics_path}"))
     if mode != "overlay":
@@ -47,14 +47,13 @@ def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = No
     return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index)
 
 
-def audio_issues(project: Project) -> tuple[list[subs.Issue], float | None]:
-    """音源のファイルと音声の検査と、音源の長さ（秒。読めなければ None）。"""
-    path = project.audio_path
+def audio_issues(path: Path, *, label: str) -> tuple[list[subs.Issue], float | None]:
+    """音源のファイルと音声の検査と、長さ（秒。読めなければ None）。label はエラーに使う設定項目名。"""
     if not path.is_file():
-        return [subs.Issue("error", f"audio.file のファイルがありません: {path}")], None
+        return [subs.Issue("error", f"{label} のファイルがありません: {path}")], None
     audio = probe_audio(path)
     if not audio.has_sound:
-        return [subs.Issue("error", f"audio.file に音声が入っていません: {path}")], audio.duration_s
+        return [subs.Issue("error", f"{label} に音声が入っていません: {path}")], audio.duration_s
     return [], audio.duration_s
 
 
@@ -121,7 +120,7 @@ def vertical_inputs(project: Project, search: FontSearch, *, draws_main: bool) -
     """
     if draws_main:
         return analyze(project, "final", search)
-    issues, duration_s = audio_issues(project)
+    issues, duration_s = audio_issues(project.audio_path, label="audio.file")
     issues += background_issues(project)
     lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
     if lyrics is not None:
@@ -139,7 +138,12 @@ def analyze_inst(
     analyze() の preview と同じやり方）。
     """
     config = project.config
-    issues, duration_s = audio_issues(project)
+    if config.inst.audio is None:
+        message = (
+            "inst.audio が設定されていません（本編の audio.file とは別の、声を抜いた音源を指定してください）"
+        )
+        return Analysis([subs.Issue("error", message)], None, None, ())
+    issues, duration_s = audio_issues(project.inst_audio_path, label="inst.audio")
     issues += background_issues(project)
     if not project.lyrics_path.is_file():
         message = f"lyrics.file のファイルがありません: {project.lyrics_path}（曲名表示のスタイルに使います）"

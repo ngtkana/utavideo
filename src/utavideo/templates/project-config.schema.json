@@ -629,12 +629,25 @@
     },
     "inst": {
       "additionalProperties": false,
-      "description": "歌唱練習用の動画（inst）に描く、曲名・キーの表示。",
+      "description": "歌唱練習用の動画（inst）に描く、曲名・キーの表示と、使う音源。",
       "properties": {
         "text": {
           "default": "{title} / {artist}（Key: {key}）",
           "title": "Text",
           "type": "string"
+        },
+        "audio": {
+          "anyOf": [
+            {
+              "format": "path",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Audio"
         }
       },
       "title": "Inst",
