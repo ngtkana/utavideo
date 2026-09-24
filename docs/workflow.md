@@ -156,7 +156,7 @@ utavideo preview-bg --vertical  # build/preview/vertical-bg.mp4（縦の下敷�
 
 1. `utavideo.toml` に `[vertical]` を書いてから、上のコマンドを実行する。画面の作り方（`layout`）は `"blur"`（既定。本編の映像を上下のぼかした帯に置く）と `"reframe"`（背景を縦に切り取り、縦用 .ass の歌詞を重ねる）から選び（[commands.md](commands.md#shorts)）、背景の残す位置を縦で変えるなら `focus`、`blur` で本編を置く高さを変えるなら `frame_y` も書く
 2. Aegisub で `src/vertical.ass` を開く。下敷きの `build/preview/vertical-bg.mp4` は、縦用 .ass に書いてあるので開くと読み込まれることがあります。読み込まれなければ、[4.](#4-aegisub-で歌詞を入れる) と同じ手順で動画と音声を開く
-3. 波形を見ながら、切り抜く区間に行を置き、スタイルを `Short`、本文をショートの名前（例: `chorus`）にして、コメント行にする。区間の頭は、歌い出しの少し前に置く
+3. 波形を見ながら、切り抜く区間の行を置く（書き方は下の[区間の書き方（文法）](#区間の書き方文法)）
 4. `utavideo.toml` に、同じ名前の `[[shorts]]` を書く
 
 ```toml
@@ -181,6 +181,13 @@ utavideo shorts --name chorus   # 1本だけ書き出す
 - 区間の端の音声はフェードします（長さは [`vertical.audio_fade_ms`](config-reference.md#vertical)）。フェードインの間は音が小さいので、区間の頭は歌い出しの少し前に置きます
 - 16:9 版（SNS の告知に添える用）が要るときは、`[[shorts]]` に `wide = true` を書きます
 - 区間の長さが投稿先の上限を超えると警告します（[ショートの検査](commands.md#ショートの検査)）
+
+### 区間の書き方（文法）
+
+- 1区間 = スタイル `Short` のコメント行1本（本文を `chorus` にすると `[[shorts]] name = "chorus"` と対応します）
+- 区間の開始・終了 = その行の開始・終了時刻。Aegisub 上での行の長さが、そのまま区間の長さになります
+- 本文 = `[[shorts]]` の `name` と一致させる（前後の空白を除き、大文字小文字も含めて比べます）
+- エラーになる条件（区間の行が無い・2つ以上ある、Dialogue になっている、終了が始まり以前・音源の長さを超える、など）は[ショートの検査](commands.md#ショートの検査)を参照してください
 
 ## 動画編集ソフトと組み合わせる
 
