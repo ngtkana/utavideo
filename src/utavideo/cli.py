@@ -20,6 +20,7 @@ from utavideo import (
     graph,
     inputs,
     inst,
+    layers,
     sample,
     shorts,
     status,
@@ -36,6 +37,7 @@ from utavideo.analyze import (
     analyze_vertical,
     background_issues,
     font_missing_message,
+    layer_issues,
 )
 from utavideo.config import (
     PROJECT_CONFIG_NAME,
@@ -149,7 +151,15 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
         "overlay": project.overlay_output,
     }[mode]
     video = project.config.video
-    target = VideoTarget(mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label)
+    # overlay は背景の無い透過動画（動画編集ソフトで自分の背景に重ねる用）なので、[[layers]] は重ねない
+    layer_specs = (
+        ()
+        if mode == "overlay"
+        else tuple(layers.spec(project.root, layer) for layer in project.config.layers)
+    )
+    target = VideoTarget(
+        mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label, layers=layer_specs
+    )
     return write_video(project, script, target, analysis.duration_s, analysis.font_files, record)
 
 
@@ -438,7 +448,7 @@ def _render_thumbnail_bg(project_dir: Path | None, target: str) -> None:
     thumbnails = _select_named(
         project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
     )
-    issues = background_issues(project)
+    issues = background_issues(project) + layer_issues(project)
     analysis = analyze_thumbnails(project, thumbnails, bg_only=True)
     issues += analysis.issues
     _print_issues(issues)
@@ -473,7 +483,8 @@ def _render_vertical_preview(project: Project) -> None:
     # 下敷きも完成図と同じ画面にする。本編の歌詞は真ん中の映像に入れ、縦用 .ass の行は入れない
     assert inputs.lyrics is not None
     frame_ass = frame_script(project, inputs.lyrics, duration_ms, search.index)
-    frame = Frame(frame_ass, project.work_dir / "vertical-preview-frame.ass")
+    layer_specs = tuple(layers.spec(project.root, layer) for layer in project.config.layers)
+    frame = Frame(frame_ass, project.work_dir / "vertical-preview-frame.ass", layers=layer_specs)
     font_files = checked.font_files + inputs.font_files
     target = VideoTarget(
         "preview",
@@ -683,6 +694,8 @@ def shorts_command(
     font_files = analysis.font_files + vertical_analysis.font_files
     default_focus = vertical.focus(config.vertical, config.video.focus)
     overlay = vertical.overlay_text(config.overlay_text, config.vertical)
+    # [[layers]] はどのショートでも同じ。区間との重なりは本編と同じ enable の仕組みに任せる
+    layer_specs = tuple(layers.spec(project.root, layer) for layer in config.layers)
     for short in selected:
         section = analysis.sections[short.name]
         clip = graph.Clip(*shorts.clip_frames(section, fps), config.vertical.audio_fade_ms)
@@ -692,7 +705,7 @@ def shorts_command(
         script = compose(
             project, in_section, duration_ms, "final", search.index, no_vertical_fade=True, overlay=overlay
         )
-        frame = Frame(frame_ass, shorts.work_ass_path(project.work_dir, short, "frame"))
+        frame = Frame(frame_ass, shorts.work_ass_path(project.work_dir, short, "frame"), layers=layer_specs)
         target = VideoTarget(
             "final",
             config.vertical.size,
@@ -715,6 +728,7 @@ def shorts_command(
             shorts.output_path(project.build_dir, short, wide=True),
             f"shorts {short.name}（wide）",
             clip,
+            layers=layer_specs,
         )
         # 本編と同じ .ass・同じ大きさで描くので、区間のコマは build/main.mp4 と一致する
         # （wide は shorts:<name> の記録で代表させ、個別の記録は持たない）
@@ -847,7 +861,7 @@ def thumbnail_command(
     thumbnails = _select_named(
         project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
     )
-    issues = background_issues(project)
+    issues = background_issues(project) + layer_issues(project)
     analysis = analyze_thumbnails(project, thumbnails, bg_only=False)
     issues += analysis.issues
     _print_issues(issues)
@@ -887,6 +901,12 @@ def _write_thumbnail(
         subtitles = thumbnail.file_path(project.root, thumb).absolute()
         fontsdir = fonts.prepare_fontsdir(font_files, cache_dir() / "fontsets")
         output = thumbnail.output_path(project.build_dir, thumb)
+    at = thumb.at or 0.0
+    active_layers = tuple(
+        layers.spec(project.root, layer, timed=False)
+        for layer in project.config.layers
+        if layers.active_at(layer, at)
+    )
     spec = graph.StillSpec(
         size=thumbnail.size(thumb, video.size),
         background=project.background_path.absolute(),
@@ -897,6 +917,7 @@ def _write_thumbnail(
         focus=thumbnail.focus(thumb, video.focus),
         scale_flags=video.scale_flags,
         pad_color=video.pad_color,
+        layers=active_layers,
     )
     inputs.unlink_stale_record(record)
     try:
@@ -952,7 +973,7 @@ def _run_build_all_target(project: Project, search: FontSearch, name: str) -> No
     else:
         thumb_name = name.removeprefix("thumbnail:")
         thumb = next(t for t in project.config.thumbnails if t.name == thumb_name)
-        issues = background_issues(project)
+        issues = background_issues(project) + layer_issues(project)
         analysis = analyze_thumbnails(project, (thumb,), bg_only=False, search=search)
         issues += analysis.issues
         _print_issues(issues)

@@ -327,3 +327,97 @@ def test_a_file_shared_by_multiple_targets_is_hashed_once(
     assert inputs.stale_inputs(main_target) is None
     assert inputs.stale_inputs(shorts_target) is None
     assert calls == [audio]
+
+
+LAYER_TOML = TOML + '\n[[layers]]\nname = "logo"\nfile = "assets/logo.png"\n'
+
+
+@pytest.fixture
+def layered_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    root = tmp_path / "曲"
+    scaffold(root, "曲", "曲")
+    (root / "utavideo.toml").write_text(LAYER_TOML, encoding="utf-8")
+    (root / "assets").mkdir(exist_ok=True)
+    (root / "assets/logo.png").write_bytes(b"logo")
+    (root / "build").mkdir(exist_ok=True)
+    (root / "build/main.mp4").write_bytes(b"video")
+    return root
+
+
+def test_main_target_includes_layer_files(layered_project: Path) -> None:
+    loaded = Project.load(layered_project)
+    names = dict(inputs.main_target(loaded).files)
+    assert names["layers.logo"] == layered_project / "assets/logo.png"
+
+
+def test_main_target_stale_detects_layer_file_changes(layered_project: Path) -> None:
+    _record_build(layered_project)
+    (layered_project / "assets/logo.png").write_bytes(b"changed")
+
+    loaded = Project.load(layered_project)
+    stale = inputs.stale_inputs(inputs.main_target(loaded))
+    assert stale is not None
+    assert "layers.logo" in stale
+
+
+def test_main_target_stale_detects_layer_setting_changes(layered_project: Path) -> None:
+    """ファイルの中身ではなく、margin・anchor などの設定だけを変えても止まる（config 全体を比べるため）。"""
+    _record_build(layered_project)
+    toml = (layered_project / "utavideo.toml").read_text(encoding="utf-8")
+    (layered_project / "utavideo.toml").write_text(
+        toml.replace('file = "assets/logo.png"', 'file = "assets/logo.png"\nlayer = 50'), encoding="utf-8"
+    )
+
+    loaded = Project.load(layered_project)
+    stale = inputs.stale_inputs(inputs.main_target(loaded))
+    assert stale is not None
+    assert "utavideo.toml" in stale
+
+
+def test_thumbnail_target_includes_layer_files_and_settings(layered_project: Path) -> None:
+    toml = (layered_project / "utavideo.toml").read_text(encoding="utf-8")
+    (layered_project / "utavideo.toml").write_text(
+        toml + '\n[[thumbnails]]\nname = "main"\nfile = "src/thumbnail.ass"\n', encoding="utf-8"
+    )
+    (layered_project / "src/thumbnail.ass").write_text("サムネイル用", encoding="utf-8")
+
+    loaded = Project.load(layered_project)
+    thumb = loaded.config.thumbnails[0]
+    target = inputs.thumbnail_target(loaded, thumb)
+    assert dict(target.files)["layers.logo"] == layered_project / "assets/logo.png"
+    assert isinstance(target.config, dict)
+    assert "layers" in target.config
+
+
+def test_shorts_target_includes_layer_files_and_settings(layered_project: Path) -> None:
+    toml = (layered_project / "utavideo.toml").read_text(encoding="utf-8")
+    (layered_project / "utavideo.toml").write_text(toml + '\n[[shorts]]\nname = "chorus"\n', encoding="utf-8")
+    (layered_project / "src/vertical.ass").write_text("縦用", encoding="utf-8")
+
+    loaded = Project.load(layered_project)
+    short = loaded.config.shorts[0]
+    target = inputs.shorts_target(loaded, short)
+    assert dict(target.files)["layers.logo"] == layered_project / "assets/logo.png"
+    assert isinstance(target.config, dict)
+    assert "layers" in target.config
+
+
+def test_shorts_target_stale_detects_layer_setting_changes(layered_project: Path) -> None:
+    """ファイルの中身ではなく、margin・anchor などの設定だけを変えても止まる（main_target と同じ理由）。"""
+    toml = (layered_project / "utavideo.toml").read_text(encoding="utf-8")
+    (layered_project / "utavideo.toml").write_text(toml + '\n[[shorts]]\nname = "chorus"\n', encoding="utf-8")
+    (layered_project / "src/vertical.ass").write_text("縦用", encoding="utf-8")
+    _record_shorts_build(layered_project, "chorus")
+
+    toml2 = (layered_project / "utavideo.toml").read_text(encoding="utf-8")
+    (layered_project / "utavideo.toml").write_text(
+        toml2.replace('file = "assets/logo.png"', 'file = "assets/logo.png"\nlayer = 50'), encoding="utf-8"
+    )
+
+    loaded = Project.load(layered_project)
+    short = loaded.config.shorts[0]
+    target = inputs.shorts_target(loaded, short)
+    stale = inputs.stale_inputs(target)
+    assert stale is not None
+    assert "utavideo.toml" in stale

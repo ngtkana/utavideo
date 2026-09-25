@@ -89,6 +89,7 @@ class Frame:
 
     script: pysubs2.SSAFile  # 本編の合成したスクリプト
     subtitles_path: Path  # 描画に使った .ass を書く場所
+    layers: tuple[graph.LayerSpec, ...] = ()  # 本編と同じ画面に重ねる [[layers]]
 
 
 @dataclass(frozen=True)
@@ -106,6 +107,8 @@ class VideoTarget:
     pitch: graph.Pitch | None = None  # inst のキー変更。None なら音声はそのまま
     loudnorm: graph.Loudnorm | None = None  # inst の音量正規化。None なら音量はそのまま
     audio: Path | None = None  # None なら project.audio_path（inst は inst_audio_path を渡す）
+    # [[layers]] を重ねる本編の画面用。frame があるときは無視される（frame.layers を使う）
+    layers: tuple[graph.LayerSpec, ...] = ()
 
 
 def write_video(
@@ -129,6 +132,7 @@ def write_video(
             focus=video.focus,
             subtitles=target.frame.subtitles_path.absolute(),
             fit=video.fit,
+            layers=target.frame.layers,
         )
     spec = graph.RenderSpec(
         mode=target.mode,
@@ -149,6 +153,7 @@ def write_video(
         frame=frame,
         pitch=target.pitch,
         loudnorm=target.loudnorm,
+        layers=target.layers,
     )
     inputs.unlink_stale_record(record)
 

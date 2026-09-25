@@ -202,6 +202,59 @@ def test_thumbnail_names_must_differ_ignoring_case(tmp_path: Path) -> None:
         load_project_config(_write(tmp_path, text))
 
 
+LAYERS = """
+[[layers]]
+name = "logo"
+file = "assets/logo.png"
+"""
+
+
+def test_layer_defaults(tmp_path: Path) -> None:
+    (layer,) = load_project_config(_write(tmp_path, MINIMAL + LAYERS)).layers
+    assert layer.start is None
+    assert layer.end is None
+    assert layer.scale == 1.0
+    assert layer.anchor == "center"
+    assert layer.margin == (0, 0)
+    assert layer.layer == 0
+
+
+def test_config_without_layers_still_loads(tmp_path: Path) -> None:
+    assert load_project_config(_write(tmp_path, MINIMAL)).layers == ()
+
+
+def test_layer_fields(tmp_path: Path) -> None:
+    text = (
+        MINIMAL
+        + LAYERS
+        + 'start = "0:05"\nend = "0:12"\nscale = 1.5\nanchor = "top-right"\n'
+        + "margin = [40, -10]\nlayer = 50\n"
+    )
+    (layer,) = load_project_config(_write(tmp_path, text)).layers
+    assert (layer.start, layer.end) == (5.0, 12.0)
+    assert (layer.scale, layer.anchor, layer.margin, layer.layer) == (1.5, "top-right", (40, -10), 50)
+
+
+@pytest.mark.parametrize(
+    ("extra", "message"),
+    [
+        ('anchor = "top-centre"', "anchor"),
+        ('scale = "big"', "scale"),
+        ("margin = [0.5, 0]", "margin"),
+        ("layer = 1.5", "layer"),
+    ],
+)
+def test_layer_values_are_validated(tmp_path: Path, extra: str, message: str) -> None:
+    with pytest.raises(ConfigError, match=message):
+        load_project_config(_write(tmp_path, MINIMAL + LAYERS + extra + "\n"))
+
+
+def test_layer_names_must_differ_ignoring_case(tmp_path: Path) -> None:
+    text = MINIMAL + LAYERS + LAYERS.replace('"logo"', '"Logo"')
+    with pytest.raises(ConfigError, match=r"重複.*Logo"):
+        load_project_config(_write(tmp_path, text))
+
+
 def test_vertical_defaults_and_values(tmp_path: Path) -> None:
     assert load_project_config(_write(tmp_path, MINIMAL)).vertical.size == (1080, 1920)
     text = MINIMAL + '[vertical]\nsize = [720, 1280]\nlyrics = "src/short.ass"\n'

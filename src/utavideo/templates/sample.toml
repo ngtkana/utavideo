@@ -32,6 +32,16 @@ scale_flags = "lanczos"
 file = "src/lyrics.ass"
 fade_ms = [150, 150]
 
+[[layers]]
+# 背景の上に重ねる素材（画像・GIF・アルファ付き動画）の見本。半透明の帯を右上に、5〜25 秒だけ出す
+name = "logo"
+file = "$logo"
+start = "0:05"
+end = "0:25"
+anchor = "top-right"
+margin = [40, 40]
+layer = 50
+
 [overlay_text]
 style = "Title"
 text = "$overlay_text"
