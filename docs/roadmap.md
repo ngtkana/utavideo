@@ -18,6 +18,7 @@
 - 今作れるものをまとめて作る（issue #85）: `utavideo build-all` で、`build`・`description`・`announce`・`thumbnail` について、既に済んでいるものはスキップし、書き出し前の検査（`analyze.py`）でエラーがあるものは「要対応」として案内し、それ以外を書き出す
 - 素材を重ねる（issue #111）: `[[layers]]` で、ユーザーが用意した画像・GIF・アルファ付き動画を背景の上に重ねる（位置・大きさ・表示する区間）。本編・`preview-bg`（本編・縦の両方）・サムネイルに共通で効く。`layer`（`.ass` の `Layer` と同じ尺度）で歌詞との前後関係を決める
 - ショートも release で残す（issue #122）: `utavideo release --short <name>` で、ショートも本編と同じ規則（`release/<slug>-shorts-<name>-vX.Y.N.mp4`。`wide` は別番号）で `release/` にコピーする。`status` もショートの release の状態を追う
+- 数値調整の高速プレビュー（issue #113）: `utavideo preview --at <時刻> [--duration <秒数>] [--watch]` で、指定した一瞬・短い区間だけを `build/.work/preview.png`・`preview.mp4` に書き出す。`preview-bg` とは別に、`utavideo.toml` の数値やスタイルを調整するたびに本番の `build` を待たなくて済む。`--watch` は `utavideo.toml`・歌詞・`[[layers]]`・背景の変更を mtime のポーリングで検知して自動的に作り直す。`check` 相当の検査はせず、今の状態をそのまま見せる
 
 ## 予定
 

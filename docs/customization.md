@@ -90,6 +90,7 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | 歌詞との前後関係 | `layer`。`.ass` の `Layer` と同じ尺度で、負なら歌詞の奥、0 以上（既定）なら歌詞の手前 |
 | 複数の素材を重ねる | `[[layers]]` をもう1つ書き、`name`・`file`・`layer` などを変える |
 | アルファ付き動画（VP9 / `.webm`）の書き出し | `-auto-alt-ref 0` を付けてエンコードする（付けないとアルファが欠けることがある） |
+| `anchor`・`margin`・`scale` を素早く確かめる | `utavideo preview --at <表示される時刻> --watch`。macOS ならプレビュー.app で `build/.work/preview.png` を開いておくと、`utavideo.toml` を保存するたびに位置・大きさが更新された絵が自動で表示される（[commands.md](commands.md#preview)） |
 
 ## サムネイル
 
@@ -216,6 +217,7 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 | やりたいこと | 書き方 |
 |---|---|
 | サムネイルの下敷き | `utavideo preview-bg --target thumbnail` → `build/thumbnail/bg/<name>.png` |
+| 数値・スタイルの調整を、本番の `build` を待たずに確かめる | `utavideo preview --at <時刻> [--duration <秒数>] [--watch]`（[commands.md](commands.md#preview)。`check` 相当の検査はしない） |
 | 実際に描画した .ass を見る | `build/.work/final.ass`・`preview.ass`・`overlay.ass`（自動のフェードと曲名表示が入っている） |
 | 書き出す前に検査 | `utavideo check` |
 
