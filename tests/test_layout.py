@@ -140,8 +140,22 @@ def test_overflows_groups_multiple_lines_into_one_issue(lookup) -> None:
     assert "ほか" not in issues[0].message
 
 
+def test_overflows_group_message_has_no_more_marker_at_exactly_five(lookup) -> None:
+    # ちょうど5件は全部が代表例に収まるので「ほか」は付かない
+    issues = layout.overflows(_multi_script(5), lookup)
+    assert len(issues) == 1
+    assert issues[0].message.startswith("5 行が画面からはみ出しそうです")
+    assert "ほか" not in issues[0].message
+
+
 def test_overflows_group_message_truncates_after_five_examples(lookup) -> None:
     issues = layout.overflows(_multi_script(7), lookup)
     assert len(issues) == 1
-    assert issues[0].message.startswith("7 行が画面からはみ出しそうです")
-    assert issues[0].message.endswith("ほか")
+    message = issues[0].message
+    assert message.startswith("7 行が画面からはみ出しそうです")
+    assert message.endswith("ほか")
+    # 代表例は先頭5件（0〜4番目の行）で、6・7番目（5・6秒の行）は挙げない
+    for i in range(5):
+        assert f"0:00:0{i}.00" in message
+    for i in (5, 6):
+        assert f"0:00:0{i}.00" not in message
