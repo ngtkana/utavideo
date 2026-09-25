@@ -21,6 +21,7 @@ from utavideo import (
     inputs,
     inst,
     layers,
+    preview,
     sample,
     shorts,
     status,
@@ -78,6 +79,7 @@ from utavideo.project import (
     to_windows_path,
 )
 from utavideo.render import Frame, VideoTarget, compose, compose_inst, frame_script, write_video
+from utavideo.timecode import parse_time
 
 app = typer.Typer(
     no_args_is_help=True,
@@ -496,6 +498,79 @@ def _render_vertical_preview(project: Project) -> None:
         frame=frame,
     )
     write_video(project, script, target, duration_s, font_files, None)
+
+
+def _parse_preview_time(option: str, value: str) -> float:
+    """--at・--duration の値を秒にする（"M:SS" か秒の数のどちらでも受け付ける）。
+
+    Time（timecode.parse_time）は utavideo.toml の値（文字列か数）を読む前提で、コマンドラインの
+    引数は常に文字列なので、まず数として読めるか試してから parse_time に渡す。
+    """
+    try:
+        candidate: object = float(value)
+    except ValueError:
+        candidate = value
+    try:
+        return parse_time(candidate)
+    except ValueError as e:
+        _fail(f"{option}: {e}")
+
+
+PreviewAtOption = Annotated[
+    str, typer.Option("--at", help='確認したい時刻（"M:SS" か秒の数）。省略時は 0 秒')
+]
+PreviewDurationOption = Annotated[
+    str | None,
+    typer.Option("--duration", help="この秒数だけの短い動画にする（省略時は1フレームの静止画）"),
+]
+PreviewWatchOption = Annotated[
+    bool,
+    typer.Option(
+        "--watch",
+        help=("utavideo.toml・歌詞・[[layers]]・背景の変更を検知して自動的に作り直す（Ctrl+C で終了）"),
+    ),
+]
+
+
+@app.command("preview")
+@_handle_errors
+def preview_command(
+    project_dir: ProjectOption = None,
+    at: PreviewAtOption = "0",
+    duration: PreviewDurationOption = None,
+    watch: PreviewWatchOption = False,
+) -> None:
+    """--at の一瞬・短い区間だけをすばやく確認する（preview-bg とは別のコマンド）。
+
+    --duration を付けなければ、[[layers]]・歌詞・曲名表示込みの1フレームを
+    build/.work/preview.png に書き出す。--duration を付けると、その秒数だけの動画を
+    build/.work/preview.mp4 に書き出す（ffmpeg の ultrafast プリセット）。どちらも同じ名前に
+    上書きするので、macOS のプレビュー.app 等の自動更新するビューアで開いておくとよい。
+
+    utavideo.toml・スタイルの調整を速く確かめるための出口なので、check 相当の検査はしない
+    （エラーがあっても、今の状態のまま書き出す）。
+    """
+    require_tools()
+    at_s = _parse_preview_time("--at", at)
+    duration_s = None if duration is None else _parse_preview_time("--duration", duration)
+    if duration_s is not None and duration_s <= 0:
+        _fail("--duration には 0 より大きい秒数を指定してください")
+    search = FontSearch.load()
+
+    if not watch:
+        preview.render(_load_project(project_dir), search, at_s, duration_s)
+        return
+
+    root = find_project_root(project_dir or Path.cwd())
+    console.print("変更を監視しています。終了するには Ctrl+C を押してください。", markup=False)
+
+    def on_change(project: Project) -> None:
+        preview.render(project, search, at_s, duration_s)
+
+    try:
+        preview.watch(root, on_change)
+    except KeyboardInterrupt:
+        console.print()
 
 
 @app.command()

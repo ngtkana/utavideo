@@ -333,6 +333,38 @@ def test_preview_bg(project: Path) -> None:
     assert _stream(_probe(project / "build/preview/bg.mp4"), "video")["codec_name"] == "h264"
 
 
+def test_preview_writes_a_still_image_for_the_given_time(project: Path) -> None:
+    result = invoke("preview", "-C", str(project), "--at", "0.2")
+
+    output = project / "build/.work/preview.png"
+    assert str(output) in result.output
+    stream = _stream(_probe(output), "video")
+    assert stream["codec_name"] == "png"
+    assert (int(stream["width"]), int(stream["height"])) == (320, 180)
+
+
+def test_preview_writes_a_short_video_for_the_given_duration(project: Path) -> None:
+    result = invoke("preview", "-C", str(project), "--at", "0.2", "--duration", "1")
+
+    output = project / "build/.work/preview.mp4"
+    assert str(output) in result.output
+    info = _probe(output)
+    assert _stream(info, "video")["codec_name"] == "h264"
+    assert float(info["format"]["duration"]) == pytest.approx(1.0, abs=0.2)
+
+
+def test_preview_rejects_a_duration_shorter_than_one_frame(project: Path) -> None:
+    result = runner.invoke(app, ["preview", "-C", str(project), "--duration", "0.02"])
+    assert result.exit_code == 1
+    assert "--duration" in result.output
+
+
+def test_preview_rejects_a_badly_formatted_at(project: Path) -> None:
+    result = runner.invoke(app, ["preview", "-C", str(project), "--at", "not-a-time"])
+    assert result.exit_code == 1
+    assert "--at" in result.output
+
+
 def test_overlay_is_transparent_except_lyrics(project: Path) -> None:
     invoke("overlay", "-C", str(project))
 

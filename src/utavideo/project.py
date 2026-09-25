@@ -125,6 +125,16 @@ class Project:
         return self.build_dir / "preview" / "bg.mp4"
 
     @property
+    def preview_still_output(self) -> Path:
+        """utavideo preview（--duration 無し）の静止画。毎回同じ名前に上書きする。"""
+        return self.work_dir / "preview.png"
+
+    @property
+    def preview_video_output(self) -> Path:
+        """utavideo preview --duration の動画。毎回同じ名前に上書きする。"""
+        return self.work_dir / "preview.mp4"
+
+    @property
     def title_output(self) -> Path:
         return self.build_dir / "title.txt"
 

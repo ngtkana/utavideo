@@ -4,14 +4,14 @@
 
 ## 共通
 
-- `check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`status`・`build-all` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
-- `sample`・`check`・`preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
-- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
+- `check`・`preview-bg`・`preview`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`description`・`release`・`announce`・`status`・`build-all` は曲フォルダで実行します。`-C <曲フォルダ>`（`--project`）で指定でき、省略するとカレントディレクトリから親へ向かって `utavideo.toml` を探します
+- `sample`・`check`・`preview-bg`・`preview`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` には ffmpeg と ffprobe が必要です。無ければ、何を入れればよいかを表示して始めに止まります
+- 歌詞の描画には libass 付きの ffmpeg が必要です（[動作環境](../README.md#動作環境)）。無いと `preview-bg`・`preview`・`build`・`overlay`・`thumbnail`・`shorts`・`inst`・`build-all` は書き出す前に止まり、`check` は[エラー](#検査項目)として他の検査結果と一緒に出します。素材を合成するだけの `sample` には要りません
 - `inst` はキー変更に rubberband フィルタを使いますが、無い ffmpeg では代わりに `asetrate`+`atempo` を使います（[inst](#inst)）
 - 書き出しは `<名前>.partial.<拡張子>` に書いてから名前を変えます。失敗・中断しても、前に書き出したファイルは残ります
 - 出力先のファイルを他のアプリ（動画プレイヤー、エクスプローラーのプレビューなど）で開いていると、WSL2 で Windows のドライブ（`/mnt/c` など）にある曲フォルダでは名前を変えられずに止まります。書き出したものは `.partial` の付いた名前で残るので、アプリを閉じて実行し直します（`release` も同じ）
 - WSL2 で `/mnt/<ドライブ>/` 以下に書き出したときは、Windows のパスも表示します
-- エラーがあると終了コード 1 で終わります
+- エラーがあると終了コード 1 で終わります（`preview` は検査を省略するため例外。[preview](#preview) 参照）
 
 ## new
 
@@ -168,6 +168,30 @@ utavideo overlay [-C <曲フォルダ>]
 次のときは止まります（縦の下敷きの分。本編の下敷きは別に[検査項目](#検査項目)のとおり止まります）。
 
 - 縦用 .ass がまだ無いのに、`lyrics.file` のファイルが無い、読めない、`PlayResX`・`PlayResY` が無い
+
+## preview
+
+```sh
+utavideo preview [-C <曲フォルダ>] [--at <時刻>] [--duration <秒数>] [--watch]
+```
+
+`utavideo.toml` の数値やスタイルを直すたびに、確認のためだけに本番の `build`（曲全体、`video.crf`・`video.preset`）を待つのは遅いので、指定した一瞬・短い区間だけをすばやく書き出します。`preview-bg` が歌詞を除いた曲全体の Aegisub 用の下敷きを作るのに対し、`preview` は歌詞・曲名表示・`[[layers]]` を含む完成に近い絵を、狭い範囲だけ速く確かめる用途です。
+
+| オプション | 既定値 | 内容 |
+|---|---|---|
+| `--at` | `0` | 確認したい時刻（`"M:SS"` か秒の数） |
+| `--duration` | 無指定 | この秒数だけの動画にする。無指定なら1フレームの静止画 |
+| `--watch` | 無効 | `utavideo.toml`・歌詞（`lyrics.file`）・`[[layers]]` の各 `file`・背景（`video.background`）の変更を検知して自動的に作り直す（1秒間隔のポーリング。新しい依存は追加していない。`Ctrl+C` で終了） |
+
+| `--duration` | 出力 | 中身 |
+|---|---|---|
+| 無指定 | `build/.work/preview.png` | `--at` の1フレーム（背景 ＋ `[[layers]]` ＋ 歌詞 ＋ 曲名表示。フェードも入る） |
+| あり | `build/.work/preview.mp4` | `--at` から `--duration` 秒（ffmpeg の ultrafast プリセット。`preview-bg` と同じ書き出しの速さ） |
+
+- 出力先は毎回同じ名前に上書きします。macOS のプレビュー.app のように、ファイルの変更を検知して自動で再表示するビューアで開いておくと、保存するたびに表示が更新されます（Windows・Linux では、開きっぱなしで自動更新するビューアを別途探してください）
+- `check` 相当の検査はしません。歌詞・フォント・素材にエラーがあっても、書き出せるところまではそのまま書き出し、検査で分かる内容は警告・エラーとして表示しますが、それだけでは止まりません（終了コードは 0 のままです）
+- 音源（`audio.file`）か歌詞（`lyrics.file`）が読めないとき、`--at`・`--duration` の書式が不正なとき、`--duration` をフレームに丸めると長さ 0 になるときは、書き出さずにエラーで止まります（終了コード 1）
+- `[[shorts]]` の区間指定とは独立しています。`--at`・`--duration` はコマンドラインだけで完結し、`utavideo.toml` は変更しません
 
 ## thumbnail
 
