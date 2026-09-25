@@ -58,7 +58,7 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | 出す区間 | その `Dialogue` 行の Start・End |
 | 見た目・大きさ | 曲名カード用のスタイル（雛形の `TitleCard`・`TitleCardSub`） |
 | 複数パーツ（例:「曲名 / アーティスト」と「Cover: 歌った人」） | 別行にせず、`\r<スタイル名>` によるインラインのスタイル切り替えと `\N` 改行で1行にまとめる。例: `{\an8}曲名 / アーティスト\N{\rTitleCardSub}Cover: 歌った人` |
-| 位置 | `\pos`。Aegisub の動画プレビュー上で「Visual typesetting」の Standard モードでドラッグして置ける |
+| 位置 | `\pos`。Aegisub の動画プレビュー上で「Visual typesetting」の Standard モードでドラッグして置ける（`\pos`・`\move` を使った行は `check` が警告します。曲名カードでは想定通りの使い方なので、出ても無視してかまいません） |
 | 動き | `\move`・`\t`・`\fad` |
 | 縁取り・影・ぼかし | スタイルの `Outline`・`Shadow`、オーバーライドタグ `\bord`・`\shad`・`\blur`・`\be`（[utavideo が読むタグ](#utavideo-が読むタグ)はすべて使える） |
 | どうしても行を分けざるを得ない場合の時刻調整 | Aegisub の「Timing > Shift Times」で複数行をまとめて動かす |
