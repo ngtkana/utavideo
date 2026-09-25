@@ -215,7 +215,6 @@ class Vertical(_Model):
     size: VideoSize = (1080, 1920)
     lyrics: Path = Path("src/vertical.ass")
     focus: Focus | None = None  # None なら video.focus
-    frame_y: Ratio = 0.5  # blur で本編の上端を (H - h) * frame_y に置く
     overlay_text: bool = True  # false なら、縦だけ曲名表示（[overlay_text]）を出さない
     audio_fade_ms: FadeMs = (300, 1000)  # 区間の端の音声のフェード。wide の版にも効く
 
