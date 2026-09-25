@@ -163,7 +163,7 @@ def overflows(script: pysubs2.SSAFile, lookup: Callable[[str], Sequence[Path]]) 
             for run, fmt in unit
         )
 
-    issues: list[subs.Issue] = []
+    overflowing: list[tuple[pysubs2.SSAEvent, float, int]] = []
     for event in subs.dialogues(script):
         style = script.styles.get(event.style)
         if style is None or subs.POS_TAG.search(event.text):
@@ -177,14 +177,25 @@ def overflows(script: pysubs2.SSAFile, lookup: Callable[[str], Sequence[Path]]) 
 
         available = res[0] - (event.marginl or style.marginl) - (event.marginr or style.marginr)
         if width > available:
-            issues.append(
-                subs.Issue(
-                    "warning",
-                    f"{subs.describe(event)} が画面からはみ出しそうです"
-                    f"（推定 {width:.0f}px ＞ 表示幅 {available}px）。\\N で改行してください",
-                )
-            )
-    return issues
+            overflowing.append((event, width, available))
+    return _overflow_issues(overflowing)
+
+
+def _overflow_issues(overflowing: list[tuple[pysubs2.SSAEvent, float, int]]) -> list[subs.Issue]:
+    """はみ出しそうな行1つなら詳しく、複数なら1件にまとめる（同種の指摘を並べて雑音を増やさないため）。"""
+    if not overflowing:
+        return []
+    if len(overflowing) == 1:
+        event, width, available = overflowing[0]
+        message = (
+            f"{subs.describe(event)} が画面からはみ出しそうです"
+            f"（推定 {width:.0f}px ＞ 表示幅 {available}px）。\\N で改行してください"
+        )
+        return [subs.Issue("warning", message)]
+    where = ", ".join(subs.describe(event) for event, _, _ in overflowing[:5])
+    more = " ほか" if len(overflowing) > 5 else ""
+    message = f"{len(overflowing)} 行が画面からはみ出しそうです（\\N で改行してください）: {where}{more}"
+    return [subs.Issue("warning", message)]
 
 
 def _has_name(font: TTFont, family: str) -> bool:
