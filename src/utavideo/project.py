@@ -108,10 +108,13 @@ class Project:
     def inst_inputs_record(self, key_label: str) -> Path:
         return self.work_dir / f"inst-key{key_label}-inputs.json"
 
-    @property
-    def release_match_record(self) -> Path:
-        """release が最後に確かめた、build/main.mp4 と release 済みファイルの一致の記録（issue #82）。"""
-        return self.work_dir / "release-match.json"
+    def release_match_record(self, suffix: str = "") -> Path:
+        """release が最後に確かめた、成果物と release 済みファイルの一致の記録（issue #82）。
+
+        main は release-match.json、ショートは release-match-shorts-<name>.json のように、
+        release_path・released と同じ suffix でファイルを分ける。
+        """
+        return self.work_dir / f"release-match{suffix}.json"
 
     @property
     def overlay_output(self) -> Path:
@@ -146,18 +149,23 @@ class Project:
     def release_dir(self) -> Path:
         return self.root / "release"
 
-    def release_path(self, version: str, revision: int) -> Path:
-        return self.release_dir / f"{self.slug}-{version}.{revision}.mp4"
+    def release_path(self, version: str, revision: int, *, suffix: str = "") -> Path:
+        return self.release_dir / f"{self.slug}{suffix}-{version}.{revision}.mp4"
 
-    def released(self, version: str) -> list[tuple[int, Path]]:
+    def released(self, version: str, *, suffix: str = "") -> list[tuple[int, Path]]:
         """同じ音源のバージョンで公開済みの動画を、(何本目か, パス) の一覧で返す。
 
-        枝番を手で付けていた頃の <名前> vX.Y.mp4 は、1本目（0）とみなす。
-        song.slug より前に公開した <曲名> vX.Y[.N].mp4 も、同じ音源のものとして数える
+        枝番を手で付けていた頃の <名前> vX.Y.mp4 は、1本目（0）とみなす（本編のみ。suffix が
+        無いときだけ）。song.slug より前に公開した <曲名> vX.Y[.N].mp4 も、同じ音源のものとして数える
         （見落とすと、同じ動画が別の名前でもう一度 release されてしまう）。
         番号が同じファイルが両方あることもあるので、番号ごとに1つに絞らない。
+
+        suffix はショートなど本編以外の成果物を release するときに使う（例: "-shorts-chorus"）。
+        本編とは別の名前空間になるので、番号は suffix ごとに別々に振られる。
         """
-        bases = {f"{self.slug}-{version}", f"{legacy_name_from_title(self.config.song.title)} {version}"}
+        bases = {f"{self.slug}{suffix}-{version}"}
+        if not suffix:
+            bases.add(f"{legacy_name_from_title(self.config.song.title)} {version}")
         found: list[tuple[int, Path]] = []
         if not self.release_dir.is_dir():
             return found
@@ -195,25 +203,29 @@ def next_revision(released: list[tuple[int, Path]]) -> int:
 _RELEASE_MATCH_FORMAT = 1
 
 
-def find_matching_release(project: Project, version: str, source: Path) -> tuple[Path | None, Path, bool]:
+def find_matching_release(
+    project: Project, version: str, source: Path, *, suffix: str = ""
+) -> tuple[Path | None, Path, bool]:
     """source と同じ内容の release 済みファイル、次に release したらできるファイル、release 済みの有無。
 
     同じ入力からの build はバイト単位で一致する（docs/verification/20260916-release-revision.md）。
     release 済みファイルは上書きしない約束なので、release が最後に確かめた一致（record_release_match）を
     source の size・mtime_ns が変わっていない間は信じ、release/ を読み直さずに済ませる（issue #82）。
+
+    suffix は released・release_path と同じもの（本編なら省略、ショートなら "-shorts-<name>" など）を渡す。
     """
-    released = project.released(version)
-    matched = _cached_match(project, version, source, released)
+    released = project.released(version, suffix=suffix)
+    matched = _cached_match(project, version, source, released, suffix=suffix)
     if matched is None:
         matched = next((path for _, path in released if filecmp.cmp(source, path, shallow=False)), None)
-    return matched, project.release_path(version, next_revision(released)), bool(released)
+    return matched, project.release_path(version, next_revision(released), suffix=suffix), bool(released)
 
 
 def _cached_match(
-    project: Project, version: str, source: Path, released: list[tuple[int, Path]]
+    project: Project, version: str, source: Path, released: list[tuple[int, Path]], *, suffix: str = ""
 ) -> Path | None:
     try:
-        data = json.loads(project.release_match_record.read_text(encoding="utf-8"))
+        data = json.loads(project.release_match_record(suffix).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
     if (
@@ -228,7 +240,9 @@ def _cached_match(
     return next((path for _, path in released if path.name == matched_name), None)
 
 
-def record_release_match(project: Project, version: str, source: Path, matched: Path) -> None:
+def record_release_match(
+    project: Project, version: str, source: Path, matched: Path, *, suffix: str = ""
+) -> None:
     """release が source と matched の一致を確かめたことを記録する（次回は読み直さずに済む）。"""
     data = {
         "format": _RELEASE_MATCH_FORMAT,
@@ -236,7 +250,7 @@ def record_release_match(project: Project, version: str, source: Path, matched: 
         "source": _stamp(source),
         "matched": matched.name,
     }
-    write_text(project.release_match_record, json.dumps(data, ensure_ascii=False) + "\n")
+    write_text(project.release_match_record(suffix), json.dumps(data, ensure_ascii=False) + "\n")
 
 
 def _stamp(path: Path) -> list[int | None]:

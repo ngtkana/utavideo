@@ -286,23 +286,28 @@ utavideo description [-C <曲フォルダ>]
 ## release
 
 ```sh
-utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [--allow-stale]
+utavideo release [-C <曲フォルダ>] [--short <name>] [--version <音源のバージョン>] [--allow-stale]
 ```
 
 `build/main.mp4` を `release/<slug>-<音源のバージョン>.<何本目か>.mp4` にコピーします。何本目かは `release/` にある同じ音源の動画から決まります（規則は [project-layout.md](project-layout.md#名前の付け方)）。書くのは `.mp4` だけです。概要欄は `release/` に置きません（[description](#description) の `build/` の出力を使います）。`release/` にある `.mp4` 以外のファイル（`.txt` など）は読まず、書き換えず、番号にも数えません。
 
+`--short <name>` を付けると、本編の代わりに `build/shorts/<name>.mp4` を `release/<slug>-shorts-<name>-<音源のバージョン>.<何本目か>.mp4` にコピーします。ショートは公開する完成品という点で本編と変わらないため、同じ規則で `release/` に残します（issue #122）。何本目かは本編とは別に、ショート（`name`）ごとに数えます。`wide = true` のショートは、`build/shorts/wide/<name>.mp4` も `release/<slug>-shorts-<name>-wide-<音源のバージョン>.<何本目か>.mp4` として同時にコピーします（何本目かはこちらも別に数えます）。
+
+- `wide = true` のショートは、通常版・`wide` 版の順に1本ずつコピーします。片方が成功した後にもう片方が失敗すると、次の実行では成功済みの側が「同じ内容が既にあります」で止まり、その回はもう片方のコピーまで進みません。`utavideo shorts` は常に両方を一緒に書き出すので、通常はここで内容がずれることはありません
+
 | オプション | 既定値 | 内容 |
 |---|---|---|
+| `--short` | 無効（本編を release する） | `[[shorts]]` の `name`。指定するとそのショートを release する |
 | `--version` | 音源のファイル名から（規則は [project-layout.md](project-layout.md#名前の付け方)） | 音源のバージョン。`v1.2` の形（小文字の `v`）。何本目かは指定できない |
-| `--allow-stale` | 無効 | `build` の後に入力が変わっていてもコピーする |
+| `--allow-stale` | 無効 | 書き出した後に入力が変わっていてもコピーする |
 
 次のときは止まります。
 
-- `build/main.mp4` が無い
+- release する動画（`build/main.mp4`、または `--short` のときは `build/shorts/<name>.mp4`）が無い
 - 音源のバージョンが決まらない、または `vX.Y` の形でない
-- 同じ音源のバージョンで、`build/main.mp4` と中身が同じ動画を既に公開している
+- 同じ音源のバージョンで、中身が同じ動画を既に公開している
 - 同じ名前の `.mp4` が `release/` にある（上書きしない）
-- `build` の後に、描画に効く入力が変わった（`--allow-stale` で無視）。変わった入力の名前を表示します
+- 書き出した後に、描画に効く入力が変わった（`--allow-stale` で無視）。変わった入力の名前を表示します
 
 描画に効く入力は、`build` が記録したときと次のように比べます。
 
@@ -313,7 +318,7 @@ utavideo release [-C <曲フォルダ>] [--version <音源のバージョン>] [
 | フォント | 使ったフォントファイルのパス・大きさ・更新時刻（中身は読まない） |
 
 - 保存し直しただけのときや、`build` の後に概要欄の項目だけを変えたときは止まりません
-- 確かめた一致を `build/.work/release-match.json` に記録します。次回 [release](#release)・[status](#status) を呼んだとき、`build/main.mp4` の size・更新時刻が記録と同じなら、`release/` のファイルを読み直さずに記録を信じます
+- 確かめた一致を `build/.work/release-match.json`（`--short <name>` は `release-match-shorts-<name>.json`、`wide` は `release-match-shorts-<name>-wide.json`）に記録します。次回同じ対象を release・status したとき、出力の size・更新時刻が記録と同じなら、`release/` のファイルを読み直さずに記録を信じます
 - 記録が無いとき（記録を始める前の版の `build`）や、記録の後に `build/main.mp4` が差し替わっているときは、`utavideo.toml`・音源・背景・歌詞のどれかの更新時刻が `build/main.mp4` より新しいと止まります
 - フォントは、`build` で使ったファイルだけを見ます。同じ名前のフォントを別の場所に足して、使われるファイルが変わっても気付きません
 
@@ -368,11 +373,12 @@ utavideo status [-C <曲フォルダ>]
 | 概要欄 | `build/title.txt`・`build/description.txt` のどちらかが無い（有無だけを見ます。中身が古いかは見ません） |
 | 告知文 | `build/announce.txt` が無い（有無だけを見ます） |
 | ショート（`[[shorts]]` があるとき、1本ごと） | 出力（`build/shorts/<name>.mp4`）が無い。または縦用 .ass・本編歌詞・音源・背景・設定のいずれかが、書き出した後に変わっている |
+| ショートの release（ショートの出力が最新のとき、1本ごと。`wide = true` なら2本） | [release](#release) と同じ基準で、音源のバージョンが分からない・まだ release していない・release 済みの内容と違う |
 | サムネイル（`[[thumbnails]]` があるとき、1本ごと） | 出力（`build/thumbnail/<name>.png`）が無い（`preview-bg --target thumbnail` の実行だけでは生成済みになりません）。またはサムネイルの .ass・背景・設定のいずれかが、書き出した後に変わっている |
 | inst（`build/inst/` に実在するキーごと） | 本編歌詞・音源・背景・設定のいずれかが、書き出した後に変わっている |
 | release | 音源のバージョン（`vX.Y`）が `audio.file` の名前から分からない。まだ release していない。`build/main.mp4` と release 済みの内容が違う（次に release したときのファイル名を表示します） |
 
-- main が未生成・古いときは release の行を表示しません（先に `build` を促します）
+- main が未生成・古いときは release の行を表示しません（先に `build` を促します）。ショートも同様に、そのショートの出力が未生成・古いときは、そのショートの release の行を表示しません（先に `shorts` を促します）
 - ショート・サムネイル・inst の「変わった」判定は、歌詞・設定ファイル自体の変化だけを見ます。フォントファイル単体の差し替えは検出しません
 - inst は `--keys` で任意のキーを指定でき、`[[shorts]]` のような事前宣言された個数を持たないので、`build/inst/` に実在するキーだけを対象にします（一度も inst していなければ何も表示しません）
 - ffmpeg は使いません

@@ -819,7 +819,9 @@ def test_shorts_records_inputs_and_status_shows_it_as_clean(project: Path) -> No
     invoke("shorts", "-C", str(project))
 
     assert (project / "build/.work/shorts-chorus-inputs.json").is_file()
-    assert "ショート" not in invoke("status", "-C", str(project)).output
+    # 出力自体は最新（"ショート chorus:" の行が無い）。release していないことは別の行で示すので、
+    # ここでは見ない（issue #122）
+    assert "ショート chorus:" not in invoke("status", "-C", str(project)).output
 
 
 def test_shorts_composites_layers_on_both_the_vertical_and_wide_versions(project: Path) -> None:

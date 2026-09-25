@@ -9,7 +9,8 @@ check（analyze.py）は「今書き出しても大丈夫か」という正し�
 from dataclasses import dataclass
 from pathlib import Path
 
-from utavideo import inputs, inst
+from utavideo import inputs, inst, shorts
+from utavideo.config import Short
 from utavideo.project import Project, find_matching_release
 
 
@@ -52,9 +53,21 @@ class InstKeyStatus:
 @dataclass(frozen=True)
 class ReleaseStatus:
     version: str | None  # audio.file の名前から分からなければ None（next_path も None）
-    matched: bool  # main.output と同じ内容の release 済みファイルがあるか
+    matched: bool  # 出力と同じ内容の release 済みファイルがあるか
     has_releases: bool  # 同じバージョンで release 済みのものが1つでもあるか
     next_path: Path | None  # 次に release したらできるファイル
+
+
+@dataclass(frozen=True)
+class ShortStatus:
+    """ショート1本分の build の状態と、release の状態（wide があれば2本分）。
+
+    ショートも公開する完成品なので、main と同じ基準で release の状態を追う（issue #122）。
+    build が未生成・古いときは releases を空にする（先に shorts を促す）。
+    """
+
+    build: NamedStatus
+    releases: tuple[tuple[str, ReleaseStatus], ...]  # (見出し, 状態)。wide があれば2本分持つ
 
 
 @dataclass(frozen=True)
@@ -62,7 +75,7 @@ class Status:
     main: MainStatus
     description: ArtifactStatus
     announce: ArtifactStatus
-    shorts: tuple[NamedStatus, ...]
+    shorts: tuple[ShortStatus, ...]
     thumbnails: tuple[NamedStatus, ...]
     # inst は --keys で任意のキーを指定でき、[[shorts]] のような事前宣言された個数を持たないので、
     # build/inst/ に実在するものだけを対象にする（一度も inst していなければ空）
@@ -77,10 +90,7 @@ def collect(project: Project) -> Status:
         main=main,
         description=_artifact_status("概要欄", (project.title_output, project.description_output)),
         announce=_artifact_status("告知文", (project.announce_output,)),
-        shorts=tuple(
-            _named_status("ショート", "utavideo shorts", inputs.shorts_target(project, s), s.name)
-            for s in project.config.shorts
-        ),
+        shorts=tuple(_short_status(project, s) for s in project.config.shorts),
         thumbnails=tuple(
             _named_status("サムネイル", "utavideo thumbnail", inputs.thumbnail_target(project, t), t.name)
             for t in project.config.thumbnails
@@ -107,16 +117,29 @@ def _named_status(label: str, command: str, target: inputs.RecordTarget, name: s
     return NamedStatus(label, command, name, target.output, exists, stale)
 
 
+def _short_status(project: Project, short: Short) -> ShortStatus:
+    build = _named_status("ショート", "utavideo shorts", inputs.shorts_target(project, short), short.name)
+    if not build.exists or build.stale:
+        return ShortStatus(build, ())
+    label = f"ショート {short.name} の release"
+    releases = [(label, _release_status(project, build.output, suffix=f"-shorts-{short.name}"))]
+    if short.wide:
+        wide_output = shorts.output_path(project.build_dir, short, wide=True)
+        wide_suffix = f"-shorts-{short.name}-wide"
+        releases.append((f"{label}（wide）", _release_status(project, wide_output, suffix=wide_suffix)))
+    return ShortStatus(build, tuple(releases))
+
+
 def _inst_key_status(project: Project, key: int) -> InstKeyStatus:
     target = inputs.inst_target(project, key)
     return InstKeyStatus(key, target.output, inputs.stale_inputs(target))
 
 
-def _release_status(project: Project, main_output: Path) -> ReleaseStatus:
+def _release_status(project: Project, output: Path, *, suffix: str = "") -> ReleaseStatus:
     version = project.version
     if version is None:
         return ReleaseStatus(None, False, False, None)
-    matched, next_path, has_releases = find_matching_release(project, version, main_output)
+    matched, next_path, has_releases = find_matching_release(project, version, output, suffix=suffix)
     return ReleaseStatus(version, matched is not None, has_releases, next_path)
 
 
@@ -127,7 +150,7 @@ def render(status: Status) -> str:
             _format_main(status.main),
             _format_artifact(status.description),
             _format_artifact(status.announce),
-            *(_format_named(s) for s in status.shorts),
+            *(line for s in status.shorts for line in _format_short(s)),
             *(_format_named(t) for t in status.thumbnails),
             *(_format_inst_key(k) for k in status.inst),
             _format_release(status.release),
@@ -163,12 +186,22 @@ def _format_inst_key(status: InstKeyStatus) -> str | None:
     return f"inst {inst.key_label(status.key)}: {status.stale}" if status.stale else None
 
 
-def _format_release(release: ReleaseStatus | None) -> str | None:
+def _format_short(status: ShortStatus) -> list[str]:
+    lines = []
+    if (build_line := _format_named(status.build)) is not None:
+        lines.append(build_line)
+    for label, release in status.releases:
+        if (line := _format_release(release, label=label)) is not None:
+            lines.append(line)
+    return lines
+
+
+def _format_release(release: ReleaseStatus | None, *, label: str = "release") -> str | None:
     if release is None or release.matched:
         return None
     if release.version is None:
-        return "release: 音源のバージョン（vX.Y）が audio.file の名前から分かりません"
+        return f"{label}: 音源のバージョン（vX.Y）が audio.file の名前から分かりません"
     assert release.next_path is not None
     if not release.has_releases:
-        return f"release: まだ release していません（release すると {release.next_path.name} になります）"
-    return f"release: 内容が変わっています。release してください（次は {release.next_path.name} になります）"
+        return f"{label}: まだ release していません（release すると {release.next_path.name} になります）"
+    return f"{label}: 内容が変わっています。release してください（次は {release.next_path.name} になります）"
