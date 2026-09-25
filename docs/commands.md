@@ -102,7 +102,7 @@ utavideo fonts [名前]
 utavideo check [-C <曲フォルダ>]
 ```
 
-[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさ・縦用 .ass の場所と大きさ・ショートの名前を表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。`[[shorts]]` があれば、縦用 .ass とすべてのショートの区間も検査します（[ショートの検査](#ショートの検査)。書き出しは [shorts](#shorts)）。`[[shorts]]` が無ければ、縦用 .ass のファイルがあっても見ません。
+[検査項目](#検査項目)を調べ、曲名・音源の長さ・歌詞の行数・使うフォントのファイル・`release` で次に付く名前・サムネイルの名前と大きさ・縦用 .ass の場所と大きさ・ショートの名前を表示します。`[avatar]` があり `sync = "auto"` なら、求めた頭出しのズレ（秒）と際立ち（z 値）も表示します。`[[thumbnails]]` があれば、すべてのサムネイルも検査します（[thumbnail](#thumbnail) の検査と同じ）。`[[shorts]]` があれば、縦用 .ass とすべてのショートの区間も検査します（[ショートの検査](#ショートの検査)。書き出しは [shorts](#shorts)）。`[[shorts]]` が無ければ、縦用 .ass のファイルがあっても見ません。
 
 ## preview-bg / build / overlay
 
@@ -114,9 +114,9 @@ utavideo overlay [-C <曲フォルダ>]
 
 | コマンド | 出力 | 入るもの |
 |---|---|---|
-| `preview-bg` | `build/preview/bg.mp4` | 背景・`[[layers]]`・曲名表示・音声（歌詞の行は入れない） |
-| `build` | `build/main.mp4` | 背景・`[[layers]]`・歌詞・曲名表示・音声 |
-| `overlay` | `build/overlay.mov` | 歌詞・曲名表示（背景・`[[layers]]` は無し）・音声。背景のファイルは不要 |
+| `preview-bg` | `build/preview/bg.mp4` | 背景・`[[layers]]`・`[avatar]`・曲名表示・音声（歌詞の行は入れない） |
+| `build` | `build/main.mp4` | 背景・`[[layers]]`・`[avatar]`・歌詞・曲名表示・音声 |
+| `overlay` | `build/overlay.mov` | 歌詞・曲名表示（背景・`[[layers]]`・`[avatar]` は無し）・音声。背景のファイルは不要 |
 
 - 書き出す前に[検査](#検査項目)し、エラーがあれば書き出しません。警告は表示して続けます
 - `preview-bg` は、歌詞の行についての検査を行いません
@@ -161,7 +161,7 @@ utavideo overlay [-C <曲フォルダ>]
 
 縦の下敷きを書き出すとき:
 
-- 本編の映像（本編の .ass の歌詞入り、`[[layers]]` も重ねる。曲名表示は入れません）を帯の上に置いた、完成図と同じ画面にします。曲名表示は帯（縦用 .ass の `VerticalBand` スタイル）に描きます。本編の合成とぼかしの分だけ、本編の下敷きより時間がかかります。描画に使った本編の .ass は `build/.work/vertical-preview-frame.ass` に書きます
+- 本編の映像（本編の .ass の歌詞入り、`[[layers]]`・`[avatar]` も重ねる。曲名表示は入れません）を帯の上に置いた、完成図と同じ画面にします。曲名表示は帯（縦用 .ass の `VerticalBand` スタイル）に描きます。本編の合成とぼかしの分だけ、本編の下敷きより時間がかかります。描画に使った本編の .ass は `build/.work/vertical-preview-frame.ass` に書きます
 - `[[shorts]]` は無くてもかまいません（区間を置く前に使うため）。検査は[ショートの検査](#ショートの検査)の表の `preview-bg` の列のとおりです
 - 曲名表示は `vertical.overlay_text = false` で消せます（`shorts` と同じ）
 
@@ -175,17 +175,17 @@ utavideo overlay [-C <曲フォルダ>]
 utavideo preview [-C <曲フォルダ>] [--at <時刻>] [--duration <秒数>] [--watch]
 ```
 
-`utavideo.toml` の数値やスタイルを直すたびに、確認のためだけに本番の `build`（曲全体、`video.crf`・`video.preset`）を待つのは遅いので、指定した一瞬・短い区間だけをすばやく書き出します。`preview-bg` が歌詞を除いた曲全体の Aegisub 用の下敷きを作るのに対し、`preview` は歌詞・曲名表示・`[[layers]]` を含む完成に近い絵を、狭い範囲だけ速く確かめる用途です。
+`utavideo.toml` の数値やスタイルを直すたびに、確認のためだけに本番の `build`（曲全体、`video.crf`・`video.preset`）を待つのは遅いので、指定した一瞬・短い区間だけをすばやく書き出します。`preview-bg` が歌詞を除いた曲全体の Aegisub 用の下敷きを作るのに対し、`preview` は歌詞・曲名表示・`[[layers]]`・`[avatar]` を含む完成に近い絵を、狭い範囲だけ速く確かめる用途です。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
 | `--at` | `0` | 確認したい時刻（`"M:SS"` か秒の数） |
 | `--duration` | 無指定 | この秒数だけの動画にする。無指定なら1フレームの静止画 |
-| `--watch` | 無効 | `utavideo.toml`・歌詞（`lyrics.file`）・`[[layers]]` の各 `file`・背景（`video.background`）の変更を検知して自動的に作り直す（1秒間隔のポーリング。新しい依存は追加していない。`Ctrl+C` で終了） |
+| `--watch` | 無効 | `utavideo.toml`・歌詞（`lyrics.file`）・`[[layers]]` の各 `file`・`avatar.file`・背景（`video.background`）の変更を検知して自動的に作り直す（1秒間隔のポーリング。新しい依存は追加していない。`Ctrl+C` で終了） |
 
 | `--duration` | 出力 | 中身 |
 |---|---|---|
-| 無指定 | `build/.work/preview.png` | `--at` の1フレーム（背景 ＋ `[[layers]]` ＋ 歌詞 ＋ 曲名表示。フェードも入る） |
+| 無指定 | `build/.work/preview.png` | `--at` の1フレーム（背景 ＋ `[[layers]]` ＋ `[avatar]` ＋ 歌詞 ＋ 曲名表示。フェードも入る） |
 | あり | `build/.work/preview.mp4` | `--at` から `--duration` 秒（ffmpeg の ultrafast プリセット。`preview-bg` と同じ書き出しの速さ） |
 
 - 出力先は毎回同じ名前に上書きします。macOS のプレビュー.app のように、ファイルの変更を検知して自動で再表示するビューアで開いておくと、保存するたびに表示が更新されます（Windows・Linux では、開きっぱなしで自動更新するビューアを別途探してください）
@@ -207,7 +207,7 @@ utavideo thumbnail [-C <曲フォルダ>] [--name <name>]
 
 | 出力 | 入るもの |
 |---|---|
-| `build/thumbnail/<name>.png` | 背景のフレーム＋ `[[layers]]`（`at` の時刻に区間が入っているものだけ）＋ .ass |
+| `build/thumbnail/<name>.png` | 背景のフレーム＋ `[[layers]]`（`at` の時刻に区間が入っているものだけ）＋ `[avatar]`（区間指定が無いので常に重なる）＋ .ass |
 
 - 背景が GIF・動画のときは、`at` 秒以降の最初のフレームを使います（繰り返しません）
 - .ass は加工せずに、**0 秒**の状態を描きます。`lyrics.fade_ms` の自動フェードと `[overlay_text]` の曲名表示は入りません。`\t`・`\move`・`\k` なども 0 秒の状態になります
@@ -235,8 +235,8 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 
 | 出力 | 画面 | 使う .ass |
 |---|---|---|
-| `build/shorts/<name>.mp4` | 本編の映像（`[[layers]]` も重ねる）を `vertical.size` の幅いっぱいに縮めて上下中央に置き、上下の帯を背景だけをぼかして埋め、縦用 .ass の縦だけの文字（曲名表示を含む）を重ねる | 真ん中は本編の .ass、帯の上は縦用 .ass の、区間に入る `Vertical` で始まるスタイルの行 |
-| `build/shorts/wide/<name>.mp4`（`wide = true`） | `build/main.mp4` と同じ画面（`video.size`・`video.focus`・`[[layers]]`） | 本編の .ass |
+| `build/shorts/<name>.mp4` | 本編の映像（`[[layers]]`・`[avatar]` も重ねる）を `vertical.size` の幅いっぱいに縮めて上下中央に置き、上下の帯を背景だけをぼかして埋め、縦用 .ass の縦だけの文字（曲名表示を含む）を重ねる | 真ん中は本編の .ass、帯の上は縦用 .ass の、区間に入る `Vertical` で始まるスタイルの行 |
+| `build/shorts/wide/<name>.mp4`（`wide = true`） | `build/main.mp4` と同じ画面（`video.size`・`video.focus`・`[[layers]]`・`[avatar]`） | 本編の .ass |
 
 画面の作り方（本編の映像を帯の上に置く、blur 一本）:
 
@@ -441,6 +441,7 @@ utavideo build-all [-C <曲フォルダ>]
 | 歌詞 | .ass が読めない、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって縦横比が PlayRes と違う（文字が潰れて描かれる。縦横比が同じで大きさだけ違うのは問題ない）、未定義のスタイル（`\r` の切り替え先を含む）を使っている |
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
+| アバター（`[avatar]` がある曲） | `file` のファイルが無い、形式に対応していない、`sync = "auto"` で際立ち（z 値）が低すぎる（5 未満。求めたズレを信頼できないので、`sync` に秒数を直接書く） |
 | サムネイル（`thumbnail`・`check`） | 背景が画像なのに `at` を書いた、`at` が背景の長さ以上（長さは ffprobe で取る） |
 | サムネイルの .ass（`thumbnail`・`check`。`preview-bg --target thumbnail` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイルを使っている、フォントが見つからない |
 | 縦用 .ass・ショートの区間 | [ショートの検査](#ショートの検査) |
@@ -455,6 +456,7 @@ utavideo build-all [-C <曲フォルダ>]
 | 歌詞の行 | `\pos`・`\move` を使っている、表示時間が 0 以下、音声が終わった後に始まる、音声の終わりで途中で切られる、同じスタイル・同じレイヤーで重なる、画面からはみ出しそう |
 | サムネイルの .ass（`thumbnail`・`check`。`preview-bg --target thumbnail` では見ない） | 0 秒に表示されない行（始まりが 0 秒より後、または終わりが 0 秒以前）、`\fad`・`\fade` のフェードインが 0 秒で終わっていない、画面からはみ出しそう（`\pos` の行は対象外なので、サムネイルではほとんど検査されない） |
 | サムネイル（`thumbnail`・`check`） | 背景の長さを取得できず、`at` を確かめられない |
+| アバター（`[avatar]` がある曲） | `sync = "auto"` で際立ちが低め（z 値が 5 以上 10 未満）。誤りがないか確認する |
 | 縦用 .ass・ショートの区間 | [ショートの検査](#ショートの検査) |
 | `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空、本編の .ass にスタイル `Short` の行がある（区間は縦用 .ass に書く） |
 | 概要欄（`[description]` がある曲の `check`） | `video.background` がどの `materials.files` にも無い、`materials.files` のファイルが無い、タイトルの `{singers}` に入る人がいない、タイトルが 100 文字・概要欄が 5000 バイトを超える、`<` か `>` を含む（YouTube の上限） |

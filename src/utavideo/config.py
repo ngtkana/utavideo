@@ -2,6 +2,7 @@
 
 import glob
 import os
+import re
 import sys
 import tomllib
 from collections.abc import Callable
@@ -173,6 +174,36 @@ class Layer(_Model):
     layer: int = 0  # 大きいほど手前。0 未満は歌詞より奥、0 以上（既定）は歌詞より手前
 
 
+_KEY_COLOR_RE = re.compile(r"0[xX][0-9a-fA-F]{6}")
+
+
+def _check_key_color(key: str) -> str:
+    if not _KEY_COLOR_RE.fullmatch(key):
+        raise ValueError(f'"0xRRGGBB" の形で書いてください（例: "0x0000ff"）: {key!r}')
+    return key
+
+
+class Avatar(_Model):
+    """ブルーバック・グリーンバックで録画したアバター動画を背景に合成する（issue #112）。
+
+    file・key・similarity・despill・sync・delay_ms は「答えが一つに決まるもの」で、
+    utavideo.avatar が内部でキャッシュする（利用者からは build・check を叩くだけに見える）。
+    scale・anchor・margin・layer は「気分で変えたいもの」で、[[layers]]（Layer）と同じ
+    LayerSpec に変換し、同じ合成コードに乗せる（utavideo.avatar.layer_spec）。
+    """
+
+    file: Path
+    key: Annotated[str, AfterValidator(_check_key_color)] = "0x0000ff"  # 既定はブルーバック
+    similarity: Ratio = 0.3
+    despill: Ratio = 0.2
+    sync: Literal["auto"] | float = "auto"  # 数値なら手動オフセット（秒）
+    delay_ms: float = 0
+    scale: float = 1.0
+    anchor: LayerAnchor = "center"
+    margin: tuple[int, int] = (0, 0)  # 余白（横, 縦）。ピクセル、負の値も許す
+    layer: int = 0  # 前後関係。[[layers]] の layer と同じ尺度
+
+
 class OverlayText(_Model):
     enabled: bool = True
     style: str = "Title"
@@ -262,6 +293,7 @@ class ProjectConfig(_Model):
     video: Video
     lyrics: Lyrics = Field(default_factory=Lyrics)
     layers: tuple[Layer, ...] = ()  # 本編の描画に効くので NOT_RENDERED は付けない
+    avatar: Avatar | None = None  # 本編の描画に効くので NOT_RENDERED は付けない
     overlay_text: OverlayText = Field(default_factory=OverlayText)
     credits: Annotated[tuple[Credit, ...], NOT_RENDERED] = ()
     materials: Annotated[tuple[Material, ...], NOT_RENDERED] = ()

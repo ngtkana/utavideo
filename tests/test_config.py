@@ -398,3 +398,51 @@ def test_settings_marked_as_not_rendered() -> None:
 def test_hashtags_must_not_repeat(tmp_path: Path, section: str) -> None:
     with pytest.raises(ConfigError, match="重複"):
         load_project_config(_write(tmp_path, MINIMAL + f'[{section}]\nhashtags = ["cover", "Cover"]\n'))
+
+
+AVATAR = """
+[avatar]
+file = "src/avatar/avatar-raw.mp4"
+"""
+
+
+def test_avatar_defaults(tmp_path: Path) -> None:
+    avatar = load_project_config(_write(tmp_path, MINIMAL + AVATAR)).avatar
+    assert avatar is not None
+    assert avatar.key == "0x0000ff"
+    assert avatar.similarity == 0.3
+    assert avatar.despill == 0.2
+    assert avatar.sync == "auto"
+    assert avatar.delay_ms == 0
+    assert avatar.scale == 1.0
+    assert avatar.anchor == "center"
+    assert avatar.margin == (0, 0)
+    assert avatar.layer == 0
+
+
+def test_config_without_avatar_still_loads(tmp_path: Path) -> None:
+    assert load_project_config(_write(tmp_path, MINIMAL)).avatar is None
+
+
+def test_avatar_fields(tmp_path: Path) -> None:
+    text = (
+        MINIMAL
+        + AVATAR
+        + 'key = "0x00ff00"\nsimilarity = 0.5\ndespill = 0.1\nsync = 2.5\ndelay_ms = 80\n'
+        + 'scale = 1.5\nanchor = "right"\nmargin = [40, 0]\nlayer = 50\n'
+    )
+    avatar = load_project_config(_write(tmp_path, text)).avatar
+    assert avatar is not None
+    assert (avatar.key, avatar.similarity, avatar.despill) == ("0x00ff00", 0.5, 0.1)
+    assert (avatar.sync, avatar.delay_ms) == (2.5, 80)
+    assert (avatar.scale, avatar.anchor, avatar.margin, avatar.layer) == (1.5, "right", (40, 0), 50)
+
+
+def test_avatar_key_must_be_hex_color(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="0xRRGGBB"):
+        load_project_config(_write(tmp_path, MINIMAL + AVATAR + 'key = "blue"\n'))
+
+
+def test_avatar_similarity_out_of_range_is_rejected(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match="similarity"):
+        load_project_config(_write(tmp_path, MINIMAL + AVATAR + "similarity = 1.5\n"))

@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from utavideo import inst, shorts, thumbnail, vertical
-from utavideo.config import PROJECT_CONFIG_NAME, Layer, Short, Thumbnail, rendered_values
+from utavideo import avatar, inst, shorts, thumbnail, vertical
+from utavideo.config import PROJECT_CONFIG_NAME, Avatar, Layer, Short, Thumbnail, rendered_values
 from utavideo.ffmpeg import write_text
 from utavideo.layers import file_path as layer_file_path
 from utavideo.project import Project
@@ -32,6 +32,17 @@ FONTS = "フォント"
 def _layer_files(root: Path, layers: tuple[Layer, ...]) -> tuple[tuple[str, Path], ...]:
     """[[layers]] の各ファイルを、files タプルに足す分の (名前, パス) にする。"""
     return tuple((f"layers.{layer.name}", layer_file_path(root, layer)) for layer in layers)
+
+
+def _avatar_files(root: Path, config_avatar: Avatar | None) -> tuple[tuple[str, Path], ...]:
+    """[avatar] の生の録画を、files タプルに足す分の (名前, パス) にする（無ければ空）。
+
+    キー抜き・頭出し済みの中間動画（build/.work/）はここでは追わない。生の録画・
+    utavideo.toml の値（config ハッシュに含まれる）が変わらない限り作り直さないため。
+    """
+    if config_avatar is None:
+        return ()
+    return (("avatar.file", avatar.file_path(root, config_avatar)),)
 
 
 @dataclass(frozen=True)
@@ -64,6 +75,7 @@ def main_target(project: Project) -> RecordTarget:
             ("video.background", project.background_path),
             ("lyrics.file", project.lyrics_path),
             *_layer_files(project.root, project.config.layers),
+            *_avatar_files(project.root, project.config.avatar),
         ),
         rendered_values(project.config),
         "build/main.mp4",
@@ -83,6 +95,7 @@ def shorts_target(project: Project, short: Short) -> RecordTarget:
             ("audio.file", project.audio_path),
             ("video.background", project.background_path),
             *_layer_files(project.root, config.layers),
+            *_avatar_files(project.root, config.avatar),
         ),
         {
             "video": rendered_values(config.video),
@@ -91,6 +104,7 @@ def shorts_target(project: Project, short: Short) -> RecordTarget:
             "song": rendered_values(config.song),
             "short": rendered_values(short),
             "layers": rendered_values(config.layers),
+            "avatar": rendered_values(config.avatar),
         },
         str(output),
         track_fonts=False,
@@ -108,11 +122,13 @@ def thumbnail_target(project: Project, thumb: Thumbnail) -> RecordTarget:
             ("video.background", project.background_path),
             ("thumbnail.file", thumbnail.file_path(project.root, thumb)),
             *_layer_files(project.root, config.layers),
+            *_avatar_files(project.root, config.avatar),
         ),
         {
             "video": rendered_values(config.video),
             "thumbnail": rendered_values(thumb),
             "layers": rendered_values(config.layers),
+            "avatar": rendered_values(config.avatar),
         },
         str(output),
         track_fonts=False,

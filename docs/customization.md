@@ -92,6 +92,25 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 | アルファ付き動画（VP9 / `.webm`）の書き出し | `-auto-alt-ref 0` を付けてエンコードする（付けないとアルファが欠けることがある） |
 | `anchor`・`margin`・`scale` を素早く確かめる | `utavideo preview --at <表示される時刻> --watch`。macOS ならプレビュー.app で `build/.work/preview.png` を開いておくと、`utavideo.toml` を保存するたびに位置・大きさが更新された絵が自動で表示される（[commands.md](commands.md#preview)） |
 
+## アバターの合成（`[avatar]`）
+
+ブルーバック・グリーンバックで録画したアバター動画を、背景の上に合成します。撮影後にやることは3つ（クロマキー、位置と大きさ、タイミング）で、`[avatar]` 1つのテーブルに書きます（`utavideo avatar prepare` のような手動の前処理コマンドはなく、`build`・`check`・`preview` 等が内部で自動的に判定します。項目の全体は [config-reference.md](config-reference.md#avatar)）。
+
+| やりたいこと | 書き方 |
+|---|---|
+| 録画を指定する | `avatar.file`（音声トラック入り） |
+| 背景の色を抜く（クロマキー） | `key`（既定はブルーバック `"0x0000ff"`。グリーンバックは `"0x00ff00"`）・`similarity` |
+| 被写体に残る色かぶりを消す | `despill`（`type` は `key` の色から自動判定） |
+| 音の頭出し | `sync = "auto"`（既定）。録画の音声と `audio.file` の相互相関で自動的に求め、`check`・`build` がズレの秒数と際立ち（z 値）を表示する |
+| 際立ちが低くて自動推定を信頼できないとき | `sync` に秒数を直接書いて手動指定する（際立ちが低い理由の多くは、録画の音声にノイズが多い・曲の一部しか重なっていない、など） |
+| 動きの遅延を合わせる | `delay_ms`（手動。モーションキャプチャ・描画の遅延ぶん、動きが録画の音声より遅れる分を目視で測って入力する。機材ごとに一度決めたら基本固定） |
+| 大きさ・位置・前後関係 | `scale`・`anchor`・`margin`・`layer`（`[[layers]]` と同じ書き方・同じ尺度。曲を通して固定） |
+| `anchor`・`margin`・`scale` を素早く確かめる | `utavideo preview --at <表示される時刻> --watch`（[[layers]] と同じ。[commands.md](commands.md#preview)） |
+
+- キー抜き・頭出し済みの中間動画は `build/.work/` に自動でキャッシュされ、`file`・`key`・`similarity`・`despill`・`sync`・`delay_ms` が前回と変わっていなければ作り直しません（60fps などの重い録画に毎回キーをかけずに済む）
+- 縦型のショート・サムネイルにも、本編と同じ位置・大きさで重なります（縦だけ別の位置に置くことはまだできません。[roadmap.md](roadmap.md)）
+- クロマキーの品質が実用に届かないときは、utavideo 側では ML マッティング等の高品質化はしません。録画側でアルファ付き録画（OBS + `alphaPacker` 等）に切り替えてください
+
 ## サムネイル
 
 `utavideo thumbnail` で `build/thumbnail/<name>.png` に書き出します。手順は [workflow.md](workflow.md#9-サムネイルを作る)。
@@ -229,8 +248,9 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 
 - 出力の形式（[一覧](commands.md#出力の形式変更不可)）
 - 曲名表示の区間・レイヤー・フェード・数
-- `[[layers]]` の位置・大きさを動かす演出、出力ごとの上書き・除外
-- アバターの合成、サムネイルごとの背景（[roadmap.md](roadmap.md)）
+- `[[layers]]`・`[avatar]` の位置・大きさを動かす演出、出力ごとの上書き・除外
+- アバターの動きの遅延（`delay_ms`）の自動推定（口の形と音素が対応しないため、手入力にしている）
+- サムネイルごとの背景（[roadmap.md](roadmap.md)）
 - サムネイルの形式（PNG だけ）
 - 雛形の中身、1曲で複数の .ass
 - サムネイルに描く .ass の時刻と加工の有無（[commands.md](commands.md#thumbnail)）

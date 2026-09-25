@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pysubs2
 
-from utavideo import fonts, graph, inst, layers, layout, shorts, subs, thumbnail, vertical
+from utavideo import avatar, fonts, graph, inst, layers, layout, shorts, subs, thumbnail, vertical
 from utavideo.config import Short, Thumbnail, cache_dir, load_user_config
 from utavideo.console import err_console
 from utavideo.ffmpeg import FFmpegError, probe_audio, probe_duration
@@ -33,6 +33,7 @@ def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = No
     if mode != "overlay":
         issues += background_issues(project)
         issues += layer_issues(project)
+        issues += subs.prefixed(avatar.analyze(project).issues, "[avatar] ")
 
     lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
     if lyrics is None or duration_s is None:

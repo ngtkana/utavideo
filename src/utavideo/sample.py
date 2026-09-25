@@ -34,6 +34,14 @@ STILL_BACKGROUND = Path("src/bg/still.jpg")
 GIF_BACKGROUND = Path("src/bg/loop.gif")
 LOGO_FILE = Path("src/layers/logo.png")  # [[layers]] の見本（合成、半透明の帯）
 LOGO_COLOR = "0xFF6FA5"
+AVATAR_FILE = Path("src/avatar/avatar-raw.mp4")  # [avatar] の見本（合成、青一色の上を図形が動く）
+AVATAR_SIZE = (480, 270)
+AVATAR_FPS = 15
+AVATAR_COLOR = "0x0000ff"  # ブルーバック（[avatar] の既定と同じ）
+AVATAR_SHAPE_COLOR = "0xFFFFFF"  # 動く図形（キー抜きで残る被写体の代わり）
+# 録画は音源より AVATAR_LEAD_S 秒早く始まり、AVATAR_TAIL_S 秒長く続く（sync = "auto" の正解値）
+AVATAR_LEAD_S = 2
+AVATAR_TAIL_S = 1
 LYRICS_FILE = Path("src/lyrics.ass")
 _MATERIAL_TEMPLATE_DIR = "sample-materials"
 _MATERIAL_CREDIT = "Kana Nagata（背景: VRoid Studio で制作・VRM Posing Desktop で撮影 / 音源: 作曲）"
@@ -136,6 +144,7 @@ def _config(spec: _Spec) -> str:
         background=VIDEO_BACKGROUND.as_posix(),
         still=STILL_BACKGROUND.as_posix(),
         gif=GIF_BACKGROUND.as_posix(),
+        avatar=AVATAR_FILE.as_posix(),
         logo=LOGO_FILE.as_posix(),
         width=str(spec.size[0]),
         height=str(spec.size[1]),
@@ -195,6 +204,7 @@ def material_note() -> str:
         f"背景の静止画（`{STILL_BACKGROUND.as_posix()}`）と音源（`{AUDIO_FILE.as_posix()}`）は、"
         f"{_MATERIAL_CREDIT}によるものです。ループする背景（`{VIDEO_BACKGROUND.as_posix()}`・"
         f"`{GIF_BACKGROUND.as_posix()}`）、[[layers]] の見本（`{LOGO_FILE.as_posix()}`）、"
+        f"[avatar] の見本（`{AVATAR_FILE.as_posix()}`）、"
         f"inst 用の音源（`{AUDIO_INST_FILE.as_posix()}`）、"
         "フォント以外の合成音は、その場で合成したものです。"
     )
@@ -229,7 +239,39 @@ def _materials(root: Path, spec: _Spec) -> list[Path]:
          "-frames:v", "1", "-update", "1", "-c:v", "png"],
         logo,
     )  # fmt: skip
-    return [audio, still, inst_audio, loop, gif, logo]
+
+    avatar = _avatar_video(root, audio)
+    return [audio, still, inst_audio, loop, gif, logo, avatar]
+
+
+def _avatar_video(root: Path, audio: Path) -> Path:
+    """[avatar] の見本。実写のブルーバック録画は用意できないので、青一色の上を図形が動く映像を合成する。
+
+    sync = "auto" が実際に相互相関で求まることを確かめられるよう、録画の音声には見本の音源
+    （audio）そのものを AVATAR_LEAD_S 秒遅らせて入れる（頭出しの正解値が既知になる）。
+    """
+    output = root / AVATAR_FILE
+    total = AVATAR_LEAD_S + AUDIO_DURATION_S + AVATAR_TAIL_S
+    w, h = AVATAR_SIZE
+    box = max(2, round(w / 4))
+    filter_complex = (
+        f"[0:v][1:v]overlay=x=(W-w)*t/{total}:y=(H-h)/2[v];"
+        f"[2:a]atrim=0:{AVATAR_LEAD_S}[lead];"
+        f"[3:a]atrim=0:{AUDIO_DURATION_S}[song];"
+        f"[2:a]atrim=0:{AVATAR_TAIL_S}[tail];"
+        "[lead][song][tail]concat=n=3:v=0:a=1[a]"
+    )
+    _ffmpeg(
+        ["-f", "lavfi", "-i", f"color=c={AVATAR_COLOR}:s={w}x{h}:r={AVATAR_FPS}:d={total}",
+         "-f", "lavfi", "-i", f"color=c={AVATAR_SHAPE_COLOR}:s={box}x{box}:r={AVATAR_FPS}:d={total}",
+         "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo",
+         "-i", str(audio),
+         "-filter_complex", filter_complex,
+         "-map", "[v]", "-map", "[a]", "-t", str(total),
+         "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-pix_fmt", "yuv420p", "-c:a", "aac"],
+        output,
+    )  # fmt: skip
+    return output
 
 
 def _box_over_bars(size: tuple[int, int], fps: int, seconds: int, *, extra_filters: str = "") -> list[str]:

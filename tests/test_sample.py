@@ -93,6 +93,26 @@ def test_every_command_runs_on_the_sample(sample: Path) -> None:
     assert (sample / "release" / "sample-v1.0.0.mp4").is_file()
 
 
+def test_sample_includes_a_working_avatar_with_correct_auto_sync(sample: Path) -> None:
+    # [avatar] の見本は、音源を AVATAR_LEAD_S 秒遅らせて録画の音声に仕込んである（頭出しの正解値）
+    config = Project.load(sample).config
+    assert config.avatar is not None
+    assert config.avatar.sync == "auto"
+    output = invoke("check", "-C", str(sample)).output
+    assert f"アバターの頭出し: {sample_module.AVATAR_LEAD_S:.3f} 秒" in output
+
+
+def test_avatar_is_prepared_once_and_reused_on_the_next_build(sample: Path) -> None:
+    first = invoke("build", "-C", str(sample)).output
+    assert "アバターを準備しています" in first
+    assert (sample / "build/.work/avatar-prepared.mov").is_file()
+    assert (sample / "build/.work/avatar-cache.json").is_file()
+
+    # 録画・設定が変わっていなければ、2 回目はキー抜きをやり直さない
+    second = invoke("build", "-C", str(sample)).output
+    assert "アバターを準備しています" not in second
+
+
 def test_font_option_uses_an_installed_font_instead_of_synthesizing_one(tmp_path: Path) -> None:
     root = tmp_path / "sample"
     invoke("sample", str(root), "--small", "--font", "Some Installed Font")

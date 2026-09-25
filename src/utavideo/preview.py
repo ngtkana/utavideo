@@ -16,7 +16,7 @@ from pathlib import Path
 
 import pysubs2
 
-from utavideo import fonts, graph, layers
+from utavideo import avatar, fonts, graph, layers
 from utavideo.analyze import FontSearch, analyze
 from utavideo.config import Video, cache_dir
 from utavideo.console import console, err_console
@@ -64,7 +64,7 @@ def render(project: Project, search: FontSearch, at: float, duration_s: float | 
         return _render_still(project, script, video, at, analysis.font_files)
 
     clip = clip_for(at, duration_s, video.fps)
-    layer_specs = tuple(layers.spec(project.root, layer) for layer in project.config.layers)
+    layer_specs = avatar.all_layer_specs(project)
     target = VideoTarget(
         "preview",
         video.size,
@@ -94,6 +94,8 @@ def _render_still(
         for layer in project.config.layers
         if layers.active_at(layer, at)
     )
+    if project.config.avatar is not None:
+        active_layers += (avatar.layer_spec(project),)  # 区間の無いレイヤーなので常に表示する
     spec = graph.StillSpec(
         size=video.size,
         background=project.background_path.absolute(),
@@ -119,12 +121,14 @@ def _render_still(
 
 
 def watched_files(project: Project) -> tuple[Path, ...]:
-    """--watch が監視するファイル（設定・歌詞・[[layers]] の素材・背景）。"""
+    """--watch が監視するファイル（設定・歌詞・[[layers]]・[avatar] の素材・背景）。"""
+    avatar_file = (avatar.file_path(project.root, project.config.avatar),) if project.config.avatar else ()
     return (
         project.config_path,
         project.lyrics_path,
         project.background_path,
         *(layers.file_path(project.root, layer) for layer in project.config.layers),
+        *avatar_file,
     )
 
 
