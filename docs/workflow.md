@@ -128,7 +128,7 @@ utavideo announce
 動画と同じ背景・フォントで、サムネイル用に文字を組み直します。`new` / `init` で `utavideo.toml` を作った曲には、`src/thumbnail.ass` と `[[thumbnails]]`（`name = "main"`）が入っています。既存の `utavideo.toml` がある曲では、`init` が表示する書き足し方に従って足してください。
 
 ```sh
-utavideo thumbnail --bg-only    # build/thumbnail/bg/main.png（文字を組むときの下敷き）
+utavideo preview-bg --target thumbnail    # build/thumbnail/bg/main.png（文字を組むときの下敷き）
 ```
 
 1. 背景が GIF・動画なら、使うフレームの時刻を `[[thumbnails]]` の `at` に書いてから実行する
