@@ -164,7 +164,8 @@ _NEXT_STEPS = """次にやること（詳しくは docs/workflow.md）:
   1. utavideo.toml の audio.file / video.background を合わせ、song を確認する
   2. utavideo preview-bg → Aegisub で src/lyrics.ass と build/preview/bg.mp4 を開いて歌詞を入れる
   3. utavideo check → utavideo build → utavideo release
-  4. utavideo thumbnail --bg-only → Aegisub で src/thumbnail.ass を開いて文字を組む → utavideo thumbnail
+  4. utavideo preview-bg --target thumbnail → Aegisub で src/thumbnail.ass を開いて文字を組む →
+     utavideo thumbnail
   5. 縦型のショートを作るなら、utavideo.toml に [vertical] を書く →
      utavideo preview-bg（縦用 .ass を自動で作り、下敷きも書き出す）→ Aegisub で src/vertical.ass を
      組み、区間を置く → utavideo.toml に [[shorts]] → utavideo shorts"""
@@ -395,17 +396,61 @@ def check(project_dir: ProjectOption = None) -> None:
 
 @app.command("preview-bg")
 @_handle_errors
-def preview_bg(project_dir: ProjectOption = None) -> None:
+def preview_bg(
+    project_dir: ProjectOption = None,
+    target: Annotated[
+        str | None,
+        typer.Option(
+            "--target",
+            help=(
+                "書き出す対象。省略時は本編・縦型ショートの下敷き。thumbnail ですべての"
+                "[[thumbnails]]、thumbnail:<name> で1つだけの下敷き（build/thumbnail/bg/<name>.png）"
+            ),
+        ),
+    ] = None,
+) -> None:
     """歌詞以外（背景・曲名表示・音声）を合成した、Aegisub 用のプレビュー動画を書き出す。
 
     utavideo.toml に [vertical] があれば、縦型のショートの下敷き（build/preview/vertical-bg.mp4）も
     作る。縦用 .ass（vertical.lyrics）がまだ無ければ、本編の歌詞から自動で作る。
+
+    --target thumbnail（または thumbnail:<name>）で、サムネイルの下敷き
+    （build/thumbnail/bg/<name>.png）を書き出す。
     """
+    if target is not None:
+        _render_thumbnail_bg(project_dir, target)
+        return
     _render(project_dir, "preview", "preview-bg")
     project = _load_project(project_dir)
     if "vertical" in project.config.model_fields_set:
         _ensure_vertical_ass(project)
         _render_vertical_preview(project)
+
+
+def _render_thumbnail_bg(project_dir: Path | None, target: str) -> None:
+    """preview-bg --target thumbnail[:<name>] を処理する。"""
+    if target != "thumbnail" and not target.startswith("thumbnail:"):
+        _fail(f"--target には thumbnail か thumbnail:<name> を指定してください: {target}")
+    name = target.removeprefix("thumbnail:") if target != "thumbnail" else None
+
+    require_tools()
+    project = _load_project(project_dir)
+    thumbnails = _select_named(
+        project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
+    )
+    issues = background_issues(project)
+    analysis = analyze_thumbnails(project, thumbnails, bg_only=True)
+    issues += analysis.issues
+    _print_issues(issues)
+    if not subs.ok(issues):
+        raise typer.Exit(1)
+
+    video = project.config.video
+    for thumb in thumbnails:
+        output = _write_thumbnail(project, thumb, video, (), bg_only=True)
+        console.print(f"書き出しました: {output}（{output.stat().st_size:,} バイト）", markup=False)
+        if windows_path := to_windows_path(output):
+            console.print(f"  Windows: {windows_path}", markup=False)
 
 
 def _render_vertical_preview(project: Project) -> None:
@@ -795,12 +840,6 @@ def _select_named[T: Thumbnail | Short](
 def thumbnail_command(
     project_dir: ProjectOption = None,
     name: Annotated[str | None, typer.Option("--name", help="[[thumbnails]] の name。省略時はすべて")] = None,
-    bg_only: Annotated[
-        bool,
-        typer.Option(
-            "--bg-only", help="背景だけを build/thumbnail/bg/<name>.png に書き出す（Aegisub の下敷き）"
-        ),
-    ] = False,
 ) -> None:
     """背景のフレームにサムネイル用の .ass を描いて、build/thumbnail/<name>.png に書き出す。"""
     require_tools()
@@ -809,7 +848,7 @@ def thumbnail_command(
         project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
     )
     issues = background_issues(project)
-    analysis = analyze_thumbnails(project, thumbnails, bg_only=bg_only)
+    analysis = analyze_thumbnails(project, thumbnails, bg_only=False)
     issues += analysis.issues
     _print_issues(issues)
     if not subs.ok(issues):
@@ -818,11 +857,9 @@ def thumbnail_command(
     video = project.config.video
     for thumb in thumbnails:
         font_files = analysis.font_files.get(thumb.name, ())
-        record = None
-        if not bg_only:
-            target = inputs.thumbnail_target(project, thumb)
-            record = inputs.Record(target, inputs.snapshot(target))
-        output = _write_thumbnail(project, thumb, video, font_files, bg_only=bg_only, record=record)
+        target = inputs.thumbnail_target(project, thumb)
+        record = inputs.Record(target, inputs.snapshot(target))
+        output = _write_thumbnail(project, thumb, video, font_files, bg_only=False, record=record)
         console.print(f"書き出しました: {output}（{output.stat().st_size:,} バイト）", markup=False)
         if windows_path := to_windows_path(output):
             console.print(f"  Windows: {windows_path}", markup=False)
@@ -839,8 +876,8 @@ def _write_thumbnail(
 ) -> Path:
     """背景のフレームに1本のサムネイルを書き出し、出力先を返す。
 
-    thumbnail_command と build-all の両方から呼ぶ（画面への表示はそれぞれの呼び出し側が行う）。
-    record は --bg-only のとき渡さない（bg は status の対象ではないので記録しない）。
+    thumbnail_command・preview-bg・build-all から呼ぶ（画面への表示はそれぞれの呼び出し側が行う）。
+    record は bg_only のとき渡さない（bg は status の対象ではないので記録しない）。
     """
     if bg_only:
         subtitles = fontsdir = None

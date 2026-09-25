@@ -343,7 +343,7 @@ def _pixels(path: Path) -> bytes:
 
 def test_thumbnail_draws_ass_over_background(project: Path) -> None:
     _with_thumbnail(project)
-    bg = invoke("thumbnail", "-C", str(project), "--bg-only")
+    bg = invoke("preview-bg", "-C", str(project), "--target", "thumbnail")
     assert "バイト" in bg.output
     result = invoke("thumbnail", "-C", str(project))
     assert "バイト" in result.output
@@ -360,7 +360,7 @@ def test_thumbnail_records_inputs_only_when_not_bg_only(project: Path) -> None:
     _with_thumbnail(project)
     record = project / "build/.work/thumbnail-main-inputs.json"
 
-    invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("preview-bg", "-C", str(project), "--target", "thumbnail")
     assert not record.exists()
 
     invoke("thumbnail", "-C", str(project))
@@ -371,7 +371,7 @@ def test_thumbnail_records_inputs_only_when_not_bg_only(project: Path) -> None:
 def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
     _with_thumbnail(project)
     (project / "src/thumbnail.ass").unlink()
-    invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("preview-bg", "-C", str(project), "--target", "thumbnail")
     result = runner.invoke(app, ["thumbnail", "-C", str(project)])
     assert result.exit_code == 1
     assert "file のファイルがありません" in result.output
@@ -380,10 +380,10 @@ def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
 def test_thumbnail_uses_the_frame_at_the_given_time(project: Path) -> None:
     # 4 fps・0.5 秒の GIF。0.25 秒のフレームは 0 秒と違う絵
     _with_thumbnail(project, "loop.gif", 'size = [90, 90]\nat = "0:00.25"')
-    invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("preview-bg", "-C", str(project), "--target", "thumbnail:main")
     later = _pixels(project / "build/thumbnail/bg/main.png")
     _with_thumbnail(project, "loop.gif")
-    invoke("thumbnail", "-C", str(project), "--bg-only")
+    invoke("preview-bg", "-C", str(project), "--target", "thumbnail:main")
     assert _pixels(project / "build/thumbnail/bg/main.png") != later
 
 
@@ -396,7 +396,7 @@ def test_thumbnail_uses_the_frame_at_the_given_time(project: Path) -> None:
 )
 def test_thumbnail_rejects_unusable_time(project: Path, background: str, at: str, message: str) -> None:
     _with_thumbnail(project, background, f"size = [90, 90]\n{at}")
-    for command in (["thumbnail", "--bg-only"], ["check"]):
+    for command in (["preview-bg", "--target", "thumbnail"], ["check"]):
         result = runner.invoke(app, [*command, "-C", str(project)])
         assert result.exit_code == 1
         assert message in result.output
@@ -405,7 +405,7 @@ def test_thumbnail_rejects_unusable_time(project: Path, background: str, at: str
 def test_thumbnail_reports_when_ffmpeg_writes_nothing(project: Path) -> None:
     # 長さ 0.5 秒の GIF の最後のフレームは 0.25 秒。それより後には書き出すフレームが無い
     _with_thumbnail(project, "loop.gif", "size = [90, 90]\nat = 0.4")
-    result = runner.invoke(app, ["thumbnail", "-C", str(project), "--bg-only"])
+    result = runner.invoke(app, ["preview-bg", "-C", str(project), "--target", "thumbnail"])
     assert result.exit_code == 1
     assert "何も書き出しませんでした" in result.output
     assert list((project / "build/thumbnail/bg").glob("*.png")) == []

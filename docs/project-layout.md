@@ -24,7 +24,7 @@
 │   ├── description.txt
 │   ├── thumbnail/       # utavideo thumbnail
 │   │   ├── main.png     # [[thumbnails]] の name ごと
-│   │   └── bg/main.png  # --bg-only（Aegisub の下敷き）
+│   │   └── bg/main.png  # utavideo preview-bg --target thumbnail（Aegisub の下敷き）
 │   ├── shorts/          # utavideo shorts
 │   │   ├── chorus.mp4   # [[shorts]] の name ごと
 │   │   └── wide/chorus.mp4  # wide = true の 16:9 版
