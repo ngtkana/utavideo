@@ -254,30 +254,19 @@ def test_negative_audio_fade_is_rejected(tmp_path: Path) -> None:
         load_project_config(_write(tmp_path, MINIMAL + "[vertical]\naudio_fade_ms = [-1, 0]\n"))
 
 
-def test_layout_and_frame_y(tmp_path: Path) -> None:
+def test_frame_y(tmp_path: Path) -> None:
     config = load_project_config(_write(tmp_path, MINIMAL))
-    assert (config.vertical.layout, config.vertical.frame_y) == ("blur", 0.5)
-    text = MINIMAL + '[vertical]\nlayout = "blur"\nframe_y = 0\n[[shorts]]\nname = "chorus"\n'
-    text += '[[shorts]]\nname = "intro"\nlayout = "reframe"\n'
+    assert config.vertical.frame_y == 0.5
+    text = MINIMAL + '[vertical]\nframe_y = 0\n[[shorts]]\nname = "chorus"\n'
     project = Project(tmp_path, load_project_config(_write(tmp_path, text)))
     assert project.config.vertical.frame_y == 0.0
-    chorus, intro = project.config.shorts
-    # shorts[].layout は vertical.layout を上書きする
-    default_layout = project.config.vertical.layout
-    assert (
-        shorts_module.resolve_layout(chorus, default_layout),
-        shorts_module.resolve_layout(intro, default_layout),
-    ) == ("blur", "reframe")
+    (chorus,) = project.config.shorts
     assert shorts_module.work_ass_path(project.work_dir, chorus, "frame").parent.name == "frame"
 
 
-@pytest.mark.parametrize(
-    ("setting", "message"),
-    [('layout = "cover"', r"vertical\.layout"), ("frame_y = 1.5", r"vertical\.frame_y")],
-)
-def test_layout_and_frame_y_are_validated(tmp_path: Path, setting: str, message: str) -> None:
-    with pytest.raises(ConfigError, match=message):
-        load_project_config(_write(tmp_path, MINIMAL + f"[vertical]\n{setting}\n"))
+def test_frame_y_is_validated(tmp_path: Path) -> None:
+    with pytest.raises(ConfigError, match=r"vertical\.frame_y"):
+        load_project_config(_write(tmp_path, MINIMAL + "[vertical]\nframe_y = 1.5\n"))
 
 
 def test_shorts_focus_and_wide(tmp_path: Path) -> None:

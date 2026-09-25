@@ -104,7 +104,8 @@ class RenderSpec:
     crf: int = 18
     preset: Preset = "slow"
     clip: Clip | None = None  # None なら曲全体
-    # None なら背景を size に合わせる画面（reframe）。あれば blur の画面で、size は縦の解像度
+    # None なら背景を size に合わせる画面（本編・wide 版など）。
+    # あれば blur の画面で、真ん中に frame の映像を重ねる（size は縦の解像度）
     frame: Frame | None = None
     pitch: Pitch | None = None  # None なら音声はそのまま（inst のキー変更）
     loudnorm: Loudnorm | None = None  # None なら音量はそのまま（inst の正規化）

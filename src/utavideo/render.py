@@ -102,7 +102,7 @@ class VideoTarget:
     output: Path
     label: str
     clip: graph.Clip | None = None  # 切り出す区間（None なら曲全体）
-    frame: Frame | None = None  # None なら背景を size に合わせる画面（reframe）
+    frame: Frame | None = None  # None なら背景を size に合わせる画面。あれば真ん中に frame の映像を重ねる
     pitch: graph.Pitch | None = None  # inst のキー変更。None なら音声はそのまま
     loudnorm: graph.Loudnorm | None = None  # inst の音量正規化。None なら音量はそのまま
     audio: Path | None = None  # None なら project.audio_path（inst は inst_audio_path を渡す）

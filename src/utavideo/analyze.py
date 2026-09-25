@@ -1,13 +1,13 @@
 """書き出し前の検査。曲フォルダの状態を読み、Issue のリストを返す。"""
 
-from collections.abc import Collection
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 import pysubs2
 
 from utavideo import fonts, graph, inst, layout, shorts, subs, thumbnail, vertical
-from utavideo.config import Layout, Short, Thumbnail, cache_dir, load_user_config
+from utavideo.config import Short, Thumbnail, cache_dir, load_user_config
 from utavideo.console import err_console
 from utavideo.ffmpeg import FFmpegError, probe_audio, probe_duration
 from utavideo.project import Project
@@ -111,23 +111,6 @@ def font_missing_message(name: str, font_dirs: list[Path]) -> str:
     return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
-def vertical_inputs(project: Project, search: FontSearch, *, draws_main: bool) -> Analysis:
-    """縦の書き出しに要るものの検査と、音源の長さ・本編の .ass（無ければ None）。
-
-    draws_main は本編の映像も描くとき（blur の真ん中、wide の版）で、本編の .ass とフォントも
-    build と同じ条件で検査する。描かないなら、本編の .ass は突き合わせと LayoutRes にだけ使い、
-    フォントは縦用 .ass のものだけでよい（文字が潰れる LayoutRes は本編の書き出しと同じく止める）。
-    """
-    if draws_main:
-        return analyze(project, "final", search)
-    issues, duration_s = audio_issues(project.audio_path, label="audio.file")
-    issues += background_issues(project)
-    lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
-    if lyrics is not None:
-        issues += subs.layout_res_issues(lyrics)
-    return Analysis(issues, duration_s, lyrics, ())
-
-
 def analyze_inst(
     project: Project, keys: list[int], *, include_lyrics: bool, search: FontSearch | None = None
 ) -> Analysis:
@@ -179,15 +162,12 @@ class VerticalAnalysis:
     font_files: tuple[Path, ...]
 
 
-def analyze_vertical(
-    project: Project, search: FontSearch, *, layouts: Collection[Layout]
-) -> VerticalAnalysis:
+def analyze_vertical(project: Project, search: FontSearch) -> VerticalAnalysis:
     """縦用 .ass のファイル全体の検査（PlayRes・LayoutRes・スタイル・フォント）と、blur の大きさ。
 
-    layouts は、この縦用 .ass から描く画面の作り方（曲名表示のスタイルが要るかが変わる）。
     区間の外の行は書き出しに使わないので、行ごとの検査（はみ出しを含む）はここでは行わない。
     """
-    sizing = _blur_frame_issues(project) if "blur" in layouts else []
+    sizing = _blur_frame_issues(project)
     config = project.config
     path = vertical.lyrics_path(project.root, config.vertical)
     if not path.is_file():
@@ -199,9 +179,7 @@ def analyze_vertical(
         script = subs.load(path)
     except subs.SubtitleError as e:
         return VerticalAnalysis([*sizing, subs.Issue("error", f"縦用 .ass: {e}")], None, ())
-    overlay = vertical.script_overlay_text(
-        vertical.overlay_text(config.overlay_text, config.vertical), layouts
-    )
+    overlay = vertical.overlay_text(config.overlay_text, config.vertical)
     issues = subs.lint_vertical(script, size=config.vertical.size, overlay=overlay)
     # 曲名表示のフォントも探すよう、書き出しと同じく曲名表示の行を足してから調べる
     composed = compose(project, script, 0, "final", search.index, no_vertical_fade=True, overlay=overlay)
@@ -223,8 +201,7 @@ def _blur_frame_issues(project: Project) -> list[subs.Issue]:
     message = (
         f"blur の画面を作れません: video.size（{video.size[0]}x{video.size[1]}）が "
         f"vertical.size（{width}x{height}）より縦長なので、縦の幅に縮めた本編の映像"
-        f"（{width}x{frame}）が縦の画面に収まりません"
-        '（vertical.size を高くするか、vertical.layout = "reframe" にします）'
+        f"（{width}x{frame}）が縦の画面に収まりません（vertical.size を高くします）"
     )
     return [subs.Issue("error", message)]
 
@@ -249,13 +226,11 @@ def analyze_shorts(
     """targets のショートの検査。縦用 .ass のファイル全体と、区間の行、区間に入る行。
 
     duration_s は音源の長さ（読めなければ None で、長さとの比較と行の検査をしない）。
-    lyrics は本編の .ass（読めなければ None で、本編との突き合わせをしない）。
+    lyrics は本編の .ass（読めなければ None で、はみ出しの区間の検査をしない）。
     report_unused は、どの name にも合わない区間の行を警告するか。
     """
     config = project.config
-    checked = analyze_vertical(
-        project, search, layouts=[shorts.resolve_layout(s, config.vertical.layout) for s in targets]
-    )
+    checked = analyze_vertical(project, search)
     if checked.script is None:
         return ShortsAnalysis(checked.issues, None, {}, checked.font_files)
     script = checked.script
@@ -265,18 +240,14 @@ def analyze_shorts(
     )
     issues = checked.issues + found.issues
     sections = {section.name: section for section in found.sections}
-    # blur の区間では、縦用 .ass に歌詞を置かない。歌詞についての検査は本編の .ass で行う
-    edge_lines: dict[Layout, list[pysubs2.SSAEvent]] = {
-        "reframe": shorts.lyric_lines(script),
-        "blur": [] if lyrics is None else shorts.lyric_lines(lyrics),
-    }
-    by_layout: dict[Layout, list[shorts.Section]] = {}
+    # 縦用 .ass に歌詞を置かないので、歌詞についての検査は本編の .ass で行う
+    edge_lines = [] if lyrics is None else shorts.lyric_lines(lyrics)
+    all_sections: list[shorts.Section] = []
     for short in targets:
         if (section := sections.get(short.name)) is None:
             continue
-        layout_ = shorts.resolve_layout(short, config.vertical.layout)
-        by_layout.setdefault(layout_, []).append(section)
-        found_issues = shorts.edge_issues(edge_lines[layout_], section)
+        all_sections.append(section)
+        found_issues = shorts.edge_issues(edge_lines, section)
         # 書き出しの前に必ず通す検査。区間が音源より後ろだと、ffmpeg は音声の無い動画を書いてしまう
         found_issues += shorts.render_issues(
             section,
@@ -286,32 +257,22 @@ def analyze_shorts(
             wide=short.wide,
         )
         issues += subs.prefixed(found_issues, f"ショート {short.name}: ")
-    if lyrics is not None and (reframed := by_layout.get("reframe")):
-        matched = shorts.match_lyrics(lyrics, script, reframed)
-        issues += subs.prefixed(matched, "本編との突き合わせ: ")
     if duration_ms is not None:
-        issues += subs.prefixed(_vertical_line_issues(script, by_layout, search, duration_ms), "縦用 .ass: ")
+        issues += subs.prefixed(
+            _vertical_line_issues(script, all_sections, search, duration_ms), "縦用 .ass: "
+        )
     return ShortsAnalysis(issues, script, sections, checked.font_files)
 
 
 def _vertical_line_issues(
-    script: pysubs2.SSAFile,
-    by_layout: dict[Layout, list[shorts.Section]],
-    search: FontSearch,
-    duration_ms: int,
+    script: pysubs2.SSAFile, sections: Sequence[shorts.Section], search: FontSearch, duration_ms: int
 ) -> list[subs.Issue]:
-    """区間に入る、描く行の警告。区間の外の行（本編の写し）は、本編と同じ警告を二重に出さない。
+    """区間に入る、縦だけの文字（帯の曲名など）の警告。
 
-    描く行は画面の作り方で変わる（blur では帯の文字だけ）ので、まとめてから1回だけ検査する。
-    そうしないと、reframe と blur の両方の区間に入る行の警告が2回出る。
-    はみ出しは blur でも見る。帯の文字こそ vertical.size の幅に収まるか確かめたい行のため。
+    はみ出しは vertical.size の幅に収まるか確かめたい行のため見る。
     """
     drawn = subs.without_events(script)
-    drawn.events = [
-        event
-        for event in subs.dialogues(script)
-        if any(shorts.draws(event, group, vertical_only=name == "blur") for name, group in by_layout.items())
-    ]
+    drawn.events = [event for event in subs.dialogues(script) if shorts.draws(event, sections)]
     return subs.lint_lines(drawn.events, duration_ms=duration_ms) + layout.overflows(
         drawn, search.index.lookup
     )

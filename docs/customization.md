@@ -81,31 +81,29 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 
 縦型のショートに使う歌詞は、本編とは別の縦用 .ass に組みます。手順は [workflow.md](workflow.md#10-ショートの縦用-ass-を作り区間を置く)。
 
+縦型のショートは、本編の映像をぼかした帯の上に置く画面（blur）で作ります。曲名表示（`overlay_text`）は上下の帯に自動で入ります。
+
 | やりたいこと | 書き方 |
 |---|---|
-| 画面の作り方を選ぶ | `vertical.layout`。`"blur"`（既定）は本編の映像をぼかした帯の上に置き、曲名表示（`overlay_text`）は上下の帯に自動で入る。`"reframe"` は背景を縦に切り取って縦用 .ass の歌詞を重ねる（[shorts](commands.md#shorts)） |
-| `blur` で本編の映像を置く高さ | `vertical.frame_y`（0〜1。`0` で上端、`0.5` で中央、`1` で下端）。帯を上に広く取りたいなら大きくする |
-| ショートごとに画面の作り方を変える | `shorts[].layout`（既定は `vertical.layout`）。`blur` の曲で1本だけ `reframe` にするときは、本編の .ass の歌詞の行を Aegisub で縦用 .ass にコピーする。縦用 .ass の自動生成と縦の下敷きは `[[shorts]]` で実際に使う `layout` に合わせます（`blur` が1本でもあれば下敷きは `blur`、`reframe` が1本でもあれば歌詞を写す） |
-| 縦用 .ass を作る | `[vertical]` を書いてから `utavideo preview-bg`。無ければ本編の .ass の行を写し、大きさと座標を縦の解像度に変換する（使う `layout` が `blur` だけなら行を写さず、スタイルだけ写す） |
+| 本編の映像を置く高さ | `vertical.frame_y`（0〜1。`0` で上端、`0.5` で中央、`1` で下端）。帯を上に広く取りたいなら大きくする |
+| 縦用 .ass を作る | `[vertical]` を書いてから `utavideo preview-bg`。無ければ本編の .ass のスタイルだけを写し、幅の比で縮める（歌詞は本編の映像に入るので行は写さない） |
 | 縦の解像度 | `vertical.size`（縦用 .ass を作る前に決める。後から変えるなら、縦用 .ass の PlayRes も同じにする） |
 | 縦用 .ass の場所・名前 | `vertical.lyrics` |
-| 縦だけ文字を大きくする・改行する | 縦用 .ass のスタイル `Lyrics` の大きさ、行の `\N`（本編の .ass は変わらない） |
 | 縦用 .ass を作り直す | 縦用 .ass を消してから `preview-bg`（直した内容は残らない） |
 | 縦の下敷き（Aegisub で開く） | `preview-bg`（`build/preview/vertical-bg.mp4`。`[vertical]` があれば本編の下敷きと一緒に作る） |
-| 縦で背景のどこを残すか | `vertical.focus`（既定は `video.focus`）。`blur` では上下の帯の切り取りに効く |
+| 縦で背景のどこを残すか | `vertical.focus`（既定は `video.focus`）。上下の帯の切り取りに効く |
 | 切り抜く区間 | 縦用 .ass に、スタイル `Short` のコメント行を置き、本文をショートの名前にする。`utavideo.toml` に同じ `name` の `[[shorts]]` を書く（書き方の詳細は[区間の書き方（文法）](workflow.md#区間の書き方文法)） |
 | ショートを何本も作る | 区間の行と `[[shorts]]` を、名前を変えて並べる |
-| 縦だけの文字（帯の曲名など） | スタイル名を `Vertical` で始める（例: `VerticalBand`）。歌詞として扱わず、区間の端の検査と本編との突き合わせをしない |
-| 本編の行を縦では出さない | 縦用 .ass の対応する行を、文字はそのままでコメント行にする（[本編との突き合わせ](commands.md#本編との突き合わせ)で警告しない） |
+| 帯に文字を足す（曲名表示以外） | 縦用 .ass に、スタイル名を `Vertical` で始める行を足す（例: `VerticalBand`） |
 | ショートを書き出す | `utavideo shorts`（`--name <name>` で1本だけ） |
 | 区間ごとに背景の残す位置を変える | `shorts[].focus`（既定は `vertical.focus`） |
 | 同じ区間の 16:9 版も書き出す | `shorts[].wide = true`（`build/shorts/wide/<name>.mp4`） |
 | 区間の端の音声のフェード | `vertical.audio_fade_ms`（16:9 版にも効く）。映像はフェードしない |
-| 縦だけ曲名表示を消す | `vertical.overlay_text = false`（本編と 16:9 版には出る。`blur` では帯からも消える） |
-| `blur` の帯に出る曲名表示の位置を細かく変える | 縦用 .ass のスタイル `VerticalBand` の `MarginV`（既定は縦用 .ass を作った時点の `frame_y` に合わせて自動計算） |
+| 縦だけ曲名表示を消す | `vertical.overlay_text = false`（本編と 16:9 版には出たまま、帯からも消える） |
+| 帯に出る曲名表示の位置を細かく変える | 縦用 .ass のスタイル `VerticalBand` の `MarginV`（既定は縦用 .ass を作った時点の `frame_y` に合わせて自動計算） |
 | 帯の文字にフェードを入れない | スタイル名を `Vertical` で始める（自動のフェードを入れない。`\fad` を自分で書けば効く） |
 
-`blur` のぼかしの強さは変えられません（帯が落ち着いて見える強さに決めています。[検証記録](verification/20260919-blur-band.md)）。
+帯のぼかしの強さは変えられません（帯が落ち着いて見える強さに決めています。[検証記録](verification/20260919-blur-band.md)）。
 
 ## 音源と公開
 
