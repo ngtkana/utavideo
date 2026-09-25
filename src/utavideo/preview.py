@@ -69,19 +69,22 @@ def render(project: Project, search: FontSearch, at: float, duration_s: float | 
         "preview",
         video.size,
         video.focus,
-        project.work_dir / "preview.ass",
+        project.work_dir / "preview-video.ass",
         project.preview_video_output,
         "preview",
         clip=clip,
         layers=layer_specs,
     )
-    return write_video(project, script, target, clip.duration_s(video.fps), analysis.font_files, None)
+    try:
+        return write_video(project, script, target, clip.duration_s(video.fps), analysis.font_files, None)
+    except NoOutputError as e:
+        raise NoOutputError(f"{e}。--at・--duration が音源の長さを超えていないか確認してください") from e
 
 
 def _render_still(
     project: Project, script: pysubs2.SSAFile, video: Video, at: float, font_files: tuple[Path, ...]
 ) -> Path:
-    subtitles_path = project.work_dir / "preview.ass"
+    subtitles_path = project.work_dir / "preview-still.ass"
     write_text(subtitles_path, script.to_string("ass"))
     fontsdir = fonts.prepare_fontsdir(font_files, cache_dir() / "fontsets")
     # -ss で読む素材は t が 0 秒近辺になるので、区間の判定はここで済ませ enable には渡さない
