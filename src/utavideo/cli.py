@@ -498,34 +498,86 @@ def announce_command(project_dir: ProjectOption = None) -> None:
 @_handle_errors
 def release(
     project_dir: ProjectOption = None,
+    short: Annotated[
+        str | None,
+        typer.Option("--short", help="[[shorts]] の name。指定すると本編でなくこのショートを release する"),
+    ] = None,
     version: Annotated[
         str | None,
         typer.Option("--version", help="音源のバージョン。例: v1.0。省略時は audio.file のファイル名から"),
     ] = None,
-    allow_stale: Annotated[
-        bool, typer.Option(help="build/main.mp4 を書き出した後に入力が変わっていてもコピーする")
-    ] = False,
+    allow_stale: Annotated[bool, typer.Option(help="書き出した後に入力が変わっていてもコピーする")] = False,
 ) -> None:
-    """build/main.mp4 を release/<slug>-<音源のバージョン>.<何本目か>.mp4 にコピーする。"""
+    """build/main.mp4 を release/<slug>-<音源のバージョン>.<何本目か>.mp4 にコピーする。
+
+    --short <name> を付けると、本編の代わりにそのショート（wide があれば両方）を release する。
+    """
     project = _load_project(project_dir)
-    source = project.main_output
+    if short is None:
+        _release_one(
+            project,
+            project.main_output,
+            "utavideo build",
+            version,
+            allow_stale,
+            suffix="",
+            stale_target=inputs.main_target(project),
+        )
+        return
+
+    (selected,) = _select_named(project.config.shorts, short, table="[[shorts]]", example=SHORTS_EXAMPLE)
+    stale_target = inputs.shorts_target(project, selected)
+    rebuild_command = f"utavideo shorts --name {selected.name}"
+    _release_one(
+        project,
+        shorts.output_path(project.build_dir, selected),
+        rebuild_command,
+        version,
+        allow_stale,
+        suffix=f"-shorts-{selected.name}",
+        stale_target=stale_target,
+    )
+    if selected.wide:
+        _release_one(
+            project,
+            shorts.output_path(project.build_dir, selected, wide=True),
+            rebuild_command,
+            version,
+            allow_stale,
+            suffix=f"-shorts-{selected.name}-wide",
+            stale_target=stale_target,
+        )
+
+
+def _release_one(
+    project: Project,
+    source: Path,
+    rebuild_command: str,
+    version: str | None,
+    allow_stale: bool,
+    *,
+    suffix: str,
+    stale_target: inputs.RecordTarget,
+) -> None:
+    """release の1本分（本編・ショート・ショートの wide のいずれか）。"""
+    label = source.relative_to(project.root).as_posix()
     if not source.is_file():
-        _fail("build/main.mp4 がありません。先に utavideo build を実行してください")
+        _fail(f"{label} がありません。先に {rebuild_command} を実行してください")
 
-    version = version or project.version
-    if version is None:
+    resolved = version or project.version
+    if resolved is None:
         _fail("audio.file のファイル名に vX.Y が無いので --version で指定してください")
-    if not re.fullmatch(VERSION_PATTERN, version, re.IGNORECASE):
-        _fail(f"音源のバージョンは v1.0 のような vX.Y の形で指定してください: {version}")
-    version = version.lower()
+    if not re.fullmatch(VERSION_PATTERN, resolved, re.IGNORECASE):
+        _fail(f"音源のバージョンは v1.0 のような vX.Y の形で指定してください: {resolved}")
+    resolved = resolved.lower()
 
-    if not allow_stale and (stale := inputs.stale_inputs(inputs.main_target(project))):
-        _fail(f"{stale}。build し直すか --allow-stale を付けてください")
+    if not allow_stale and (stale := inputs.stale_inputs(stale_target)):
+        _fail(f"{stale}。{rebuild_command} で書き出し直すか --allow-stale を付けてください")
 
     # 書き出し直しただけの動画を別の番号で公開しないよう、公開済みのものと中身を比べる
-    same, dest, _ = find_matching_release(project, version, source)
+    same, dest, _ = find_matching_release(project, resolved, source, suffix=suffix)
     if same is not None:
-        record_release_match(project, version, source, same)
+        record_release_match(project, resolved, source, same, suffix=suffix)
         _fail(f"同じ内容が既にあります: {same}（コピーしません）")
 
     if dest.exists():
@@ -534,7 +586,7 @@ def release(
     tmp = partial_path(dest)
     shutil.copy2(source, tmp)
     replace_partial(tmp, dest)
-    record_release_match(project, version, source, dest)
+    record_release_match(project, resolved, source, dest, suffix=suffix)
     console.print(f"コピーしました: {dest}", markup=False)
 
 

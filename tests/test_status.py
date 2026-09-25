@@ -1,13 +1,14 @@
 """status（git status 風の一覧）。ffmpeg は要らない。"""
 
 import os
+import shutil
 from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import scaffold_named_project
-from utavideo import inputs, inst
+from utavideo import inputs, inst, shorts
 from utavideo import project as project_module
 from utavideo.cli import app
 from utavideo.project import Project, scaffold
@@ -236,10 +237,53 @@ def test_shorts_and_thumbnails_show_not_generated(named_project: Path) -> None:
 def test_recorded_shorts_and_thumbnails_are_clean(named_project: Path) -> None:
     _record_shorts_build(named_project)
     _record_thumbnail_build(named_project)
+    (named_project / "release").mkdir(exist_ok=True)
+    shutil.copy2(
+        named_project / "build/shorts/chorus.mp4", named_project / "release/曲-shorts-chorus-v1.2.0.mp4"
+    )
 
     output = _status(named_project)
     assert "ショート" not in output
     assert "サムネイル" not in output
+
+
+def test_built_short_shows_not_released(named_project: Path) -> None:
+    _record_shorts_build(named_project)
+
+    output = _status(named_project)
+    assert "ショート chorus の release: まだ release していません" in output
+    assert "曲-shorts-chorus-v1.2.0.mp4" in output
+
+
+def test_stale_short_hides_its_release_line(named_project: Path) -> None:
+    _record_shorts_build(named_project)
+    (named_project / "src/vertical.ass").write_text("変えた", encoding="utf-8")
+
+    output = _status(named_project)
+    assert "ショート chorus:" in output
+    assert "ショート chorus の release" not in output
+
+
+WIDE_TOML = NAMED_TOML.replace('name = "chorus"', 'name = "chorus"\nwide = true')
+
+
+def test_wide_short_shows_two_release_lines(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    project = scaffold_named_project(tmp_path, monkeypatch, WIDE_TOML)
+    _record_shorts_build(project)
+    loaded = Project.load(project)
+    wide_output = shorts.output_path(loaded.build_dir, loaded.config.shorts[0], wide=True)
+    wide_output.parent.mkdir(parents=True, exist_ok=True)
+    wide_output.write_bytes(b"wide video")
+
+    output = _status(project)
+    assert (
+        "ショート chorus の release: まだ release していません（release すると 曲-shorts-chorus-v1.2.0.mp4"
+        in output
+    )
+    assert (
+        "ショート chorus の release（wide）: まだ release していません"
+        "（release すると 曲-shorts-chorus-wide-v1.2.0.mp4" in output
+    )
 
 
 def test_editing_vertical_ass_marks_only_the_short_stale(named_project: Path) -> None:
@@ -259,7 +303,9 @@ def test_editing_thumbnail_ass_marks_only_the_thumbnail_stale(named_project: Pat
 
     output = _status(named_project)
     assert "サムネイル main:" in output
-    assert "ショート" not in output
+    # 出力自体は最新（"ショート chorus:" の行が無い）。release していないことは別の行で示すので、
+    # ここでは見ない（issue #122）
+    assert "ショート chorus:" not in output
 
 
 def test_shorts_config_entry_change_marks_stale_without_editing_files(named_project: Path) -> None:

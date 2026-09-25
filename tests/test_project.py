@@ -184,6 +184,32 @@ def test_next_revision_counts_released_videos(tmp_path: Path) -> None:
     assert next_revision(project.released("v3.5")) == 5
 
 
+def test_released_with_suffix_is_a_separate_namespace(tmp_path: Path) -> None:
+    root = tmp_path / "20260814 サンプル"
+    scaffold(root, "サンプル", "sample")
+    (root / "utavideo.toml").write_text(
+        '[song]\ntitle = "サンプル"\nslug = "sample"\n[audio]\nfile = "src/mix/サンプル v3.4.wav"\n'
+        '[video]\nbackground = "src/bg/a.gif"\n',
+        encoding="utf-8",
+    )
+    project = Project.load(root)
+    assert (
+        project.release_path("v3.4", 0, suffix="-shorts-chorus")
+        == root / "release" / "sample-shorts-chorus-v3.4.0.mp4"
+    )
+
+    # 本編と番号空間が別なので、本編の release は shorts の番号に影響しない
+    (root / "release" / "sample-v3.4.0.mp4").write_bytes(b"")
+    assert next_revision(project.released("v3.4", suffix="-shorts-chorus")) == 0
+
+    # 枝番を手で付けていた頃の legacy 名の救済（"曲名 vX.Y.mp4"）は本編（suffix 無し）だけに効く
+    (root / "release" / "サンプル v3.4.mp4").write_bytes(b"")
+    assert project.released("v3.4", suffix="-shorts-chorus") == []
+
+    (root / "release" / "sample-shorts-chorus-v3.4.0.mp4").write_bytes(b"")
+    assert next_revision(project.released("v3.4", suffix="-shorts-chorus")) == 1
+
+
 def test_scaffold_copies_default_credits_and_hashtags(tmp_path: Path) -> None:
     credit = Credit(roles=("Vocal", "Mix"), name='歌う "人"', urls=("https://example.com/a",))
     defaults = Defaults(credits=(credit, credit), hashtags=("歌ってみた", "cover"))

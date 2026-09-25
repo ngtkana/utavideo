@@ -247,6 +247,113 @@ def test_stops_when_a_used_font_file_changes(project: Path, tmp_path: Path) -> N
     assert "（フォント）" in result.output
 
 
+NAMED_TOML = """
+[song]
+title = "曲"
+[audio]
+file = "src/mix/曲 v1.2.wav"
+[video]
+background = "src/bg/bg.png"
+
+[[shorts]]
+name = "chorus"
+"""
+
+
+def _scaffold_shorts_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, toml: str = NAMED_TOML) -> Path:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    root = tmp_path / "曲"
+    scaffold(root, "曲", "曲")
+    (root / "src/vertical.ass").write_text("縦用", encoding="utf-8")
+    (root / "utavideo.toml").write_text(toml, encoding="utf-8")
+    return root
+
+
+def _release_short(project: Path, name: str = "chorus", *args: str):
+    return runner.invoke(app, ["release", "-C", str(project), "--short", name, *args])
+
+
+def _record_shorts_build(project: Path) -> None:
+    """build/shorts/chorus.mp4 が書き出し終えたときの記録を、ffmpeg を使わずに作る。"""
+    loaded = Project.load(project)
+    short = loaded.config.shorts[0]
+    target = inputs.shorts_target(loaded, short)
+    target.output.parent.mkdir(parents=True, exist_ok=True)
+    target.output.write_bytes(b"short video")
+    record = inputs.record_text(target, inputs.snapshot(target))
+    target.record_path.parent.mkdir(parents=True, exist_ok=True)
+    target.record_path.write_text(record, encoding="utf-8")
+
+
+def test_short_release_starts_at_zero(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _scaffold_shorts_project(tmp_path, monkeypatch)
+    _record_shorts_build(root)
+
+    assert _release_short(root).exit_code == 0
+    assert _released(root) == ["曲-shorts-chorus-v1.2.0.mp4"]
+
+
+def test_short_release_numbers_are_independent_from_main(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _scaffold_shorts_project(tmp_path, monkeypatch)
+    (root / "build/main.mp4").write_bytes(b"video")
+    _record_shorts_build(root)
+
+    assert _release(root).exit_code == 0
+    assert _release_short(root).exit_code == 0
+    assert _released(root) == ["曲-shorts-chorus-v1.2.0.mp4", "曲-v1.2.0.mp4"]
+
+
+def test_short_release_fails_for_an_unknown_name(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _scaffold_shorts_project(tmp_path, monkeypatch)
+    _record_shorts_build(root)
+
+    result = _release_short(root, "missing")
+    assert result.exit_code == 1
+    assert "chorus" in result.output
+
+
+def test_short_release_stops_when_not_built(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    root = _scaffold_shorts_project(tmp_path, monkeypatch)
+
+    result = _release_short(root)
+    assert result.exit_code == 1
+    assert "build/shorts/chorus.mp4 がありません" in result.output
+    assert "utavideo shorts --name chorus" in result.output
+
+
+def test_short_release_stops_when_vertical_ass_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _scaffold_shorts_project(tmp_path, monkeypatch)
+    _record_shorts_build(root)
+
+    vertical = root / "src/vertical.ass"
+    later = (root / "build/shorts/chorus.mp4").stat().st_mtime + 10
+    vertical.write_text(vertical.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+    os.utime(vertical, (later, later))
+
+    result = _release_short(root)
+    assert result.exit_code == 1
+    assert "vertical.lyrics" in result.output
+    assert _release_short(root, "chorus", "--allow-stale").exit_code == 0
+
+
+def test_wide_short_release_copies_both_with_separate_numbering(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    toml = NAMED_TOML.replace('name = "chorus"', 'name = "chorus"\nwide = true')
+    root = _scaffold_shorts_project(tmp_path, monkeypatch, toml)
+    _record_shorts_build(root)
+    wide_output = root / "build/shorts/wide/chorus.mp4"
+    wide_output.parent.mkdir(parents=True, exist_ok=True)
+    wide_output.write_bytes(b"wide video")
+
+    assert _release_short(root).exit_code == 0
+    assert _released(root) == ["曲-shorts-chorus-v1.2.0.mp4", "曲-shorts-chorus-wide-v1.2.0.mp4"]
+
+
 def test_record_of_another_video_falls_back_to_modification_times(project: Path) -> None:
     # 記録の後に build/main.mp4 が差し替わっていたら、記録は使わない
     _record_build(project)
