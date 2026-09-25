@@ -43,7 +43,6 @@ def _convert(
     *,
     source_dir: str = ".",
     band_video_size: tuple[int, int] = (1920, 1080),
-    band_frame_y: float = 0.5,
 ) -> pysubs2.SSAFile:
     source = pysubs2.SSAFile.from_string(text, format_="ass")
     return vertical.convert(
@@ -52,7 +51,6 @@ def _convert(
         video_file=VIDEO,
         source_dir=source_dir,
         band_video_size=band_video_size,
-        band_frame_y=band_frame_y,
     )
 
 
@@ -119,14 +117,15 @@ def test_existing_short_style_is_kept() -> None:
 
 
 def test_band_style_margin_v_fits_the_band_when_a_video_size_is_given() -> None:
-    band = _convert(band_video_size=(1920, 1080), band_frame_y=0.5).styles["VerticalBand"]
-    # 本編（1920x1080）を幅 1080 に縮めた高さは 608。上帯の高さは (1920 - 608) * 0.5 = 656
+    band = _convert(band_video_size=(1920, 1080)).styles["VerticalBand"]
+    # 本編（1920x1080）を幅 1080 に縮めた高さは 608。本編は中央に置くので、上帯の高さは (1920 - 608) / 2 = 656
     # フォントサイズは Lyrics と同じ比で縮んだ 56.25（test_styles_shrink_by_the_width_ratio と同じ値）
     assert band.marginv == round((656 - 56.25) / 2) == 300
 
 
 def test_band_style_margin_v_is_zero_when_the_band_is_thinner_than_the_font() -> None:
-    band = _convert(band_video_size=(1920, 1080), band_frame_y=0.02).styles["VerticalBand"]
+    # 本編と同じ縦横比（1080x1920）なら幅いっぱいに縮めても縦を埋め、帯の高さは 0 になる
+    band = _convert(band_video_size=(1080, 1920)).styles["VerticalBand"]
     assert band.marginv == 0
 
 

@@ -191,7 +191,7 @@ def _blur_frame_issues(project: Project) -> list[subs.Issue]:
     """blur の真ん中に置く本編の映像が、縦の画面に収まるか。
 
     video.size が vertical.size より縦長だと、幅いっぱいに縮めた本編が縦からはみ出し、
-    黙って上下を切られる（frame_y の 0〜1 が「上端から下端まで」を指さなくなる）。
+    中央に置いた本編の上下が黙って切られる。
     """
     video = project.config.video
     width, height = project.config.vertical.size

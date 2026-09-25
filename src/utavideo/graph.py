@@ -59,13 +59,12 @@ class Clip:
 class Frame:
     """blur の画面で、ぼかした帯の上に置く本編の映像。
 
-    本編を size に作ってから幅いっぱいに縮め、上端を (H - h) * frame_y に置く。
+    本編を size に作ってから幅いっぱいに縮め、上下中央に置く。
     """
 
     size: tuple[int, int]  # 本編の解像度（[video].size）
     focus: tuple[float, float]  # 本編の focus（[video].focus）
     subtitles: Path  # 本編の合成した .ass（歌詞・曲名表示入り）
-    frame_y: float
     fit: Fit = "cover"
 
 
@@ -299,7 +298,7 @@ def _blur_video(spec: RenderSpec, frame: Frame, cut: str, tail: str) -> str:
         f"[band]{_blur_band(spec.size, spec.focus, spec.pad_color)}[bg];"
         f"[frame]{main},{subtitles_filter(frame.subtitles, spec.fontsdir)},"
         f"scale={width}:{height}:flags={spec.scale_flags}[fg];"
-        f"[bg][fg]overlay=y=(H-h)*{_ratio(frame.frame_y)}:format=rgb,"
+        f"[bg][fg]overlay=y=(H-h)/2:format=rgb,"
         f"{subtitles_filter(spec.subtitles, spec.fontsdir)},{tail}"
     )
 

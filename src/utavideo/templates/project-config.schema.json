@@ -472,13 +472,6 @@
           ],
           "default": null
         },
-        "frame_y": {
-          "default": 0.5,
-          "maximum": 1,
-          "minimum": 0,
-          "title": "Frame Y",
-          "type": "number"
-        },
         "overlay_text": {
           "default": true,
           "title": "Overlay Text",

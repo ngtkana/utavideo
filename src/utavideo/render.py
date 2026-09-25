@@ -128,7 +128,6 @@ def write_video(
             size=video.size,
             focus=video.focus,
             subtitles=target.frame.subtitles_path.absolute(),
-            frame_y=project.config.vertical.frame_y,
             fit=video.fit,
         )
     spec = graph.RenderSpec(

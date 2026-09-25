@@ -702,9 +702,7 @@ def _ensure_vertical_ass(project: Project) -> None:
         size=size,
         video_file=_path_from(dest.parent, vertical.preview_bg_output(project.build_dir)),
         source_dir=_path_from(dest.parent, source.parent),
-        # 帯（VerticalBand）の MarginV を frame_y に合わせる
         band_video_size=config.video.size,
-        band_frame_y=config.vertical.frame_y,
     )
     write_text(dest, script.to_string("ass"))
 
