@@ -441,14 +441,6 @@
           "title": "Size",
           "type": "array"
         },
-        "layout": {
-          "enum": [
-            "reframe",
-            "blur"
-          ],
-          "type": "string",
-          "default": "blur"
-        },
         "lyrics": {
           "default": "src/vertical.ass",
           "format": "path",
@@ -524,21 +516,6 @@
           "name": {
             "title": "Name",
             "type": "string"
-          },
-          "layout": {
-            "anyOf": [
-              {
-                "enum": [
-                  "reframe",
-                  "blur"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "default": null
           },
           "focus": {
             "anyOf": [

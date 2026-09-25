@@ -459,23 +459,21 @@ def _add_vertical_lines(project: Path, *lines: str) -> None:
 
 
 def test_check_inspects_the_vertical_ass_only_when_there_are_shorts(project: Path) -> None:
-    # 本編との突き合わせ（歌詞を縦用 .ass に写す reframe）を見るテストなので layout を明示する
-    _with_shorts(project, shorts="", extra='layout = "reframe"')
+    _with_shorts(project, shorts="")
     invoke("preview-bg", "-C", str(project))
     assert "縦用 .ass" not in invoke("check", "-C", str(project)).output
 
-    _with_shorts(project, extra='layout = "reframe"')
+    _with_shorts(project)
     _add_vertical_lines(project, "Comment: 0,0:00:00.00,0:00:01.80,Short,,0,0,0,,chorus")
     output = invoke("check", "-C", str(project)).output
     assert "縦用 .ass: src/vertical.ass（180x320）" in output
     assert "ショート: chorus" in output
-    assert "問題ありません" in output  # 自動で写した歌詞は、本編と食い違わない
+    assert "問題ありません" in output
 
-    lyrics = project / "src/lyrics.ass"
-    lyrics.write_text(lyrics.read_text(encoding="utf-8").replace(",AAAA", ",AAAB"), encoding="utf-8")
-    output = invoke("check", "-C", str(project)).output
-    assert "本編との突き合わせ: 本編と文字が違います（0:00:00.200）: 本編「AAAB」" in output
-
+    config = project / "utavideo.toml"
+    config.write_text(
+        config.read_text(encoding="utf-8").replace("enabled = false", "enabled = true"), encoding="utf-8"
+    )
     vertical = project / "src/vertical.ass"
     text = vertical.read_text(encoding="utf-8")
     vertical.write_text(
@@ -509,8 +507,8 @@ def test_check_reports_a_missing_vertical_ass_and_sections(project: Path) -> Non
 
 
 def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
-    # 縦用 .ass の歌詞の行（reframe）のはみ出し・突き合わせを見るテストなので layout を明示する
-    _with_shorts(project, extra='layout = "reframe"')
+    """縦用 .ass の行（帯の文字）の警告は、区間の中の行だけ出す。"""
+    _with_shorts(project)
     invoke("preview-bg", "-C", str(project))
     long_line = "A" * 20
     _add_vertical_lines(
@@ -518,15 +516,13 @@ def test_check_warns_only_about_lines_in_sections(project: Path) -> None:
         "Comment: 0,0:00:01.00,0:00:02.00,Short,,0,0,0,,chorus",
         "Comment: 0,0:00:00.00,0:00:01.00,Short,,0,0,0,,unused",
         # 区間の外の行ははみ出しても警告しない
-        f"Dialogue: 0,0:00:00.00,0:00:00.10,Lyrics,,0,0,0,,{long_line}",
-        f"Dialogue: 0,0:00:01.60,0:00:01.90,Lyrics,,0,0,0,,{long_line}",
+        f"Dialogue: 0,0:00:00.00,0:00:00.10,VerticalBand,,0,0,0,,{long_line}",
+        f"Dialogue: 0,0:00:01.60,0:00:01.90,VerticalBand,,0,0,0,,{long_line}",
     )
     output = invoke("check", "-C", str(project)).output
     assert output.count("はみ出しそう") == 1
     assert "0:00:01.600「AAAA" in output
-    assert "区間の頭（0:00:01.000）が歌詞の行の途中にかかっています" in output
     assert "どの [[shorts]] の name にも合わない区間の行があります" in output
-    assert "本編との突き合わせ: 本編に時刻の重なる行がありません" in output
 
 
 def test_preview_bg_creates_the_vertical_ass_and_writes_both_previews(project: Path) -> None:
@@ -586,20 +582,13 @@ def test_preview_bg_needs_the_lyrics_before_creating_the_vertical_ass(project: P
 
 
 def test_preview_bg_for_blur_creates_a_vertical_ass_without_lyrics(project: Path) -> None:
-    _with_shorts(project, shorts="", extra='layout = "blur"')
+    _with_shorts(project, shorts="")
     output = invoke("preview-bg", "-C", str(project)).output
     assert "曲名表示は自動で帯に入る" in output
     text = (project / "src/vertical.ass").read_text(encoding="utf-8")
     # 歌詞は本編の映像に入るので写さない。スタイルは Aegisub で選べるように写す
     assert "Dialogue:" not in text
     assert "Style: VerticalBand," in text
-
-
-def test_preview_bg_vertical_ass_follows_the_layouts_the_shorts_use(project: Path) -> None:
-    """vertical.layout ではなく、[[shorts]] で実際に使う layout で決める。"""
-    _with_shorts(project, shorts='[[shorts]]\nname = "chorus"\nlayout = "blur"\n', extra='layout = "reframe"')
-    invoke("preview-bg", "-C", str(project))
-    assert "Dialogue:" not in (project / "src/vertical.ass").read_text(encoding="utf-8")
 
 
 def test_layout_res_that_squashes_the_lyrics_stops_the_build(project: Path) -> None:
@@ -696,42 +685,6 @@ def test_shorts_fades_the_audio_at_both_edges(project: Path) -> None:
     assert _mean_volume(output, 1.25, 1.3) < middle - 10
 
 
-def test_shorts_draw_only_the_section_lines_and_can_drop_the_vertical_title(project: Path) -> None:
-    # 縦用 .ass の歌詞・曲名表示（Title）を直接扱う reframe のテストなので layout を明示する
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n', extra='layout = "reframe"')
-    config = project / "utavideo.toml"
-    config.write_text(
-        config.read_text(encoding="utf-8")
-        .replace("enabled = false", "enabled = true")
-        .replace("[vertical]", "[vertical]\noverlay_text = false"),
-        encoding="utf-8",
-    )
-    vertical = project / "src/vertical.ass"
-    vertical.write_text(
-        vertical.read_text(encoding="utf-8").replace(
-            "Style: Title,",
-            "Style: VerticalBand,Test Sans,20,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
-            "0,0,0,0,100,100,0,0,1,0,0,8,10,10,10,1\nStyle: Title,",
-        ),
-        encoding="utf-8",
-    )
-    _add_vertical_lines(
-        project,
-        "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,,AA",
-        "Dialogue: 0,0:00:01.90,0:00:02.00,Lyrics,,0,0,0,,AA",  # 区間の外の行
-    )
-    invoke("shorts", "-C", str(project))
-
-    work = (project / "build/.work/shorts/chorus.ass").read_text(encoding="utf-8")
-    # vertical.overlay_text = false なので、縦には曲名表示を入れない（wide には入れる）
-    assert "テスト / テスター" not in work
-    assert "テスト / テスター" in (project / "build/.work/shorts/wide/chorus.ass").read_text(encoding="utf-8")
-    # 区間の外の行は描かない。帯の文字（Vertical で始まるスタイル）には自動のフェードを入れない
-    assert work.count("Dialogue:") == 2
-    assert "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,,AA" in work
-    assert r"{\fad(150,150)}AAAA" in work
-
-
 def test_shorts_needs_a_name_that_exists(project: Path) -> None:
     _with_shorts(project, shorts="")
     result = runner.invoke(app, ["shorts", "-C", str(project)])
@@ -784,7 +737,7 @@ def test_shorts_blur_places_the_main_video_by_frame_y_and_keeps_it_out_of_the_ba
     _ffmpeg(
         "-f", "lavfi", "-i", "color=c=gray:size=640x360", "-frames:v", "1", str(project / "src/bg/bg.png")
     )
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"\nframe_y = 0')
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra="frame_y = 0")
     invoke("shorts", "-C", str(project))
     output = project / "build/shorts/chorus.mp4"
     video = _stream(_probe(output), "video")
@@ -810,7 +763,7 @@ def test_shorts_blur_places_the_main_video_by_frame_y_and_keeps_it_out_of_the_ba
 def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_band(
     project: Path,
 ) -> None:
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n')
     config = project / "utavideo.toml"
     config.write_text(
         config.read_text(encoding="utf-8").replace("enabled = false", "enabled = true"), encoding="utf-8"
@@ -820,28 +773,35 @@ def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_ban
         "Dialogue: 0,0:00:00.53,0:00:01.77,VerticalBand,,0,0,0,,AA",
         # blur では歌詞を縦用 .ass に置いても描かない（本編の映像に入っているため）
         "Dialogue: 0,0:00:00.60,0:00:01.00,Lyrics,,0,0,0,,AAAA",
+        # 区間の外の帯の行は描かない
+        "Dialogue: 0,0:00:01.90,0:00:02.00,VerticalBand,,0,0,0,,OUT",
     )
     invoke("shorts", "-C", str(project))
 
     work = (project / "build/.work/shorts/chorus.ass").read_text(encoding="utf-8")
     assert work.count("Dialogue:") == 2
     assert "VerticalBand,,0,0,0,,AA" in work
+    assert "OUT" not in work
+    # 帯の文字（Vertical で始まるスタイル）には自動のフェードを入れない
+    assert r"{\fad(150,150)}AA" not in work
     # 曲名表示は本編の映像ではなく、縦用 .ass の帯（自動で作るスタイル VerticalBand）に描く
     assert "VerticalBand,,0,0,0,,テスト / テスター" in work
     frame = (project / "build/.work/shorts/frame/chorus.ass").read_text(encoding="utf-8")
     assert "テスト / テスター" not in frame and "AAAA" in frame
 
-    # vertical.overlay_text = false は、帯からも曲名表示を消す
+    # vertical.overlay_text = false は、帯からも曲名表示を消す（wide には影響しない）
     config.write_text(
         config.read_text(encoding="utf-8").replace("[vertical]", "[vertical]\noverlay_text = false"),
         encoding="utf-8",
     )
     invoke("shorts", "-C", str(project))
     assert "テスト / テスター" not in (project / "build/.work/shorts/chorus.ass").read_text("utf-8")
+    wide = (project / "build/.work/shorts/wide/chorus.ass").read_text("utf-8")
+    assert "テスト / テスター" in wide
 
 
 def test_check_for_a_blur_section_uses_the_main_lyrics(project: Path) -> None:
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n')
     _add_vertical_lines(
         project,
         "Style: VerticalBand,Test Sans,40,&H00FFFFFF,&H000000FF,&H00000000,&H00000000,"
@@ -851,15 +811,13 @@ def test_check_for_a_blur_section_uses_the_main_lyrics(project: Path) -> None:
     output = invoke("check", "-C", str(project)).output
     # 縦用 .ass に歌詞が無くても、区間の端は本編の .ass（0.20〜1.50 秒の行）で見る
     assert "区間の頭（0:00:00.530）が歌詞の行の途中にかかっています" in output
-    # 歌詞は本編の画面で見るので、突き合わせはしない
-    assert "本編との突き合わせ" not in output
     # 帯に描く文字は、縦の画面に収まるか見る（blur で唯一、縦用 .ass から描く行のため）
     assert "「" + "A" * 20 + "」 が画面からはみ出しそうです" in output
 
 
 def test_check_requires_the_band_style_for_blur_when_overlay_text_is_enabled(project: Path) -> None:
     """blur では曲名表示を帯（VerticalBand）に描くので、そのスタイルが無いとエラーになる。"""
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n')
     config = project / "utavideo.toml"
     config.write_text(
         config.read_text(encoding="utf-8").replace("enabled = false", "enabled = true"), encoding="utf-8"
@@ -877,12 +835,11 @@ def test_check_requires_the_band_style_for_blur_when_overlay_text_is_enabled(pro
     assert "VerticalBand" in result.output
 
 
-def test_check_does_not_repeat_a_warning_for_mixed_layouts(project: Path) -> None:
-    """blur と reframe の両方の区間に入る行の警告は、1回だけ出す。"""
+def test_check_does_not_repeat_a_warning_for_overlapping_sections(project: Path) -> None:
+    """複数のショートの区間に同時に入る行の警告は、1回だけ出す。"""
     _with_section(
         project,
-        shorts='[[shorts]]\nname = "chorus"\n\n[[shorts]]\nname = "intro"\nlayout = "reframe"\n',
-        extra='layout = "blur"',
+        shorts='[[shorts]]\nname = "chorus"\n\n[[shorts]]\nname = "intro"\n',
     )
     _add_vertical_lines(
         project,
@@ -897,7 +854,7 @@ def test_check_does_not_repeat_a_warning_for_mixed_layouts(project: Path) -> Non
 
 def test_check_rejects_a_video_size_taller_than_the_vertical_size(project: Path) -> None:
     """blur では、縦の幅に縮めた本編が縦の画面に収まらない設定を止める（黙って切らない）。"""
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra='layout = "blur"')
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n')
     config = project / "utavideo.toml"
     # video.size = [320, 180] を [180, 640] にすると、縦（180x320）より縦長になる
     config.write_text(
@@ -911,7 +868,7 @@ def test_check_rejects_a_video_size_taller_than_the_vertical_size(project: Path)
 
 
 def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> None:
-    _with_shorts(project, shorts="", extra='layout = "blur"\nframe_y = 0')
+    _with_shorts(project, shorts="", extra="frame_y = 0")
     invoke("preview-bg", "-C", str(project))
 
     output = project / "build/preview/vertical-bg.mp4"
@@ -922,15 +879,6 @@ def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> Non
     assert "AAAA" in frame
     # 縦用 .ass の行は下敷きに焼き込まない（Aegisub で組むのはこちら）
     assert "AAAA" not in (project / "build/.work/vertical-preview.ass").read_text(encoding="utf-8")
-
-
-def test_preview_bg_vertical_follows_the_layouts_the_shorts_use(project: Path) -> None:
-    """vertical.layout = "reframe" でも、blur のショートがあれば下敷きを blur の画面にする。"""
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nlayout = "blur"\n')
-    invoke("preview-bg", "-C", str(project))
-    # 完成図と同じく、真ん中に本編の映像（歌詞入り）を置く
-    frame = (project / "build/.work/vertical-preview-frame.ass").read_text(encoding="utf-8")
-    assert "AAAA" in frame
 
 
 @pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")

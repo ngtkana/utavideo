@@ -45,19 +45,18 @@ file = "src/thumbnail.ass"  # 文字を組む .ass（Aegisub で編集）
 # focus = [0.5, 0.5]       # 省略時は video.focus
 
 # [vertical]
-# 縦型のショート（utavideo preview-bg が無ければ本編の歌詞から縦用 .ass を作る）
+# 縦型のショート（utavideo preview-bg が無ければ本編の歌詞から縦用 .ass を作る）。
+# 本編をぼかした帯の上に置く画面で作る
 # size = [1080, 1920]
-# layout = "blur"          # blur（既定）: 本編をぼかした帯の上に置く / reframe: 縦に組み直す
 # lyrics = "src/vertical.ass"
-# focus = [0.5, 0.5]       # 省略時は video.focus（blur では上下の帯の切り取りに効く）
-# frame_y = 0.5            # blur で本編を置く高さ（0 で上端、1 で下端）
+# focus = [0.5, 0.5]       # 省略時は video.focus（上下の帯の切り取りに効く）
+# frame_y = 0.5            # 本編を置く高さ（0 で上端、1 で下端）
 # overlay_text = true      # false にすると、縦だけ曲名表示を消す
 # audio_fade_ms = [300, 1000]  # 区間の端の音声のフェード（wide にも効く）
 
 # [[shorts]]
 # 区間は縦用 .ass に、スタイル Short のコメント行で置き、本文を name と同じにする
 # name = "chorus"          # utavideo shorts → build/shorts/chorus.mp4
-# layout = "blur"          # 省略時は vertical.layout
 # focus = [0.5, 0.5]       # 省略時は vertical.focus
 # wide = true              # 同じ区間の 16:9 版も書き出す
 
