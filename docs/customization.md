@@ -83,7 +83,7 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 
 | やりたいこと | 書き方 |
 |---|---|
-| 文字の位置・見た目 | `[[thumbnails]]` の `file` の .ass。Aegisub で `utavideo thumbnail --bg-only` の下敷き（`build/thumbnail/bg/<name>.png`）を開いて組む |
+| 文字の位置・見た目 | `[[thumbnails]]` の `file` の .ass。Aegisub で `utavideo preview-bg --target thumbnail` の下敷き（`build/thumbnail/bg/<name>.png`）を開いて組む |
 | 背景の GIF・動画のどの時刻を使うか | `at`（`"1:23.5"` か秒の数） |
 | 正方形などのサイズ違いを足す | `[[thumbnails]]` をもう1つ書き、`name`・`file`・`size` を変える。.ass の PlayRes も `size` に合わせる |
 | サイズ違いで背景の残す位置を変える | そのサムネイルの `focus` |
@@ -200,7 +200,7 @@ Aegisub で同じ見た目にするには、Aegisub 側にもフォントをイ�
 
 | やりたいこと | 書き方 |
 |---|---|
-| サムネイルの下敷き | `utavideo thumbnail --bg-only` → `build/thumbnail/bg/<name>.png` |
+| サムネイルの下敷き | `utavideo preview-bg --target thumbnail` → `build/thumbnail/bg/<name>.png` |
 | 実際に描画した .ass を見る | `build/.work/final.ass`・`preview.ass`・`overlay.ass`（自動のフェードと曲名表示が入っている） |
 | 書き出す前に検査 | `utavideo check` |
 

@@ -107,7 +107,7 @@ utavideo check [-C <曲フォルダ>]
 ## preview-bg / build / overlay
 
 ```sh
-utavideo preview-bg [-C <曲フォルダ>]
+utavideo preview-bg [-C <曲フォルダ>] [--target <target>]
 utavideo build [-C <曲フォルダ>]
 utavideo overlay [-C <曲フォルダ>]
 ```
@@ -123,6 +123,19 @@ utavideo overlay [-C <曲フォルダ>]
 - 動画の長さは音源の長さです
 - 描画に使った .ass を `build/.work/final.ass`・`preview.ass`・`overlay.ass`・`vertical-preview.ass` に書きます（自動のフェードと曲名表示が入ったもの）
 - `build` は、書き出しに成功した後、使った入力の記録を `build/.work/main-inputs.json` に書きます（[release](#release) が比べる）。書き出しを始める前に前の記録を消すので、途中で止まったときは記録が残りません
+
+### `--target`（下敷きの対象を選ぶ）
+
+`preview-bg` は「Aegisub で何か手を入れる前に打つ」下敷き生成の唯一の入口です。`--target` を省略すると本編・縦型ショートの下敷き（上の表のとおり）、`thumbnail`・`thumbnail:<name>` を渡すとサムネイルの下敷きを書き出します。
+
+| `--target` | 出力 | 内容 |
+|---|---|---|
+| （省略） | `build/preview/bg.mp4`・（`[vertical]` があれば）`build/preview/vertical-bg.mp4` | 本編・縦型ショートの下敷き |
+| `thumbnail` | `build/thumbnail/bg/<name>.png`（すべての `[[thumbnails]]`） | サムネイルの下敷き |
+| `thumbnail:<name>` | `build/thumbnail/bg/<name>.png`（指定した1本だけ） | サムネイルの下敷き |
+
+- `--target thumbnail`・`thumbnail:<name>` では、背景と `at` だけを検査します（サムネイルの .ass はまだ無くてよい）。書き出したら、パスとバイト数を表示し、[status](#status) の記録対象にはしません
+- 次のときは止まります: `[[thumbnails]]` が無い（書き足し方を表示）、`thumbnail:<name>` の `name` が `[[thumbnails]]` に無い（ある名前を表示）、ffmpeg が正常に終わっても何も書き出さなかった（背景の終わり近くの `at` で、それ以降のフレームが無いとき）
 
 ### 縦型のショートの下敷きと縦用 .ass
 
@@ -159,26 +172,24 @@ utavideo overlay [-C <曲フォルダ>]
 ## thumbnail
 
 ```sh
-utavideo thumbnail [-C <曲フォルダ>] [--name <name>] [--bg-only]
+utavideo thumbnail [-C <曲フォルダ>] [--name <name>]
 ```
 
-`[[thumbnails]]`（[config-reference.md](config-reference.md#thumbnails)）ごとに、背景の1フレームにサムネイル用の .ass を描いた PNG を書き出します。
+`[[thumbnails]]`（[config-reference.md](config-reference.md#thumbnails)）ごとに、背景の1フレームにサムネイル用の .ass を描いた PNG を書き出します。背景だけの下敷き（`build/thumbnail/bg/<name>.png`）は [preview-bg の `--target`](#--target下敷きの対象を選ぶ) で書き出します。
 
 | オプション | 既定値 | 内容 |
 |---|---|---|
 | `--name` | すべて | この `name` のサムネイルだけを検査して書き出す |
-| `--bg-only` | 無効 | 文字を描かず、背景だけを書き出す（Aegisub で文字を組むときの下敷き） |
 
 | 出力 | 入るもの |
 |---|---|
 | `build/thumbnail/<name>.png` | 背景のフレーム＋ .ass |
-| `build/thumbnail/bg/<name>.png`（`--bg-only`） | 背景のフレームだけ |
 
 - 背景が GIF・動画のときは、`at` 秒以降の最初のフレームを使います（繰り返しません）
 - .ass は加工せずに、**0 秒**の状態を描きます。`lyrics.fade_ms` の自動フェードと `[overlay_text]` の曲名表示は入りません。`\t`・`\move`・`\k` なども 0 秒の状態になります
 - 書き出したら、パスとバイト数を表示します
-- 書き出す前に[検査](#検査項目)し、エラーがあれば1枚も書き出しません。`--bg-only` では、背景と `at` だけを検査します（.ass はまだ無くてよい）
-- `--bg-only` でなければ、書き出しに成功した後、使った入力の記録を `build/.work/thumbnail-<name>-inputs.json` に書きます（[status](#status)が比べます）。`--bg-only` では記録しません
+- 書き出す前に[検査](#検査項目)し、エラーがあれば1枚も書き出しません
+- 書き出しに成功した後、使った入力の記録を `build/.work/thumbnail-<name>-inputs.json` に書きます（[status](#status)が比べます）
 
 次のときは止まります。
 
@@ -357,7 +368,7 @@ utavideo status [-C <曲フォルダ>]
 | 概要欄 | `build/title.txt`・`build/description.txt` のどちらかが無い（有無だけを見ます。中身が古いかは見ません） |
 | 告知文 | `build/announce.txt` が無い（有無だけを見ます） |
 | ショート（`[[shorts]]` があるとき、1本ごと） | 出力（`build/shorts/<name>.mp4`）が無い。または縦用 .ass・本編歌詞・音源・背景・設定のいずれかが、書き出した後に変わっている |
-| サムネイル（`[[thumbnails]]` があるとき、1本ごと） | 出力（`build/thumbnail/<name>.png`）が無い（`--bg-only` の実行だけでは生成済みになりません）。またはサムネイルの .ass・背景・設定のいずれかが、書き出した後に変わっている |
+| サムネイル（`[[thumbnails]]` があるとき、1本ごと） | 出力（`build/thumbnail/<name>.png`）が無い（`preview-bg --target thumbnail` の実行だけでは生成済みになりません）。またはサムネイルの .ass・背景・設定のいずれかが、書き出した後に変わっている |
 | inst（`build/inst/` に実在するキーごと） | 本編歌詞・音源・背景・設定のいずれかが、書き出した後に変わっている |
 | release | 音源のバージョン（`vX.Y`）が `audio.file` の名前から分からない。まだ release していない。`build/main.mp4` と release 済みの内容が違う（次に release したときのファイル名を表示します） |
 
@@ -388,7 +399,6 @@ utavideo build-all [-C <曲フォルダ>]
 - 要対応の対象があっても終了コード 0 です（利用者への案内であり、`build-all` 自体の失敗ではありません）。実行しようとした対象が想定外のエラーで失敗したときだけ、終了コード 1 で止まります
 - 書き出す対象は、それぞれのコマンド（`build`・`description`・`announce`・`thumbnail`）と同じ検査をもう一度行い、警告もあわせて表示します（分類の時点ではエラーの有無しか見ていないため）。分類してから書き出すまでの間に状態が変わり、announce・thumbnail でエラーになったときは、書き出さずに終了コード 1 で止まります（`description` は元のコマンドと同じく、エラーがあっても書き出します）
 - `build` は既存の `build` コマンドと同じ処理をそのまま呼ぶので、検査を2回行います（`status` の判定と、書き出し前の検査）
-- `thumbnail` の実行は `--bg-only` を付けない `thumbnail` コマンドと同じです
 
 ## 検査項目
 
@@ -402,7 +412,7 @@ utavideo build-all [-C <曲フォルダ>]
 | 曲名表示 | `overlay_text.style` のスタイルが .ass に無い、`overlay_text.text` の書式が不正 |
 | フォント | 使っているフォントが見つからない |
 | サムネイル（`thumbnail`・`check`） | 背景が画像なのに `at` を書いた、`at` が背景の長さ以上（長さは ffprobe で取る） |
-| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイルを使っている、フォントが見つからない |
+| サムネイルの .ass（`thumbnail`・`check`。`preview-bg --target thumbnail` では見ない） | `file` が無い・読めない、`PlayResX`・`PlayResY` が無い、`size` と違う、`LayoutResX`・`LayoutResY` の縦横比が PlayRes と違う、未定義のスタイルを使っている、フォントが見つからない |
 | 縦用 .ass・ショートの区間 | [ショートの検査](#ショートの検査) |
 | 概要欄（`[description]` がある曲の `check`） | ユーザー設定の `description.title`・`description.heading` の書式が不正 |
 | 告知文（`announce`、`[announce]` がある曲の `check`） | ユーザー設定の `announce.work`・`announce.link` の書式が不正、`[[uploads]]` の URL が[受け付ける形](#受け付ける-url)でない・同じサイトが2つある・サイトが `announce.sites` に無い、`[announce].hashtags` に [X でタグが切れる文字](#ハッシュタグ)がある |
@@ -413,7 +423,7 @@ utavideo build-all [-C <曲フォルダ>]
 | 対象 | 内容 |
 |---|---|
 | 歌詞の行 | `\pos`・`\move` を使っている、表示時間が 0 以下、音声が終わった後に始まる、音声の終わりで途中で切られる、同じスタイル・同じレイヤーで重なる、画面からはみ出しそう |
-| サムネイルの .ass（`thumbnail`・`check`。`--bg-only` では見ない） | 0 秒に表示されない行（始まりが 0 秒より後、または終わりが 0 秒以前）、`\fad`・`\fade` のフェードインが 0 秒で終わっていない、画面からはみ出しそう（`\pos` の行は対象外なので、サムネイルではほとんど検査されない） |
+| サムネイルの .ass（`thumbnail`・`check`。`preview-bg --target thumbnail` では見ない） | 0 秒に表示されない行（始まりが 0 秒より後、または終わりが 0 秒以前）、`\fad`・`\fade` のフェードインが 0 秒で終わっていない、画面からはみ出しそう（`\pos` の行は対象外なので、サムネイルではほとんど検査されない） |
 | サムネイル（`thumbnail`・`check`） | 背景の長さを取得できず、`at` を確かめられない |
 | 縦用 .ass・ショートの区間 | [ショートの検査](#ショートの検査) |
 | `check` だけ | 音源のファイル名にバージョン（`vX.Y`）が無い、`song.artist` が空、本編の .ass にスタイル `Short` の行がある（区間は縦用 .ass に書く） |

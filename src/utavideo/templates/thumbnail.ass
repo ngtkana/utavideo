@@ -1,6 +1,6 @@
 [Script Info]
 ; サムネイル（utavideo thumbnail）。0 秒の状態を1枚の画像に描く。行は 0:00:00.00 から始める。
-; 下敷き: utavideo thumbnail --bg-only で build/thumbnail/bg/main.png を作り、ビデオ → ビデオを開く で開く。
+; 下敷き: utavideo preview-bg --target thumbnail で build/thumbnail/bg/main.png を作り、ビデオ → ビデオを開く で開く。
 Title: utavideo thumbnail
 ScriptType: v4.00+
 WrapStyle: 0
