@@ -31,8 +31,8 @@
 │   ├── inst/            # utavideo inst（歌唱練習用のカラオケ動画）
 │   │   └── <slug>-key-1.mp4    # --keys のキーごと
 │   ├── announce.txt     # utavideo announce
-│   └── .work/           # 書き出しに使った中間ファイル（描画に使った .ass など）、入力の記録（main-inputs.json・shorts-<name>-inputs.json・thumbnail-<name>-inputs.json・inst-key<キー>-inputs.json）、release の一致の記録（release-match.json）
-├── release/             # 公開した動画（概要欄を残すなら自分でコピー）。消さない
+│   └── .work/           # 書き出しに使った中間ファイル（描画に使った .ass など）、入力の記録（main-inputs.json・shorts-<name>-inputs.json・thumbnail-<name>-inputs.json・inst-key<キー>-inputs.json）、release の一致の記録（release-match.json、`--short <name>` は release-match-shorts-<name>.json、wide は release-match-shorts-<name>-wide.json）
+├── release/             # 公開した動画。本編・ショート（概要欄を残すなら自分でコピー）。消さない
 └── share/               # 人とやり取りしたファイル
     └── YYYYMMDD-相手/
 ```
@@ -49,6 +49,8 @@
 
 utavideo が読むのは `utavideo.toml` で指定したファイルだけなので、`src/` の中の細かい分け方は自由に変えてかまいません。
 
+`[[thumbnails]]`・`[[shorts]]` は `name` で宣言し、`utavideo.toml` の中に永続する識別子を持ちます。同じ種類の成果物を複数本作り、それぞれを名前で指定して書き出し直せるようにするためです（`--name`・`release --short`）。一方 `inst`（歌唱練習用）は `--keys` で都度指定するだけの使い捨ての出力で、複数本を宣言して個別に参照し続ける必要が無いので、`utavideo.toml` に識別子を持ちません。新しい種類の成果物を足すときも、複数本を名前で管理する必要があるかどうかでこの決まりに従ってください。
+
 ## 名前の付け方
 
 ファイル名には曲名ではなく、`utavideo.toml` の `song.slug`（曲名の短い形）を使います。曲名を後から直してもファイル名が変わらず、日本語を避けたいときも曲名はそのままにできます。
@@ -57,7 +59,8 @@ utavideo が読むのは `utavideo.toml` で指定したファイルだけなの
 |---|---|---|
 | フォルダ | 自由（`utavideo new` に渡したパスのまま） | `20260915-song/` |
 | 音源 | `<slug>-vX.Y.wav` | `src/mix/song-v1.2.wav` |
-| 公開する動画 | `<slug>-vX.Y.N.mp4`（`utavideo release` が付ける） | `release/song-v1.2.0.mp4` |
+| 公開する動画（本編） | `<slug>-vX.Y.N.mp4`（`utavideo release` が付ける） | `release/song-v1.2.0.mp4` |
+| 公開する動画（ショート） | `<slug>-shorts-<name>-vX.Y.N.mp4`（`utavideo release --short <name>` が付ける。`wide = true` なら `-wide` も付く） | `release/song-shorts-chorus-v1.2.0.mp4` |
 | サムネイル | `build/thumbnail/<name>.png`（`name` は `[[thumbnails]]` に書く。使える文字は slug と同じ） | `build/thumbnail/square.png` |
 | やり取り | `share/YYYYMMDD-相手/` | `share/20260913-to-mixer/`、`share/20260920-from-illustrator/` |
 
@@ -68,7 +71,7 @@ utavideo が読むのは `utavideo.toml` で指定したファイルだけなの
 - 生成する名前の区切りは `-` です。空白は使いません（コマンドで打つときに引用が要るため）
 
 - `vX.Y` は音源のバージョンです。ファイル名に含まれる `v` と、先頭に 0 の付かない整数2つ（`v1.2`・`V0.10`）で、複数あれば最後のものを使います。`v1`・`v1.2.3`・`v1.02`・`v1.2a` は対象外です。無いときは `utavideo release --version` で指定します
-- `N` は、その音源で何本目かです。0 から始まり、`release/` にある同じ音源の動画の番号の最大値 + 1 が付きます。番号は音源のバージョンごとに別々に付きます
+- `N` は、その音源で何本目かです。0 から始まり、`release/` にある同じ音源の動画の番号の最大値 + 1 が付きます。番号は音源のバージョンごとに別々に付きます。本編・ショート（`name` ごと）・ショートの `wide` は、それぞれ別の名前空間として番号を数えます
 - 枝番を手で付けていた頃の `<名前> vX.Y.mp4` は、1本目（`vX.Y.0` にあたるもの）として数えます
 - `build/main.mp4` は書き出すたびに上書きされます。残したい版は `release/` にコピーしてください
 

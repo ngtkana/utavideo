@@ -16,6 +16,7 @@
 - 歌唱練習用のカラオケ動画（issue #69・#70・#71・#72）: `utavideo inst --keys -1,-2,-3` で、ffmpeg の `rubberband`（無ければ `asetrate`+`atempo`）によりキーを変えた伴奏動画を、キーごとに別ファイルで書き出す（`build/inst/<slug>-key<キー>.mp4`）。`loudnorm`（2パス）で音量をそろえる。画面には既定で曲名・アーティスト・キーだけを表示する（YouTube 限定公開／非公開で自分が聴く用途なので、クレジット画面は作らない）。`--lyrics` を付けると本編と同じ歌詞も焼き込める（`--keys` によるキー変更と両立）
 - 曲フォルダの状態の一覧（issue #77・#78・#79）: `utavideo status` で、`build`・概要欄・告知文・`[[shorts]]`・`[[thumbnails]]`・release の状態を git status 風に一覧する。`check`（今書き出しても大丈夫か）とは別に「前回書き出したときから何が変わったか」を見る。入力の比較は size・mtime_ns が一致すれば読まずに済ませ、違うときだけ中身で確かめる二層判定にした（ショート・サムネイルはフォント依存の検出を簡略化し、歌詞・設定ファイル自体の変化だけを見る）
 - 今作れるものをまとめて作る（issue #85）: `utavideo build-all` で、`build`・`description`・`announce`・`thumbnail` について、既に済んでいるものはスキップし、書き出し前の検査（`analyze.py`）でエラーがあるものは「要対応」として案内し、それ以外を書き出す
+- ショートも release で残す（issue #122）: `utavideo release --short <name>` で、ショートも本編と同じ規則（`release/<slug>-shorts-<name>-vX.Y.N.mp4`。`wide` は別番号）で `release/` にコピーする。`status` もショートの release の状態を追う
 
 ## 予定
 
@@ -41,7 +42,6 @@
 ### 縦型のショート（続き）
 
 - ショートのタイトル・概要欄を作る（本編の URL が要るので、`[[uploads]]`（issue #21）と一緒に考える）
-- `release` でショートも残す（`.txt` は置かない形にそろえる）
 - アバターの合成を、縦では別の位置に置く
 
 ### 歌唱練習用のカラオケ動画（続き）
