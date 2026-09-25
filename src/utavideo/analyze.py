@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pysubs2
 
-from utavideo import fonts, graph, inst, layout, shorts, subs, thumbnail, vertical
+from utavideo import fonts, graph, inst, layers, layout, shorts, subs, thumbnail, vertical
 from utavideo.config import Short, Thumbnail, cache_dir, load_user_config
 from utavideo.console import err_console
 from utavideo.ffmpeg import FFmpegError, probe_audio, probe_duration
@@ -32,6 +32,7 @@ def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = No
         issues.append(subs.Issue("error", f"lyrics.file のファイルがありません: {project.lyrics_path}"))
     if mode != "overlay":
         issues += background_issues(project)
+        issues += layer_issues(project)
 
     lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
     if lyrics is None or duration_s is None:
@@ -64,6 +65,24 @@ def background_issues(project: Project) -> list[subs.Issue]:
     ext = path.suffix.lower()
     if ext not in graph.IMAGE_EXTS | graph.ANIMATED_EXTS:
         return [subs.Issue("error", f"video.background の形式に対応していません: {ext}")]
+    return []
+
+
+def layer_issues(project: Project) -> list[subs.Issue]:
+    """[[layers]] の各ファイルの検査（存在するか、対応する形式か）。background_issues と同じ基準。"""
+    issues: list[subs.Issue] = []
+    for layer in project.config.layers:
+        found = _layer_file_issues(layers.file_path(project.root, layer))
+        issues += subs.prefixed(found, f"[[layers]] {layer.name}: ")
+    return issues
+
+
+def _layer_file_issues(path: Path) -> list[subs.Issue]:
+    if not path.is_file():
+        return [subs.Issue("error", f"file のファイルがありません: {path}")]
+    ext = path.suffix.lower()
+    if ext not in graph.IMAGE_EXTS | graph.ANIMATED_EXTS:
+        return [subs.Issue("error", f"file の形式に対応していません: {ext}")]
     return []
 
 

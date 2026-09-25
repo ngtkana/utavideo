@@ -178,6 +178,28 @@ def test_check_reports_missing_font(project: Path) -> None:
     assert "Nope Sans" in result.output
 
 
+def test_check_reports_a_missing_layer_file(project: Path) -> None:
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    toml += '\n[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\n'
+    (project / "utavideo.toml").write_text(toml, encoding="utf-8")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "[[layers]] logo: file のファイルがありません" in result.output
+
+
+def test_check_reports_an_unsupported_layer_format(project: Path) -> None:
+    (project / "src/layers").mkdir(parents=True, exist_ok=True)
+    (project / "src/layers/logo.txt").write_text("not a video", encoding="utf-8")
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    toml += '\n[[layers]]\nname = "logo"\nfile = "src/layers/logo.txt"\n'
+    (project / "utavideo.toml").write_text(toml, encoding="utf-8")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "[[layers]] logo: file の形式に対応していません: .txt" in result.output
+
+
 def test_build_writes_main_mp4(project: Path) -> None:
     invoke("build", "-C", str(project))
 
@@ -468,6 +490,22 @@ def test_thumbnail_background_only_does_not_need_the_ass(project: Path) -> None:
     result = runner.invoke(app, ["thumbnail", "-C", str(project)])
     assert result.exit_code == 1
     assert "file のファイルがありません" in result.output
+
+
+def test_thumbnail_reports_a_missing_layer_file(project: Path) -> None:
+    """サムネイルも [[layers]] を重ねるので、preview-bg --target thumbnail・thumbnail の両方で検査する。"""
+    _with_thumbnail(project)
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    toml += '\n[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\n'
+    (project / "utavideo.toml").write_text(toml, encoding="utf-8")
+
+    bg_result = runner.invoke(app, ["preview-bg", "-C", str(project), "--target", "thumbnail"])
+    assert bg_result.exit_code == 1
+    assert "[[layers]] logo: file のファイルがありません" in bg_result.output
+
+    result = runner.invoke(app, ["thumbnail", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "[[layers]] logo: file のファイルがありません" in result.output
 
 
 def test_thumbnail_uses_the_frame_at_the_given_time(project: Path) -> None:
@@ -782,6 +820,26 @@ def test_shorts_records_inputs_and_status_shows_it_as_clean(project: Path) -> No
 
     assert (project / "build/.work/shorts-chorus-inputs.json").is_file()
     assert "ショート" not in invoke("status", "-C", str(project)).output
+
+
+def test_shorts_composites_layers_on_both_the_vertical_and_wide_versions(project: Path) -> None:
+    """blur（縦）は本編と同じ画面（frame）に、wide は本編と同じ画面にそのまま [[layers]] を重ねる。"""
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\nwide = true\n')
+    invoke("shorts", "-C", str(project))
+    vertical_without = _pixels(project / "build/shorts/chorus.mp4")
+    wide_without = _pixels(project / "build/shorts/wide/chorus.mp4")
+
+    (project / "src/layers").mkdir(parents=True, exist_ok=True)
+    _make_logo(project / "src/layers/logo.png", (40, 20), "0x00FF00")
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    toml += '\n[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\n'
+    (project / "utavideo.toml").write_text(toml, encoding="utf-8")
+    invoke("shorts", "-C", str(project))
+    vertical_with = _pixels(project / "build/shorts/chorus.mp4")
+    wide_with = _pixels(project / "build/shorts/wide/chorus.mp4")
+
+    assert vertical_with != vertical_without
+    assert wide_with != wide_without
 
 
 def test_shorts_fades_the_audio_at_both_edges(project: Path) -> None:

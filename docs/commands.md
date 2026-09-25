@@ -211,8 +211,8 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 
 | 出力 | 画面 | 使う .ass |
 |---|---|---|
-| `build/shorts/<name>.mp4` | 本編の映像を `vertical.size` の幅いっぱいに縮めて上下中央に置き、上下の帯を背景だけをぼかして埋め、縦用 .ass の縦だけの文字（曲名表示を含む）を重ねる | 真ん中は本編の .ass、帯の上は縦用 .ass の、区間に入る `Vertical` で始まるスタイルの行 |
-| `build/shorts/wide/<name>.mp4`（`wide = true`） | `build/main.mp4` と同じ画面（`video.size`・`video.focus`） | 本編の .ass |
+| `build/shorts/<name>.mp4` | 本編の映像（`[[layers]]` も重ねる）を `vertical.size` の幅いっぱいに縮めて上下中央に置き、上下の帯を背景だけをぼかして埋め、縦用 .ass の縦だけの文字（曲名表示を含む）を重ねる | 真ん中は本編の .ass、帯の上は縦用 .ass の、区間に入る `Vertical` で始まるスタイルの行 |
+| `build/shorts/wide/<name>.mp4`（`wide = true`） | `build/main.mp4` と同じ画面（`video.size`・`video.focus`・`[[layers]]`） | 本編の .ass |
 
 画面の作り方（本編の映像を帯の上に置く、blur 一本）:
 

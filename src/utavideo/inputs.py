@@ -90,6 +90,7 @@ def shorts_target(project: Project, short: Short) -> RecordTarget:
             "overlay_text": rendered_values(config.overlay_text),
             "song": rendered_values(config.song),
             "short": rendered_values(short),
+            "layers": rendered_values(config.layers),
         },
         str(output),
         track_fonts=False,

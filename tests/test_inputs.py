@@ -390,8 +390,7 @@ def test_thumbnail_target_includes_layer_files_and_settings(layered_project: Pat
     assert "layers" in target.config
 
 
-def test_shorts_target_includes_layer_files_but_not_settings(layered_project: Path) -> None:
-    """shorts はまだ [[layers]] を合成しないので、ファイルの追跡だけ足し、config には含めない。"""
+def test_shorts_target_includes_layer_files_and_settings(layered_project: Path) -> None:
     toml = (layered_project / "utavideo.toml").read_text(encoding="utf-8")
     (layered_project / "utavideo.toml").write_text(toml + '\n[[shorts]]\nname = "chorus"\n', encoding="utf-8")
     (layered_project / "src/vertical.ass").write_text("縦用", encoding="utf-8")
@@ -401,4 +400,24 @@ def test_shorts_target_includes_layer_files_but_not_settings(layered_project: Pa
     target = inputs.shorts_target(loaded, short)
     assert dict(target.files)["layers.logo"] == layered_project / "assets/logo.png"
     assert isinstance(target.config, dict)
-    assert "layers" not in target.config
+    assert "layers" in target.config
+
+
+def test_shorts_target_stale_detects_layer_setting_changes(layered_project: Path) -> None:
+    """ファイルの中身ではなく、margin・anchor などの設定だけを変えても止まる（main_target と同じ理由）。"""
+    toml = (layered_project / "utavideo.toml").read_text(encoding="utf-8")
+    (layered_project / "utavideo.toml").write_text(toml + '\n[[shorts]]\nname = "chorus"\n', encoding="utf-8")
+    (layered_project / "src/vertical.ass").write_text("縦用", encoding="utf-8")
+    _record_shorts_build(layered_project, "chorus")
+
+    toml2 = (layered_project / "utavideo.toml").read_text(encoding="utf-8")
+    (layered_project / "utavideo.toml").write_text(
+        toml2.replace('file = "assets/logo.png"', 'file = "assets/logo.png"\nlayer = 50'), encoding="utf-8"
+    )
+
+    loaded = Project.load(layered_project)
+    short = loaded.config.shorts[0]
+    target = inputs.shorts_target(loaded, short)
+    stale = inputs.stale_inputs(target)
+    assert stale is not None
+    assert "utavideo.toml" in stale

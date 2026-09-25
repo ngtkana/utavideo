@@ -384,8 +384,12 @@ def build_args(spec: RenderSpec) -> list[str]:
         raise ValueError("clip と pitch は同時に指定できません")
     if clip is not None and spec.loudnorm is not None:
         raise ValueError("clip と loudnorm は同時に指定できません")
-    audio_filter = _clip_audio(clip, spec.fps) if clip else _audio_filter(spec.pitch, spec.loudnorm)
     audio_index = 1 + len(layers)
+    audio_filter = (
+        _clip_audio(clip, spec.fps, audio_index)
+        if clip
+        else _audio_filter(spec.pitch, spec.loudnorm, audio_index)
+    )
 
     return [
         "ffmpeg",
@@ -487,12 +491,15 @@ def _clip_video(clip: Clip, fps: int) -> str:
     return f"fps={fps},trim=start_pts={clip.start_frame}:end_pts={clip.end_frame},"
 
 
-def _clip_audio(clip: Clip, fps: int) -> str:
-    """区間の音声を切り出してフェードする filtergraph（[1:a]...[a]）。"""
+def _clip_audio(clip: Clip, fps: int, audio_index: int) -> str:
+    """区間の音声を切り出してフェードする filtergraph（[<audio_index>:a]...[a]）。
+
+    audio_index は音声の入力番号（背景の次、[[layers]] の数だけ動く。build_args 参照）。
+    """
     start, end = clip.start_frame / fps, clip.end_frame / fps
     fade_in, fade_out = (ms / 1000 for ms in clip.audio_fade_ms)
     # 入力側の -ss は mp3・m4a で頭の数ミリ秒がデコーダーの立ち上がりで本編と違うので、atrim で切る
-    audio = f"[1:a]atrim=start={_seconds(start)}:end={_seconds(end)},asetpts=PTS-STARTPTS"
+    audio = f"[{audio_index}:a]atrim=start={_seconds(start)}:end={_seconds(end)},asetpts=PTS-STARTPTS"
     if fade_in > 0:
         audio += f",afade=t=in:st=0:d={_seconds(fade_in)}"
     if fade_out > 0:
@@ -503,12 +510,12 @@ def _clip_audio(clip: Clip, fps: int) -> str:
 _SAMPLE_RATE = 48000  # 出力の -ar 48000 と合わせる
 
 
-def _audio_filter(pitch: Pitch | None, loudnorm: Loudnorm | None) -> str | None:
-    """pitch・loudnorm を1本につないだ filtergraph（[1:a]...[a]）。どちらも無ければ None。"""
+def _audio_filter(pitch: Pitch | None, loudnorm: Loudnorm | None, audio_index: int) -> str | None:
+    """pitch・loudnorm を1本につないだ filtergraph（[<audio_index>:a]...[a]）。どちらも無ければ None。"""
     parts = [_pitch_filter(pitch)] if pitch is not None else []
     if loudnorm is not None:
         parts.append(_loudnorm_filter(loudnorm))
-    return f"[1:a]{','.join(parts)}[a]" if parts else None
+    return f"[{audio_index}:a]{','.join(parts)}[a]" if parts else None
 
 
 def _pitch_filter(pitch: Pitch) -> str:

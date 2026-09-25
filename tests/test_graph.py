@@ -286,6 +286,15 @@ def test_clip_trims_and_fades_the_audio() -> None:
     assert _contains(build_args(CLIP_SPEC), ["-map", "[a]"])
 
 
+def test_clip_audio_input_shifts_with_layers() -> None:
+    # レイヤーの数だけ音声の入力番号が動く（clip の atrim も spec.layers の数を数えに入れる）。
+    # レイヤーがあると video 側にも ; が増えるので、音声は常に最後の断片から取る
+    spec = replace(CLIP_SPEC, layers=(_logo(), _logo(file=Path("/a/second.png"))))
+    audio = _filter(build_args(spec)).split(";")[-1]
+    assert audio.startswith("[3:a]atrim=")
+    assert _contains(build_args(spec), ["-map", "[a]"])
+
+
 def test_clip_without_fades_has_no_afade() -> None:
     audio = _filter(build_args(replace(CLIP_SPEC, clip=Clip(0, 300, (0, 0))))).split(";")[1]
     assert "afade" not in audio

@@ -37,6 +37,7 @@ from utavideo.analyze import (
     analyze_vertical,
     background_issues,
     font_missing_message,
+    layer_issues,
 )
 from utavideo.config import (
     PROJECT_CONFIG_NAME,
@@ -447,7 +448,7 @@ def _render_thumbnail_bg(project_dir: Path | None, target: str) -> None:
     thumbnails = _select_named(
         project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
     )
-    issues = background_issues(project)
+    issues = background_issues(project) + layer_issues(project)
     analysis = analyze_thumbnails(project, thumbnails, bg_only=True)
     issues += analysis.issues
     _print_issues(issues)
@@ -641,6 +642,8 @@ def shorts_command(
     font_files = analysis.font_files + vertical_analysis.font_files
     default_focus = vertical.focus(config.vertical, config.video.focus)
     overlay = vertical.overlay_text(config.overlay_text, config.vertical)
+    # [[layers]] はどのショートでも同じ。区間との重なりは本編と同じ enable の仕組みに任せる
+    layer_specs = tuple(layers.spec(project.root, layer) for layer in config.layers)
     for short in selected:
         section = analysis.sections[short.name]
         clip = graph.Clip(*shorts.clip_frames(section, fps), config.vertical.audio_fade_ms)
@@ -650,7 +653,7 @@ def shorts_command(
         script = compose(
             project, in_section, duration_ms, "final", search.index, no_vertical_fade=True, overlay=overlay
         )
-        frame = Frame(frame_ass, shorts.work_ass_path(project.work_dir, short, "frame"))
+        frame = Frame(frame_ass, shorts.work_ass_path(project.work_dir, short, "frame"), layers=layer_specs)
         target = VideoTarget(
             "final",
             config.vertical.size,
@@ -673,6 +676,7 @@ def shorts_command(
             shorts.output_path(project.build_dir, short, wide=True),
             f"shorts {short.name}（wide）",
             clip,
+            layers=layer_specs,
         )
         # 本編と同じ .ass・同じ大きさで描くので、区間のコマは build/main.mp4 と一致する
         # （wide は shorts:<name> の記録で代表させ、個別の記録は持たない）
@@ -805,7 +809,7 @@ def thumbnail_command(
     thumbnails = _select_named(
         project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
     )
-    issues = background_issues(project)
+    issues = background_issues(project) + layer_issues(project)
     analysis = analyze_thumbnails(project, thumbnails, bg_only=False)
     issues += analysis.issues
     _print_issues(issues)
@@ -917,7 +921,7 @@ def _run_build_all_target(project: Project, search: FontSearch, name: str) -> No
     else:
         thumb_name = name.removeprefix("thumbnail:")
         thumb = next(t for t in project.config.thumbnails if t.name == thumb_name)
-        issues = background_issues(project)
+        issues = background_issues(project) + layer_issues(project)
         analysis = analyze_thumbnails(project, (thumb,), bg_only=False, search=search)
         issues += analysis.issues
         _print_issues(issues)
