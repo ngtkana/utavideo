@@ -19,6 +19,7 @@
 - 素材を重ねる（issue #111）: `[[layers]]` で、ユーザーが用意した画像・GIF・アルファ付き動画を背景の上に重ねる（位置・大きさ・表示する区間）。本編・`preview-bg`（本編・縦の両方）・サムネイルに共通で効く。`layer`（`.ass` の `Layer` と同じ尺度）で歌詞との前後関係を決める
 - ショートも release で残す（issue #122）: `utavideo release --short <name>` で、ショートも本編と同じ規則（`release/<slug>-shorts-<name>-vX.Y.N.mp4`。`wide` は別番号）で `release/` にコピーする。`status` もショートの release の状態を追う
 - 数値調整の高速プレビュー（issue #113）: `utavideo preview --at <時刻> [--duration <秒数>] [--watch]` で、指定した一瞬・短い区間だけを `build/.work/preview.png`・`preview.mp4` に書き出す。`preview-bg` とは別に、`utavideo.toml` の数値やスタイルを調整するたびに本番の `build` を待たなくて済む。`--watch` は `utavideo.toml`・歌詞・`[[layers]]`・背景の変更を mtime のポーリングで検知して自動的に作り直す。`check` 相当の検査はせず、今の状態をそのまま見せる
+- アバターの合成（issue #112）: `[avatar]` で、ブルーバック・グリーンバックで録画したアバター動画を背景の上に合成する。クロマキー（ffmpeg の `colorkey`・`despill`）、音の頭出し（`sync = "auto"`、録画の音声と音源の相互相関。`check`・`build` がズレと際立ち（z 値）を表示し、低すぎれば手動指定を促す）、動きの遅延（`delay_ms`、手動）は「答えが一つに決まるもの」として `build/.work/` に中間動画をキャッシュする。位置・大きさ・前後関係（`scale`・`anchor`・`margin`・`layer`）は「気分で変えたいもの」として `[[layers]]`（issue #111）と同じ `LayerSpec` に変換し、同じ合成コードに乗せる（本編・`preview-bg`・`shorts`・サムネイル・`preview` に共通で効く）
 
 ## 予定
 
@@ -28,16 +29,8 @@
 - 他サイト版へのリンク（告知文と同じ `[[uploads]]` の URL を使う）
 - よく使う素材をユーザー設定に登録し、名前で参照する
 
-### アバターの合成
+### 背景の演出
 
-ブルーバック・グリーンバックで録画したアバター動画を背景に合成する。
-
-- `[avatar]`
-  - `file`：録画した動画
-  - `key`：抜く色、`similarity`、`blend`、`despill`（ffmpeg の `colorkey` と `despill` を使う）
-  - `scale`・`position`：大きさと、アンカー＋余白での位置
-  - `offset`：録画と音源のズレ（秒）
-- `sync = "auto"`：録画に入っている音声と音源の相互相関を取り、ズレを自動で求める。`check` で求めた値を表示する
 - 背景をゆっくり拡大・移動させる（Ken Burns 効果）
 
 ### 縦型のショート（続き）

@@ -421,3 +421,84 @@ def test_shorts_target_stale_detects_layer_setting_changes(layered_project: Path
     stale = inputs.stale_inputs(target)
     assert stale is not None
     assert "utavideo.toml" in stale
+
+
+AVATAR_TOML = TOML + '\n[avatar]\nfile = "src/avatar/avatar-raw.mp4"\n'
+
+
+@pytest.fixture
+def avatar_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
+    root = tmp_path / "曲"
+    scaffold(root, "曲", "曲")
+    (root / "utavideo.toml").write_text(AVATAR_TOML, encoding="utf-8")
+    (root / "src/avatar").mkdir(parents=True, exist_ok=True)
+    (root / "src/avatar/avatar-raw.mp4").write_bytes(b"avatar")
+    (root / "build").mkdir(exist_ok=True)
+    (root / "build/main.mp4").write_bytes(b"video")
+    return root
+
+
+def test_main_target_includes_the_avatar_file(avatar_project: Path) -> None:
+    loaded = Project.load(avatar_project)
+    names = dict(inputs.main_target(loaded).files)
+    assert names["avatar.file"] == avatar_project / "src/avatar/avatar-raw.mp4"
+
+
+def test_main_target_stale_detects_avatar_file_changes(avatar_project: Path) -> None:
+    _record_build(avatar_project)
+    (avatar_project / "src/avatar/avatar-raw.mp4").write_bytes(b"changed")
+
+    loaded = Project.load(avatar_project)
+    stale = inputs.stale_inputs(inputs.main_target(loaded))
+    assert stale is not None
+    assert "avatar.file" in stale
+
+
+def test_main_target_stale_detects_avatar_setting_changes(avatar_project: Path) -> None:
+    """ファイルの中身ではなく、scale・layer などの設定だけを変えても止まる（layers と同じ理由）。"""
+    _record_build(avatar_project)
+    toml = (avatar_project / "utavideo.toml").read_text(encoding="utf-8")
+    (avatar_project / "utavideo.toml").write_text(toml + "layer = 50\n", encoding="utf-8")
+
+    loaded = Project.load(avatar_project)
+    stale = inputs.stale_inputs(inputs.main_target(loaded))
+    assert stale is not None
+    assert "utavideo.toml" in stale
+
+
+def test_thumbnail_target_includes_the_avatar_file_and_settings(avatar_project: Path) -> None:
+    toml = (avatar_project / "utavideo.toml").read_text(encoding="utf-8")
+    (avatar_project / "utavideo.toml").write_text(
+        toml + '\n[[thumbnails]]\nname = "main"\nfile = "src/thumbnail.ass"\n', encoding="utf-8"
+    )
+    (avatar_project / "src/thumbnail.ass").write_text("サムネイル用", encoding="utf-8")
+
+    loaded = Project.load(avatar_project)
+    thumb = loaded.config.thumbnails[0]
+    target = inputs.thumbnail_target(loaded, thumb)
+    assert dict(target.files)["avatar.file"] == avatar_project / "src/avatar/avatar-raw.mp4"
+    assert isinstance(target.config, dict)
+    assert "avatar" in target.config
+
+
+def test_shorts_target_includes_the_avatar_file_and_settings(avatar_project: Path) -> None:
+    toml = (avatar_project / "utavideo.toml").read_text(encoding="utf-8")
+    (avatar_project / "utavideo.toml").write_text(toml + '\n[[shorts]]\nname = "chorus"\n', encoding="utf-8")
+    (avatar_project / "src/vertical.ass").write_text("縦用", encoding="utf-8")
+
+    loaded = Project.load(avatar_project)
+    short = loaded.config.shorts[0]
+    target = inputs.shorts_target(loaded, short)
+    assert dict(target.files)["avatar.file"] == avatar_project / "src/avatar/avatar-raw.mp4"
+    assert isinstance(target.config, dict)
+    assert "avatar" in target.config
+
+
+def test_main_target_omits_the_avatar_file_when_avatar_is_unset(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = scaffold_named_project(tmp_path, monkeypatch, TOML)
+    loaded = Project.load(root)
+    names = [name for name, _ in inputs.main_target(loaded).files]
+    assert "avatar.file" not in names

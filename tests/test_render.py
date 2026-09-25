@@ -328,6 +328,84 @@ def test_negative_layer_is_covered_by_lyrics_but_positive_layer_covers_them(proj
     assert behind_pixels != front_pixels
 
 
+def _make_avatar_raw(path: Path, size: tuple[int, int] = (320, 180), duration: float = 1.0) -> None:
+    """[avatar] の見本。ブルーバック（キーで抜ける）の上に、白い箱（被写体の代わり）を置く。"""
+    w, h = size
+    box = max(2, round(w / 4))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _ffmpeg(
+        "-f", "lavfi", "-i", f"color=c=0x0000ff:s={w}x{h}:d={duration}",
+        "-f", "lavfi", "-i", f"color=c=0xffffff:s={box}x{box}:d={duration}",
+        "-filter_complex", "[0:v][1:v]overlay=(W-w)/2:(H-h)/2[v]",
+        "-map", "[v]",
+        str(path),
+    )  # fmt: skip
+
+
+def _with_avatar(project: Path, avatar_toml: str) -> None:
+    config = TOML.format(background="bg.png") + f"\n[avatar]\n{avatar_toml}"
+    (project / "utavideo.toml").write_text(config, encoding="utf-8")
+
+
+def test_check_reports_a_missing_avatar_file(project: Path) -> None:
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    toml += '\n[avatar]\nfile = "src/avatar/avatar-raw.mp4"\n'
+    (project / "utavideo.toml").write_text(toml, encoding="utf-8")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "[avatar] file のファイルがありません" in result.output
+
+
+def test_check_reports_an_unsupported_avatar_format(project: Path) -> None:
+    (project / "src/avatar").mkdir(parents=True, exist_ok=True)
+    (project / "src/avatar/avatar-raw.txt").write_text("not a video", encoding="utf-8")
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    toml += '\n[avatar]\nfile = "src/avatar/avatar-raw.txt"\n'
+    (project / "utavideo.toml").write_text(toml, encoding="utf-8")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "[avatar] file の形式に対応していません: .txt" in result.output
+
+
+def test_avatar_is_composited_over_the_background_after_chroma_key(project: Path) -> None:
+    invoke("build", "-C", str(project))
+    without_avatar = _pixels(project / "build/main.mp4")
+
+    _make_avatar_raw(project / "src/avatar/avatar-raw.mp4")
+    _with_avatar(project, 'file = "src/avatar/avatar-raw.mp4"\nsync = 0\n')
+    invoke("build", "-C", str(project))
+    with_avatar = _pixels(project / "build/main.mp4")
+
+    assert without_avatar != with_avatar
+
+
+def test_avatar_prepared_video_is_reused_until_key_settings_change(project: Path) -> None:
+    _make_avatar_raw(project / "src/avatar/avatar-raw.mp4")
+    _with_avatar(project, 'file = "src/avatar/avatar-raw.mp4"\nsync = 0\n')
+
+    invoke("build", "-C", str(project))
+    prepared = project / "build/.work/avatar-prepared.mov"
+    assert prepared.is_file()
+    stamp = prepared.stat().st_mtime_ns
+
+    invoke("build", "-C", str(project))
+    assert prepared.stat().st_mtime_ns == stamp  # 変わっていなければ作り直さない
+
+    _with_avatar(project, 'file = "src/avatar/avatar-raw.mp4"\nsync = 0\nsimilarity = 0.5\n')
+    invoke("build", "-C", str(project))
+    assert prepared.stat().st_mtime_ns != stamp  # key 系の設定が変われば作り直す
+
+    # scale・anchor・margin・layer（気分で変えたいもの）を変えても中間動画は作り直さない
+    stamp = prepared.stat().st_mtime_ns
+    _with_avatar(
+        project, 'file = "src/avatar/avatar-raw.mp4"\nsync = 0\nsimilarity = 0.5\nscale = 2.0\nlayer = 50\n'
+    )
+    invoke("build", "-C", str(project))
+    assert prepared.stat().st_mtime_ns == stamp
+
+
 def test_preview_bg(project: Path) -> None:
     invoke("preview-bg", "-C", str(project))
     assert _stream(_probe(project / "build/preview/bg.mp4"), "video")["codec_name"] == "h264"

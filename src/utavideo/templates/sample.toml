@@ -42,6 +42,17 @@ anchor = "top-right"
 margin = [40, 40]
 layer = 50
 
+[avatar]
+# ブルーバックの見本（合成、青一色の上を白い図形が動く）。sync = "auto" は録画の音声（見本の
+# 音源をわざと遅らせて仕込んである）と audio.file の相互相関で、実際に頭出しのズレを求める
+file = "$avatar"
+key = "0x0000ff"
+sync = "auto"
+scale = 0.5
+anchor = "bottom-right"
+margin = [20, 0]
+layer = 60
+
 [overlay_text]
 style = "Title"
 text = "$overlay_text"

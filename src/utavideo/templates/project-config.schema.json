@@ -293,6 +293,110 @@
       "title": "Layers",
       "type": "array"
     },
+    "avatar": {
+      "anyOf": [
+        {
+          "additionalProperties": false,
+          "description": "ブルーバック・グリーンバックで録画したアバター動画を背景に合成する（issue #112）。\n\nfile・key・similarity・despill・sync・delay_ms は「答えが一つに決まるもの」で、\nutavideo.avatar が内部でキャッシュする（利用者からは build・check を叩くだけに見える）。\nscale・anchor・margin・layer は「気分で変えたいもの」で、[[layers]]（Layer）と同じ\nLayerSpec に変換し、同じ合成コードに乗せる（utavideo.avatar.layer_spec）。",
+          "properties": {
+            "file": {
+              "format": "path",
+              "title": "File",
+              "type": "string"
+            },
+            "key": {
+              "default": "0x0000ff",
+              "title": "Key",
+              "type": "string"
+            },
+            "similarity": {
+              "default": 0.3,
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Similarity",
+              "type": "number"
+            },
+            "despill": {
+              "default": 0.2,
+              "maximum": 1,
+              "minimum": 0,
+              "title": "Despill",
+              "type": "number"
+            },
+            "sync": {
+              "anyOf": [
+                {
+                  "const": "auto",
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                }
+              ],
+              "default": "auto",
+              "title": "Sync"
+            },
+            "delay_ms": {
+              "default": 0,
+              "title": "Delay Ms",
+              "type": "number"
+            },
+            "scale": {
+              "default": 1.0,
+              "title": "Scale",
+              "type": "number"
+            },
+            "anchor": {
+              "enum": [
+                "top-left",
+                "top",
+                "top-right",
+                "left",
+                "center",
+                "right",
+                "bottom-left",
+                "bottom",
+                "bottom-right"
+              ],
+              "type": "string",
+              "default": "center"
+            },
+            "margin": {
+              "default": [
+                0,
+                0
+              ],
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "title": "Margin",
+              "type": "array"
+            },
+            "layer": {
+              "default": 0,
+              "title": "Layer",
+              "type": "integer"
+            }
+          },
+          "required": [
+            "file"
+          ],
+          "title": "Avatar",
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "overlay_text": {
       "additionalProperties": false,
       "properties": {

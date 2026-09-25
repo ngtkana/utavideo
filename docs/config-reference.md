@@ -73,6 +73,27 @@
 - `.webm` はアルファ付き VP9 を想定する（書き出し方は [customization.md](customization.md#素材を重ねるlayers)）
 - サムネイルでは、`start`・`end` の区間に `[[thumbnails]]` の `at`（無ければ 0 秒）が入っているレイヤーだけを重ねる
 
+## [avatar]
+
+ブルーバック・グリーンバックで録画したアバター動画を、背景の上に合成します（1つの曲に1つ）。`key`・`similarity`・`despill`・`sync`・`delay_ms`（撮影・機材ごとに答えが一つに決まるもの）は `utavideo` が内部でキャッシュし、`scale`・`anchor`・`margin`・`layer`（気分で変えたいもの）は `[[layers]]` と同じレイヤーとして本編・`preview-bg`（本編・縦の両方）・`shorts`（縦・`wide` の両方）・サムネイル・`preview` に重なります。
+
+| 項目 | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `file` | パス | 必須 | 録画した動画（音声トラック入り） |
+| `key` | 文字列（`"0xRRGGBB"`） | `"0x0000ff"` | 抜く色。既定はブルーバック（`"0x00ff00"` でグリーンバック） |
+| `similarity` | 0〜1 の数 | `0.3` | `key` にどれだけ近い色まで抜くか（ffmpeg の `colorkey` の `similarity`） |
+| `despill` | 0〜1 の数 | `0.2` | 被写体に残る `key` の色かぶりを消す強さ（ffmpeg の `despill` の `mix`）。`type`（`blue`/`green`）は `key` の色から自動で決める |
+| `sync` | `"auto"` または秒の数 | `"auto"` | 音の頭出し。`"auto"` は録画の音声と `audio.file` の相互相関で自動的に求める（`check`・`build` が値と際立ち（z 値）を表示する）。z 値が低い（5 未満）ときはエラーになるので、秒数を直接書いて手動で指定する |
+| `delay_ms` | 数（ミリ秒） | `0` | 動きの遅延。モーションキャプチャ・描画の遅延ぶん、アバターの動きが録画の音声より遅れる分を手動で足す（機材ごとに一度決めたら基本固定） |
+| `scale` | 数 | `1.0` | 拡大率 |
+| `anchor` | `[[layers]]` の `anchor` と同じ9方向 | `"center"` | アンカー |
+| `margin` | `[横, 縦]`（ピクセル） | `[0, 0]` | アンカーの辺から内側への距離。`[[layers]]` の `margin` と同じ |
+| `layer` | 整数 | `0` | 前後関係。`[[layers]]` の `layer` と同じ尺度 |
+
+- 大きさと位置は曲を通して固定です（時間で動かす演出はできません）
+- キー抜き・頭出し済みの中間動画は `build/.work/` に自動でキャッシュされます（`utavideo avatar prepare` のような手動コマンドはありません）。`file`・`key`・`similarity`・`despill`・`sync`・`delay_ms` が前回の書き出しから変わっていなければ作り直しません
+- 品質が実用に届かないときは、utavideo 側で ML マッティング等の高品質化はしません。録画側でアルファ付き録画（OBS + `alphaPacker` 等）に切り替えてください（詳しくは [customization.md](customization.md#アバターの合成avatar)）
+
 ## [overlay_text]
 
 動画の最初から最後まで表示する曲名表示です。.ass には書かず、この設定から自動で作ります。
