@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from tests.conftest import scaffold_named_project
 from utavideo import inputs
 from utavideo import project as project_module
 from utavideo.cli import app
@@ -261,12 +262,7 @@ name = "chorus"
 
 
 def _scaffold_shorts_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, toml: str = NAMED_TOML) -> Path:
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "config"))
-    root = tmp_path / "曲"
-    scaffold(root, "曲", "曲")
-    (root / "src/vertical.ass").write_text("縦用", encoding="utf-8")
-    (root / "utavideo.toml").write_text(toml, encoding="utf-8")
-    return root
+    return scaffold_named_project(tmp_path, monkeypatch, toml)
 
 
 def _release_short(project: Path, name: str = "chorus", *args: str):
