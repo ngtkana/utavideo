@@ -49,6 +49,35 @@ def _script(
     )
 
 
+def _multi_script(count: int, *, text: str = "AAAAAA") -> pysubs2.SSAFile:
+    """count 行、それぞれ別の時刻に同じ (はみ出す) 文字を出す .ass。"""
+    dialogues = "\n".join(
+        f"Dialogue: 0,0:00:{i:02d}.00,0:00:{i + 1:02d}.00,Lyrics,,0,0,0,,{text}" for i in range(count)
+    )
+    return pysubs2.SSAFile.from_string(
+        "\n".join(
+            [
+                "[Script Info]",
+                "ScriptType: v4.00+",
+                "WrapStyle: 0",
+                "PlayResX: 320",
+                "PlayResY: 180",
+                "",
+                "[V4+ Styles]",
+                "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, "
+                "BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, "
+                "BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
+                _style(),
+                "",
+                "[Events]",
+                "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+                dialogues,
+            ]
+        ),
+        format_="ass",
+    )
+
+
 @pytest.fixture
 def lookup(tmp_path: Path, make_font: MakeFont):
     font = make_font(tmp_path / "TestSans.ttf", "Test Sans")
@@ -101,3 +130,32 @@ def test_style_reset_tag_switches_size(lookup) -> None:
 def test_unknown_font_is_skipped(lookup) -> None:
     assert layout.overflows(_script("AAAAAAAAAA", font="Other"), lookup) == []
     assert layout.overflows(_script(r"AAAAAAAAAA{\fnOther}A"), lookup) == []
+
+
+def test_overflows_groups_multiple_lines_into_one_issue(lookup) -> None:
+    # 同種の指摘（はみ出し）が行の数だけ並ぶと雑音が増えるので、複数なら1件にまとめる
+    issues = layout.overflows(_multi_script(3), lookup)
+    assert len(issues) == 1
+    assert issues[0].message.startswith("3 行が画面からはみ出しそうです（\\N で改行してください）")
+    assert "ほか" not in issues[0].message
+
+
+def test_overflows_group_message_has_no_more_marker_at_exactly_five(lookup) -> None:
+    # ちょうど5件は全部が代表例に収まるので「ほか」は付かない
+    issues = layout.overflows(_multi_script(5), lookup)
+    assert len(issues) == 1
+    assert issues[0].message.startswith("5 行が画面からはみ出しそうです")
+    assert "ほか" not in issues[0].message
+
+
+def test_overflows_group_message_truncates_after_five_examples(lookup) -> None:
+    issues = layout.overflows(_multi_script(7), lookup)
+    assert len(issues) == 1
+    message = issues[0].message
+    assert message.startswith("7 行が画面からはみ出しそうです")
+    assert message.endswith("ほか")
+    # 代表例は先頭5件（0〜4番目の行）で、6・7番目（5・6秒の行）は挙げない
+    for i in range(5):
+        assert f"0:00:0{i}.00" in message
+    for i in (5, 6):
+        assert f"0:00:0{i}.00" not in message
