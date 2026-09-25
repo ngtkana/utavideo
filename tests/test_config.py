@@ -254,19 +254,11 @@ def test_negative_audio_fade_is_rejected(tmp_path: Path) -> None:
         load_project_config(_write(tmp_path, MINIMAL + "[vertical]\naudio_fade_ms = [-1, 0]\n"))
 
 
-def test_frame_y(tmp_path: Path) -> None:
-    config = load_project_config(_write(tmp_path, MINIMAL))
-    assert config.vertical.frame_y == 0.5
-    text = MINIMAL + '[vertical]\nframe_y = 0\n[[shorts]]\nname = "chorus"\n'
+def test_shorts_frame_ass_uses_a_frame_subfolder(tmp_path: Path) -> None:
+    text = MINIMAL + '[[shorts]]\nname = "chorus"\n'
     project = Project(tmp_path, load_project_config(_write(tmp_path, text)))
-    assert project.config.vertical.frame_y == 0.0
     (chorus,) = project.config.shorts
     assert shorts_module.work_ass_path(project.work_dir, chorus, "frame").parent.name == "frame"
-
-
-def test_frame_y_is_validated(tmp_path: Path) -> None:
-    with pytest.raises(ConfigError, match=r"vertical\.frame_y"):
-        load_project_config(_write(tmp_path, MINIMAL + "[vertical]\nframe_y = 1.5\n"))
 
 
 def test_shorts_focus_and_wide(tmp_path: Path) -> None:

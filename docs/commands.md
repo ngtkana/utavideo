@@ -135,7 +135,7 @@ utavideo overlay [-C <曲フォルダ>]
 - 本編の .ass のスタイルだけを写す（歌詞は本編の映像に入るので、行は写さない）
 - `[Script Info]` の `PlayResX`・`PlayResY` を `vertical.size` にする。`LayoutResX`・`LayoutResY` が2つともあれば、それぞれ x・y の比を掛けた値に書き直す（本編で PlayRes と同じなら `vertical.size` になる。片方だけなら `vertical.size`、無ければ足さない。理由は [検証記録](verification/20260917-vertical-ass.md)）
 - `[Aegisub Project Garbage]` の `Video File:` を、縦用 .ass から見た `build/preview/vertical-bg.mp4` の相対パスにする。`Audio File:` が本編の下敷きと同じなら、それも同じパスにする。そうでない `Audio File:` と `Keyframes File:`・`Timecodes File:` の相対パスは、本編の .ass と縦用 .ass のフォルダが違っても開けるよう、縦用 .ass から見たパスに付け替える（絶対パスと、`?video` などのパスでない値はそのまま）。`Video AR Mode`・`Video AR Value`・`Video Zoom Percent` は消す
-- スタイル `Short`・`VerticalBand` を足す（既にあれば足さない）。どちらも変換後の `Lyrics` の写しで、`VerticalBand` は上中央揃え。`Lyrics` が無ければ最初のスタイルを写す。`VerticalBand` の `MarginV` は、そのときの `vertical.frame_y` の帯にだいたい収まる値に計算し直す
+- スタイル `Short`・`VerticalBand` を足す（既にあれば足さない）。どちらも変換後の `Lyrics` の写しで、`VerticalBand` は上中央揃え。`Lyrics` が無ければ最初のスタイルを写す。`VerticalBand` の `MarginV` は、本編を中央に置いたときの帯にだいたい収まる値に計算し直す
 
 スタイルの大きさの変換（幅の比 = `vertical.size` の幅 ÷ 本編の `PlayResX`）:
 
@@ -200,7 +200,7 @@ utavideo shorts [-C <曲フォルダ>] [--name <name>]
 
 | 出力 | 画面 | 使う .ass |
 |---|---|---|
-| `build/shorts/<name>.mp4` | 本編の映像を `vertical.size` の幅いっぱいに縮めて `vertical.frame_y` の高さに置き、上下の帯を背景だけをぼかして埋め、縦用 .ass の縦だけの文字（曲名表示を含む）を重ねる | 真ん中は本編の .ass、帯の上は縦用 .ass の、区間に入る `Vertical` で始まるスタイルの行 |
+| `build/shorts/<name>.mp4` | 本編の映像を `vertical.size` の幅いっぱいに縮めて上下中央に置き、上下の帯を背景だけをぼかして埋め、縦用 .ass の縦だけの文字（曲名表示を含む）を重ねる | 真ん中は本編の .ass、帯の上は縦用 .ass の、区間に入る `Vertical` で始まるスタイルの行 |
 | `build/shorts/wide/<name>.mp4`（`wide = true`） | `build/main.mp4` と同じ画面（`video.size`・`video.focus`） | 本編の .ass |
 
 画面の作り方（本編の映像を帯の上に置く、blur 一本）:

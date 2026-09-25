@@ -250,7 +250,7 @@ BLUR_SPEC = replace(
     size=(1080, 1920),
     subtitles=Path("/w/vertical.ass"),
     focus=(0.5, 1.0),
-    frame=Frame(size=(1920, 1080), focus=(0.5, 0.5), subtitles=Path("/w/main.ass"), frame_y=0.25),
+    frame=Frame(size=(1920, 1080), focus=(0.5, 0.5), subtitles=Path("/w/main.ass")),
 )
 
 
@@ -272,7 +272,7 @@ def test_blur_puts_the_main_video_on_a_blurred_band() -> None:
     )
     # 重ねてから縦用 .ass を描く。RGB のまま合成してから YUV にする
     assert parts[3] == (
-        "[bg][fg]overlay=y=(H-h)*0.25:format=rgb,"
+        "[bg][fg]overlay=y=(H-h)/2:format=rgb,"
         "subtitles=filename=/w/vertical.ass:fontsdir=/c/fonts,"
         "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[v]"
     )

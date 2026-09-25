@@ -153,7 +153,7 @@ utavideo thumbnail              # build/thumbnail/main.png
 utavideo preview-bg  # src/vertical.ass（無ければ自動で作る）・build/preview/vertical-bg.mp4（縦の下敷き）
 ```
 
-1. `utavideo.toml` に `[vertical]` を書いてから、上のコマンドを実行する。本編の映像を上下のぼかした帯に置く画面（blur）で作る（[commands.md](commands.md#shorts)）。背景の残す位置を縦で変えるなら `focus`、本編を置く高さを変えるなら `frame_y` も書く。`[vertical]` があると、`preview-bg` は本編の下敷き（`build/preview/bg.mp4`）と一緒に、縦用 .ass（無ければ本編の歌詞から自動で作る）と縦の下敷き（`build/preview/vertical-bg.mp4`）も書き出す
+1. `utavideo.toml` に `[vertical]` を書いてから、上のコマンドを実行する。本編の映像を上下中央に置き、ぼかした帯を上下に敷く画面（blur）で作る（[commands.md](commands.md#shorts)）。背景の残す位置を縦で変えるなら `focus` も書く。`[vertical]` があると、`preview-bg` は本編の下敷き（`build/preview/bg.mp4`）と一緒に、縦用 .ass（無ければ本編の歌詞から自動で作る）と縦の下敷き（`build/preview/vertical-bg.mp4`）も書き出す
 2. Aegisub で `src/vertical.ass` を開く。下敷きの `build/preview/vertical-bg.mp4` は、縦用 .ass に書いてあるので開くと読み込まれることがあります。読み込まれなければ、[4.](#4-aegisub-で歌詞を入れる) と同じ手順で動画と音声を開く
 3. 波形を見ながら、切り抜く区間の行を置く（書き方は下の[区間の書き方（文法）](#区間の書き方文法)）
 4. `utavideo.toml` に、同じ名前の `[[shorts]]` を書く

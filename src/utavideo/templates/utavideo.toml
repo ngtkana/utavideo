@@ -46,11 +46,10 @@ file = "src/thumbnail.ass"  # 文字を組む .ass（Aegisub で編集）
 
 # [vertical]
 # 縦型のショート（utavideo preview-bg が無ければ本編の歌詞から縦用 .ass を作る）。
-# 本編をぼかした帯の上に置く画面で作る
+# 本編を中央に置き、ぼかした帯を上下に敷く画面で作る
 # size = [1080, 1920]
 # lyrics = "src/vertical.ass"
 # focus = [0.5, 0.5]       # 省略時は video.focus（上下の帯の切り取りに効く）
-# frame_y = 0.5            # 本編を置く高さ（0 で上端、1 で下端）
 # overlay_text = true      # false にすると、縦だけ曲名表示を消す
 # audio_fade_ms = [300, 1000]  # 区間の端の音声のフェード（wide にも効く）
 

@@ -34,7 +34,6 @@ def convert(
     video_file: str,
     band_video_size: tuple[int, int],
     source_dir: str = ".",
-    band_frame_y: float = 0.5,
 ) -> pysubs2.SSAFile:
     """本編の .ass のスタイルを縦の解像度 size に変換した複製を作る。source は変更しない。
 
@@ -42,7 +41,7 @@ def convert(
     source_dir は、本編の .ass のフォルダの、縦用 .ass のフォルダから見たパス（/ 区切り）。
     歌詞は本編の映像に入るので、行は写さずスタイルだけを写す（縦用 .ass に写すと二重になる）。
     band_video_size は、帯（スタイル VerticalBand）の MarginV を、
-    band_frame_y（vertical.frame_y）の帯にだいたい収まる値にするための本編の映像の大きさ。
+    本編を中央に置いたときの帯にだいたい収まる値にするための本編の映像の大きさ。
     """
     res = subs.play_res(source)
     if res is None:
@@ -72,18 +71,19 @@ def convert(
     if BAND_STYLE not in script.styles:
         band = base.copy()
         band.alignment = pysubs2.Alignment.TOP_CENTER
-        band.marginv = _band_margin_v(size, band_video_size, band_frame_y, band.fontsize)
+        band.marginv = _band_margin_v(size, band_video_size, band.fontsize)
         script.styles[BAND_STYLE] = band
 
     return script
 
 
-def _band_margin_v(
-    vertical_size: tuple[int, int], video_size: tuple[int, int], frame_y: float, fontsize: float
-) -> int:
-    """帯（スタイル VerticalBand、上揃え）の文字がだいたい帯の中央に来る MarginV。"""
+def _band_margin_v(vertical_size: tuple[int, int], video_size: tuple[int, int], fontsize: float) -> int:
+    """帯（スタイル VerticalBand、上揃え）の文字がだいたい帯の中央に来る MarginV。
+
+    本編を中央に置くので、上の帯の高さは上下の帯を合わせた高さのちょうど半分になる。
+    """
     frame_h = graph.frame_height(video_size, vertical_size[0])
-    band_height = (vertical_size[1] - frame_h) * frame_y
+    band_height = (vertical_size[1] - frame_h) / 2
     return round(max(0, (band_height - fontsize) / 2))
 
 

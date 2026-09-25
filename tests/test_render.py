@@ -728,7 +728,7 @@ def _greens_per_row(path: Path, size: tuple[int, int]) -> list[int]:
     return counts
 
 
-def test_shorts_blur_places_the_main_video_by_frame_y_and_keeps_it_out_of_the_bands(
+def test_shorts_blur_places_the_main_video_at_the_center_and_keeps_it_out_of_the_bands(
     project: Path,
 ) -> None:
     lyrics = project / "src/lyrics.ass"
@@ -737,27 +737,20 @@ def test_shorts_blur_places_the_main_video_by_frame_y_and_keeps_it_out_of_the_ba
     _ffmpeg(
         "-f", "lavfi", "-i", "color=c=gray:size=640x360", "-frames:v", "1", str(project / "src/bg/bg.png")
     )
-    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n', extra="frame_y = 0")
+    _with_section(project, shorts='[[shorts]]\nname = "chorus"\n')
     invoke("shorts", "-C", str(project))
     output = project / "build/shorts/chorus.mp4"
     video = _stream(_probe(output), "video")
     assert (video["width"], video["height"]) == (180, 320)
     assert (project / "build/.work/shorts/frame/chorus.ass").is_file()
 
-    # frame_y = 0 なら本編の上端は画面の上端。帯には本編の緑が1画素も写らない（背景だけをぼかす）
+    # 本編は常に上下中央に置く。上下の帯には本編の緑が1画素も写らない（背景だけをぼかす）
+    band = (320 - FRAME_HEIGHT) // 2
     counts = _greens_per_row(output, (180, 320))
-    assert counts[0] == 180
-    assert sum(counts[FRAME_HEIGHT:]) == 0
+    assert sum(counts[:band]) == 0
+    assert sum(counts[band + FRAME_HEIGHT :]) == 0
     # 本編と帯の境目の数行は、縮小で混ざるので全部は緑にならない
-    assert sum(1 for n in counts[:FRAME_HEIGHT] if n == 180) > FRAME_HEIGHT - 5
-
-    config = project / "utavideo.toml"
-    config.write_text(config.read_text(encoding="utf-8").replace("frame_y = 0", "frame_y = 1"), "utf-8")
-    invoke("shorts", "-C", str(project))
-    # frame_y = 1 なら本編の上端は (320 - 102) * 1 で、上が帯になる
-    counts = _greens_per_row(output, (180, 320))
-    assert counts[-1] == 180
-    assert sum(counts[: 320 - FRAME_HEIGHT]) == 0
+    assert sum(1 for n in counts[band : band + FRAME_HEIGHT] if n == 180) > FRAME_HEIGHT - 5
 
 
 def test_shorts_blur_draws_only_the_vertical_lines_and_puts_the_title_in_the_band(
@@ -868,7 +861,7 @@ def test_check_rejects_a_video_size_taller_than_the_vertical_size(project: Path)
 
 
 def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> None:
-    _with_shorts(project, shorts="", extra="frame_y = 0")
+    _with_shorts(project, shorts="")
     invoke("preview-bg", "-C", str(project))
 
     output = project / "build/preview/vertical-bg.mp4"
