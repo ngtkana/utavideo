@@ -13,10 +13,13 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: Lyrics,$font,$lyrics_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,$lyrics_spacing,0,1,$lyrics_outline,0,2,$lyrics_margin,$lyrics_margin,$lyrics_marginv,1
 Style: Comment,$font,$comment_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,$outline,0,1,$comment_margin,$comment_margin,$comment_margin,1
 Style: Title,$font,$title_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,$outline,0,9,$title_margin,$title_margin,$title_marginv,1
+Style: TitleCard,$font,$lyrics_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,$lyrics_outline,0,8,$lyrics_margin,$lyrics_margin,$title_marginv,1
+Style: TitleCardSub,$font,$title_size,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,0,0,0,0,100,100,0,0,1,$outline,0,8,$lyrics_margin,$lyrics_margin,$comment_margin,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 Comment: 0,0:00:00.00,0:00:00.00,Comment,,0,0,0,,コメント行は書き出しに入らない
+Dialogue: 0,0:00:00.00,0:00:03.70,TitleCard,,0,0,0,,見本のうた\N{\rTitleCardSub}Cover: 架空シンガー
 Dialogue: 0,0:00:00.50,0:00:03.33,Comment,,0,0,0,,Comment スタイルの行（歌詞以外の説明）
 Dialogue: 0,0:00:03.80,0:00:07.10,Lyrics,,0,0,0,,見本のうた、はじまり
 Dialogue: 0,0:00:07.57,0:00:10.87,Lyrics,,0,0,0,,ここで改行します\Nここは2行目です
