@@ -32,6 +32,8 @@ AUDIO_INST_FILE = Path("src/mix/sample-inst-v1.0.flac")
 VIDEO_BACKGROUND = Path("src/bg/loop.mp4")
 STILL_BACKGROUND = Path("src/bg/still.jpg")
 GIF_BACKGROUND = Path("src/bg/loop.gif")
+LOGO_FILE = Path("src/layers/logo.png")  # [[layers]] の見本（合成、半透明の帯）
+LOGO_COLOR = "0xFF6FA5"
 LYRICS_FILE = Path("src/lyrics.ass")
 _MATERIAL_TEMPLATE_DIR = "sample-materials"
 _MATERIAL_CREDIT = "Kana Nagata（背景: VRoid Studio で制作・VRM Posing Desktop で撮影 / 音源: 作曲）"
@@ -134,6 +136,7 @@ def _config(spec: _Spec) -> str:
         background=VIDEO_BACKGROUND.as_posix(),
         still=STILL_BACKGROUND.as_posix(),
         gif=GIF_BACKGROUND.as_posix(),
+        logo=LOGO_FILE.as_posix(),
         width=str(spec.size[0]),
         height=str(spec.size[1]),
         fps=str(spec.fps),
@@ -191,7 +194,8 @@ def material_note() -> str:
     return (
         f"背景の静止画（`{STILL_BACKGROUND.as_posix()}`）と音源（`{AUDIO_FILE.as_posix()}`）は、"
         f"{_MATERIAL_CREDIT}によるものです。ループする背景（`{VIDEO_BACKGROUND.as_posix()}`・"
-        f"`{GIF_BACKGROUND.as_posix()}`）、inst 用の音源（`{AUDIO_INST_FILE.as_posix()}`）、"
+        f"`{GIF_BACKGROUND.as_posix()}`）、[[layers]] の見本（`{LOGO_FILE.as_posix()}`）、"
+        f"inst 用の音源（`{AUDIO_INST_FILE.as_posix()}`）、"
         "フォント以外の合成音は、その場で合成したものです。"
     )
 
@@ -216,7 +220,16 @@ def _materials(root: Path, spec: _Spec) -> list[Path]:
     )  # fmt: skip
     gif = root / GIF_BACKGROUND
     _ffmpeg(_box_over_bars(GIF_SIZE, GIF_FPS, GIF_S, extra_filters=_GIF_PALETTE), gif)
-    return [audio, still, inst_audio, loop, gif]
+
+    # [[layers]] の見本。半透明の帯（アルファ付き PNG）。実際の素材はユーザーが画像編集ソフト等で作る
+    logo = root / LOGO_FILE
+    w, h = spec.px(320), spec.px(120)
+    _ffmpeg(
+        ["-f", "lavfi", "-i", f"color=c={LOGO_COLOR}:s={w}x{h}:d=1,format=rgba,colorchannelmixer=aa=0.85",
+         "-frames:v", "1", "-update", "1", "-c:v", "png"],
+        logo,
+    )  # fmt: skip
+    return [audio, still, inst_audio, loop, gif, logo]
 
 
 def _box_over_bars(size: tuple[int, int], fps: int, seconds: int, *, extra_filters: str = "") -> list[str]:

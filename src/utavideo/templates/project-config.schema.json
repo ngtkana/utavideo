@@ -194,6 +194,105 @@
       "title": "Lyrics",
       "type": "object"
     },
+    "layers": {
+      "default": [],
+      "items": {
+        "additionalProperties": false,
+        "description": "背景の上に重ねる画像・GIF・アルファ付き動画（1個）。前後関係は .ass の Layer と同じ尺度。",
+        "properties": {
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "file": {
+            "format": "path",
+            "title": "File",
+            "type": "string"
+          },
+          "start": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Start"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "End"
+          },
+          "scale": {
+            "default": 1.0,
+            "title": "Scale",
+            "type": "number"
+          },
+          "anchor": {
+            "enum": [
+              "top-left",
+              "top",
+              "top-right",
+              "left",
+              "center",
+              "right",
+              "bottom-left",
+              "bottom",
+              "bottom-right"
+            ],
+            "type": "string",
+            "default": "center"
+          },
+          "margin": {
+            "default": [
+              0,
+              0
+            ],
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "integer"
+              }
+            ],
+            "title": "Margin",
+            "type": "array"
+          },
+          "layer": {
+            "default": 0,
+            "title": "Layer",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "name",
+          "file"
+        ],
+        "title": "Layer",
+        "type": "object"
+      },
+      "title": "Layers",
+      "type": "array"
+    },
     "overlay_text": {
       "additionalProperties": false,
       "properties": {

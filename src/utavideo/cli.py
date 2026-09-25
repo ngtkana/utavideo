@@ -20,6 +20,7 @@ from utavideo import (
     graph,
     inputs,
     inst,
+    layers,
     sample,
     shorts,
     status,
@@ -149,7 +150,15 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
         "overlay": project.overlay_output,
     }[mode]
     video = project.config.video
-    target = VideoTarget(mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label)
+    # overlay は背景の無い透過動画（動画編集ソフトで自分の背景に重ねる用）なので、[[layers]] は重ねない
+    layer_specs = (
+        ()
+        if mode == "overlay"
+        else tuple(layers.spec(project.root, layer) for layer in project.config.layers)
+    )
+    target = VideoTarget(
+        mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label, layers=layer_specs
+    )
     return write_video(project, script, target, analysis.duration_s, analysis.font_files, record)
 
 
@@ -473,7 +482,8 @@ def _render_vertical_preview(project: Project) -> None:
     # 下敷きも完成図と同じ画面にする。本編の歌詞は真ん中の映像に入れ、縦用 .ass の行は入れない
     assert inputs.lyrics is not None
     frame_ass = frame_script(project, inputs.lyrics, duration_ms, search.index)
-    frame = Frame(frame_ass, project.work_dir / "vertical-preview-frame.ass")
+    layer_specs = tuple(layers.spec(project.root, layer) for layer in project.config.layers)
+    frame = Frame(frame_ass, project.work_dir / "vertical-preview-frame.ass", layers=layer_specs)
     font_files = checked.font_files + inputs.font_files
     target = VideoTarget(
         "preview",
@@ -835,6 +845,12 @@ def _write_thumbnail(
         subtitles = thumbnail.file_path(project.root, thumb).absolute()
         fontsdir = fonts.prepare_fontsdir(font_files, cache_dir() / "fontsets")
         output = thumbnail.output_path(project.build_dir, thumb)
+    at = thumb.at or 0.0
+    active_layers = tuple(
+        layers.spec(project.root, layer, timed=False)
+        for layer in project.config.layers
+        if layers.active_at(layer, at)
+    )
     spec = graph.StillSpec(
         size=thumbnail.size(thumb, video.size),
         background=project.background_path.absolute(),
@@ -845,6 +861,7 @@ def _write_thumbnail(
         focus=thumbnail.focus(thumb, video.focus),
         scale_flags=video.scale_flags,
         pad_color=video.pad_color,
+        layers=active_layers,
     )
     inputs.unlink_stale_record(record)
     try:

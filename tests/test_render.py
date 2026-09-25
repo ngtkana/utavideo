@@ -213,6 +213,99 @@ def test_gif_background_loops_for_whole_audio(project: Path) -> None:
     assert float(video["duration"]) == pytest.approx(2.0, abs=0.15)
 
 
+def _make_logo(path: Path, size: tuple[int, int], color: str) -> None:
+    """[[layers]] 用の、不透明な単色 PNG を合成する。"""
+    w, h = size
+    _ffmpeg(
+        "-f", "lavfi", "-i", f"color=c={color}:s={w}x{h}:d=1", "-frames:v", "1", str(path)
+    )  # fmt: skip
+
+
+def _pixels_at(path: Path, at: float) -> bytes:
+    out = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", str(at), "-i", str(path),
+         "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        capture_output=True,
+        check=True,
+    )  # fmt: skip
+    return out.stdout
+
+
+LAYER_ASS = LYRICS.format(font="Test Sans") + (
+    # 全画面を塗りつぶす不透明な行（ASS の色は &HBBGGRR& なので、これは青）。
+    # layer との前後関係を見るのに使う。0 秒ちょうどは subtitles フィルタの立ち上がりで
+    # 描かれないことがあるので、少し後ろから始める
+    "Dialogue: 0,0:00:00.10,0:00:02.00,Lyrics,,0,0,0,,"
+    r"{\an7\pos(0,0)\c&HFF0000&\bord0\shad0\p1}m 0 0 l 320 0 320 180 0 180{\p0}"
+)
+
+
+def _with_layer(project: Path, layer_toml: str) -> None:
+    (project / "src/layers").mkdir(parents=True, exist_ok=True)
+    _make_logo(project / "src/layers/logo.png", (40, 20), "0x00FF00")
+    config = TOML.format(background="bg.png") + f'\n[[layers]]\nname = "logo"\n{layer_toml}'
+    (project / "utavideo.toml").write_text(config, encoding="utf-8")
+
+
+def test_layer_is_composited_over_the_background(project: Path) -> None:
+    invoke("build", "-C", str(project))
+    without_layer = _pixels(project / "build/main.mp4")
+
+    _with_layer(project, 'file = "src/layers/logo.png"\n')
+    invoke("build", "-C", str(project))
+    with_layer = _pixels(project / "build/main.mp4")
+
+    assert without_layer != with_layer
+
+
+def test_layer_appears_only_within_its_time_range(project: Path) -> None:
+    # crf=0（可逆）で書き出し、フレームの md5 で「その区間のフレームだけ違う」ことを確かめる
+    config = TOML.format(background="bg.png").replace("fps = 10", "fps = 10\ncrf = 0")
+    (project / "utavideo.toml").write_text(config, encoding="utf-8")
+    invoke("build", "-C", str(project))
+    baseline = _frame_md5(project / "build/main.mp4")
+
+    (project / "src/layers").mkdir(parents=True, exist_ok=True)
+    _make_logo(project / "src/layers/logo.png", (40, 20), "0x00FF00")
+    layered = config + (
+        '\n[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\n'
+        'start = "0:00.5"\nend = "0:00.95"\nanchor = "top-left"\nmargin = [0, 0]\n'
+    )
+    (project / "utavideo.toml").write_text(layered, encoding="utf-8")
+    invoke("build", "-C", str(project))
+    with_layer = _frame_md5(project / "build/main.mp4")
+
+    assert len(baseline) == len(with_layer) == 20  # 10fps ✕ 2 秒
+    for i, (base, layer) in enumerate(zip(baseline, with_layer, strict=True)):
+        if 5 <= i < 10:  # 0.5〜0.9 秒（0.95 秒は含めない境界にした）
+            assert base != layer, i
+        else:
+            assert base == layer, i
+
+
+def test_negative_layer_is_covered_by_lyrics_but_positive_layer_covers_them(project: Path) -> None:
+    (project / "src/lyrics.ass").write_text(LAYER_ASS, encoding="utf-8")
+    (project / "src/layers").mkdir(parents=True, exist_ok=True)
+    _make_logo(project / "src/layers/logo.png", (320, 180), "0x00FF00")
+
+    behind = TOML.format(background="bg.png") + (
+        '\n[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\nlayer = -1\n'
+    )
+    (project / "utavideo.toml").write_text(behind, encoding="utf-8")
+    invoke("build", "-C", str(project))
+    behind_pixels = _pixels_at(project / "build/main.mp4", 1.0)
+
+    front = TOML.format(background="bg.png") + (
+        '\n[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\nlayer = 1\n'
+    )
+    (project / "utavideo.toml").write_text(front, encoding="utf-8")
+    invoke("build", "-C", str(project))
+    front_pixels = _pixels_at(project / "build/main.mp4", 1.0)
+
+    # 全画面緑のレイヤーが、layer < 0 では青い歌詞に隠れ、layer >= 0 では歌詞の上に出る
+    assert behind_pixels != front_pixels
+
+
 def test_preview_bg(project: Path) -> None:
     invoke("preview-bg", "-C", str(project))
     assert _stream(_probe(project / "build/preview/bg.mp4"), "video")["codec_name"] == "h264"
@@ -385,6 +478,25 @@ def test_thumbnail_uses_the_frame_at_the_given_time(project: Path) -> None:
     _with_thumbnail(project, "loop.gif")
     invoke("preview-bg", "-C", str(project), "--target", "thumbnail:main")
     assert _pixels(project / "build/thumbnail/bg/main.png") != later
+
+
+def test_thumbnail_includes_only_layers_active_at_the_given_time(project: Path) -> None:
+    """サムネイルの `at`（無ければ 0 秒）が [[layers]] の start・end に入るものだけ重ねる。"""
+    (project / "src/layers").mkdir(parents=True, exist_ok=True)
+    _make_logo(project / "src/layers/logo.png", (90, 90), "0x00FF00")
+    config = TOML.format(background="bg.png") + THUMBNAIL.format(extra="size = [90, 90]")
+    (project / "src/thumbnail.ass").write_text(THUMBNAIL_ASS.format(font="Test Sans"), encoding="utf-8")
+
+    def _build(layer_toml: str) -> bytes:
+        (project / "utavideo.toml").write_text(config + layer_toml, encoding="utf-8")
+        invoke("thumbnail", "-C", str(project))
+        return _pixels(project / "build/thumbnail/main.png")
+
+    # サムネイルは既定で 0 秒を描く。start が 0 秒より後のレイヤーは重ねない
+    outside = _build('[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\nstart = "0:00.10"\n')
+    # 区間の無いレイヤーは常に表示する
+    inside = _build('[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\n')
+    assert inside != outside
 
 
 @pytest.mark.parametrize(
@@ -872,6 +984,23 @@ def test_preview_bg_vertical_for_blur_draws_the_main_video(project: Path) -> Non
     assert "AAAA" in frame
     # 縦用 .ass の行は下敷きに焼き込まない（Aegisub で組むのはこちら）
     assert "AAAA" not in (project / "build/.work/vertical-preview.ass").read_text(encoding="utf-8")
+
+
+def test_preview_bg_vertical_composites_layers_on_the_main_frame(project: Path) -> None:
+    """blur（縦の下敷き）でも、本編と同じ画面（frame）に [[layers]] を重ねる。"""
+    _with_shorts(project, shorts="")
+    invoke("preview-bg", "-C", str(project))
+    without_layer = _pixels(project / "build/preview/vertical-bg.mp4")
+
+    (project / "src/layers").mkdir(parents=True, exist_ok=True)
+    _make_logo(project / "src/layers/logo.png", (40, 20), "0x00FF00")
+    toml = (project / "utavideo.toml").read_text(encoding="utf-8")
+    toml += '\n[[layers]]\nname = "logo"\nfile = "src/layers/logo.png"\n'
+    (project / "utavideo.toml").write_text(toml, encoding="utf-8")
+    invoke("preview-bg", "-C", str(project))
+    with_layer = _pixels(project / "build/preview/vertical-bg.mp4")
+
+    assert without_layer != with_layer
 
 
 @pytest.mark.skipif(rubberband_filter_error() is not None, reason="rubberband 付きの ffmpeg が必要")

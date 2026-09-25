@@ -1,6 +1,7 @@
 """ffmpeg の引数（入力・filtergraph・エンコード設定）を組み立てる。実行は ffmpeg.py が行う。"""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -18,6 +19,12 @@ type Mode = Literal["final", "preview", "overlay"]
 type PitchMethod = Literal["rubberband", "atempo"]
 type Fit = Literal["cover", "contain"]
 type ScaleFlags = Literal["lanczos", "bicubic", "bilinear", "area", "neighbor"]
+# [[layers]] のアンカー。.ass の \an（テンキー配置）と同じ9方向
+type LayerAnchor = Literal[
+    "top-left", "top", "top-right",
+    "left", "center", "right",
+    "bottom-left", "bottom", "bottom-right",
+]  # fmt: skip
 type Preset = Literal[
     "ultrafast",
     "superfast",
@@ -56,6 +63,23 @@ class Clip:
 
 
 @dataclass(frozen=True)
+class LayerSpec:
+    """[[layers]] 1個ぶんの overlay 情報。区間は秒（None は無期限）。
+
+    start・end は曲の絶対時刻。RenderSpec.background は -ss でシークしないので、
+    overlay の enable にそのまま渡せば .ass と同じ時刻系になる（layers.spec の docstring 参照）。
+    """
+
+    file: Path
+    scale: float
+    anchor: LayerAnchor
+    margin: tuple[int, int]
+    layer: int
+    start: float | None = None  # None なら動画の最初から
+    end: float | None = None  # None なら動画の最後まで
+
+
+@dataclass(frozen=True)
 class Frame:
     """blur の画面で、ぼかした帯の上に置く本編の映像。
 
@@ -66,6 +90,7 @@ class Frame:
     focus: tuple[float, float]  # 本編の focus（[video].focus）
     subtitles: Path  # 本編の合成した .ass（歌詞・曲名表示入り）
     fit: Fit = "cover"
+    layers: tuple[LayerSpec, ...] = ()  # 本編と同じ画面に重ねる [[layers]]
 
 
 @dataclass(frozen=True)
@@ -108,6 +133,8 @@ class RenderSpec:
     frame: Frame | None = None
     pitch: Pitch | None = None  # None なら音声はそのまま（inst のキー変更）
     loudnorm: Loudnorm | None = None  # None なら音量はそのまま（inst の正規化）
+    # frame があるときは無視される（frame.layers を使う。同時に両方を重ねることはしない）
+    layers: tuple[LayerSpec, ...] = ()
 
 
 def escape_filter_arg(value: str) -> str:
@@ -145,6 +172,21 @@ def frame_input(path: Path, at: float | None) -> list[str]:
     return ["-ss", f"{at:.3f}", "-i", str(path)]
 
 
+def _vp9_alpha_args(path: Path) -> list[str]:
+    """VP9 アルファ付き .webm は、既定のデコーダーだとアルファが失われるため明示する（issue #111）。"""
+    return ["-c:v", "libvpx-vp9"] if path.suffix.lower() == ".webm" else []
+
+
+def layer_input(path: Path, fps: int) -> list[str]:
+    """[[layers]] の素材の入力。background_input と同じ判定（画像は静止、それ以外はループ）を使う。"""
+    return [*_vp9_alpha_args(path), *background_input(path, fps)]
+
+
+def layer_still_input(path: Path, at: float | None) -> list[str]:
+    """[[layers]] の素材から1フレームだけ読む入力（サムネイル用）。"""
+    return [*_vp9_alpha_args(path), *frame_input(path, at)]
+
+
 def _ratio(value: float) -> str:
     # 指数表記（1e-05）を式に入れないよう、小数で書く
     return f"{value:.6f}".rstrip("0").rstrip(".")
@@ -170,13 +212,130 @@ def fit_filter(
     )
 
 
+# [[layers]] のアンカーを、.ass の \an（テンキー配置）と同じ9方向の比率に見立てたもの
+_ANCHOR_RATIOS: dict[LayerAnchor, tuple[float, float]] = {
+    "top-left": (0, 0), "top": (0.5, 0), "top-right": (1, 0),
+    "left": (0, 0.5), "center": (0.5, 0.5), "right": (1, 0.5),
+    "bottom-left": (0, 1), "bottom": (0.5, 1), "bottom-right": (1, 1),
+}  # fmt: skip
+
+
+def _overlay_axis(ratio: float, main: str, over: str, margin: int) -> str:
+    """overlay の x・y の式（片方の軸）。margin は辺から内側への距離（負なら画面外に出せる）。
+
+    中央寄せ（ratio = 0.5）では、margin はどちらの辺の内側かを決められないので無視する
+    （.ass の Alignment 中央でも MarginL/R が中央位置をずらさないのと同じ考え方）。
+    """
+    if ratio == 0:
+        return str(margin)
+    if ratio == 1:
+        return f"({main}-{over})-({margin})"
+    return f"({main}-{over})/2"
+
+
+def _overlay_position(anchor: LayerAnchor, margin: tuple[int, int]) -> tuple[str, str]:
+    rx, ry = _ANCHOR_RATIOS[anchor]
+    return _overlay_axis(rx, "W", "w", margin[0]), _overlay_axis(ry, "H", "h", margin[1])
+
+
+def _enable_clause(layer: LayerSpec) -> str:
+    """overlay の enable オプション（区間の無いレイヤーは常に表示するので空文字列）。"""
+    start, end = layer.start, layer.end
+    if start is None and end is None:
+        return ""
+    if end is None:
+        assert start is not None
+        expr = f"gte(t,{_seconds(start)})"
+    elif start is None:
+        expr = f"lte(t,{_seconds(end)})"
+    else:
+        expr = f"between(t,{_seconds(start)},{_seconds(end)})"
+    return f":enable='{expr}'"
+
+
+def _layer_scale_filter(layer: LayerSpec) -> str:
+    return f"scale=iw*{_ratio(layer.scale)}:ih*{_ratio(layer.scale)}"
+
+
+def _video_layer_filter(layer: LayerSpec, fps: int) -> str:
+    # fps を素材にも通し、本編と同じコマ番号に揃える（issue #111。ループのつなぎ目のずれを防ぐ）
+    return f"fps={fps},{_layer_scale_filter(layer)}"
+
+
+def _stack_layers(
+    label: str, layers: list[tuple[int, LayerSpec]], source_filter: Callable[[LayerSpec], str]
+) -> tuple[list[str], str]:
+    """layers（layer 昇順の (入力の番号, LayerSpec) の組）を label の画面に overlay で重ねる。
+
+    (filtergraph の断片, 出力ラベル) を返す。入力の番号は呼び出し側が決める（-i に並べた実際の順番と
+    一致させる必要があるため、layer 昇順に並べ替えた後もここでは振り直さない）。
+    """
+    parts: list[str] = []
+    for index, layer in layers:
+        src_label = f"layer{index}"
+        parts.append(f"[{index}:v]{source_filter(layer)}[{src_label}]")
+        x, y = _overlay_position(layer.anchor, layer.margin)
+        out_label = f"ov{index}"
+        parts.append(
+            f"[{label}][{src_label}]overlay=x={x}:y={y}:format=rgb{_enable_clause(layer)}[{out_label}]"
+        )
+        label = out_label
+    return parts, label
+
+
+def _split_by_layer(
+    layers: tuple[LayerSpec, ...],
+) -> tuple[list[tuple[int, LayerSpec]], list[tuple[int, LayerSpec]]]:
+    """layers を (入力の番号, LayerSpec) の組にしてから、layer < 0 / >= 0 に分けて昇順に並べる。
+
+    入力の番号は、背景（入力 0）の次から、layers の並び順のまま数える
+    （-i に並べる実際の順番と一致させるため。groupby 前に振り直すと入力とフィルタがずれる）。
+    """
+    indexed = list(enumerate(layers, start=1))
+    back = sorted((item for item in indexed if item[1].layer < 0), key=lambda item: item[1].layer)
+    front = sorted((item for item in indexed if item[1].layer >= 0), key=lambda item: item[1].layer)
+    return back, front
+
+
 def subtitles_filter(subtitles: Path, fontsdir: Path, *, alpha: bool = False) -> str:
     f = f"subtitles=filename={escape_filter_arg(str(subtitles))}:fontsdir={escape_filter_arg(str(fontsdir))}"
     return f + ":alpha=1" if alpha else f
 
 
+def _compose_layers(
+    label: str,
+    first_stage: str,
+    layers: tuple[LayerSpec, ...],
+    subtitles: Path,
+    fontsdir: Path,
+    tail: str,
+    fps: int,
+) -> str:
+    """label の画面に first_stage を適用し、layer < 0 → 字幕 → layer >= 0 の順に重ね、tail で仕上げる。
+
+    レイヤーの入力は、背景（入力 0）の次（1）から数える。layers が空なら、以前と同じ1本の
+    comma 区切りの文字列にする（filtergraph を変えないため）。
+    """
+    subs_expr = subtitles_filter(subtitles, fontsdir)
+    if not layers:
+        return f"[{label}]{first_stage},{subs_expr},{tail}"
+    back, front = _split_by_layer(layers)
+    parts = [f"[{label}]{first_stage}[bg0]"]
+    back_parts, current = _stack_layers("bg0", back, lambda layer: _video_layer_filter(layer, fps))
+    parts += back_parts
+    parts.append(f"[{current}]{subs_expr}[subs0]")
+    front_parts, current = _stack_layers("subs0", front, lambda layer: _video_layer_filter(layer, fps))
+    parts += front_parts
+    parts.append(f"[{current}]{tail}")
+    return ";".join(parts)
+
+
 def build_args(spec: RenderSpec) -> list[str]:
-    """出力ファイル名を除いた ffmpeg の引数。入力 0 が映像、入力 1 が音声。"""
+    """出力ファイル名を除いた ffmpeg の引数。入力 0 が映像、入力 1 が音声。
+
+    背景の後、音声の前に [[layers]] の素材を入力として並べる（frame があれば frame.layers、
+    無ければ spec.layers を使う。両方が同時に効くことはない）ので、音声の入力番号はその数だけ動く。
+    """
     w, h = spec.size
     clip = spec.clip
     if spec.mode == "overlay":
@@ -191,10 +350,14 @@ def build_args(spec: RenderSpec) -> list[str]:
         video = f"[0:v]{subtitles},{_TO_BT709},format=yuva444p10le[v]"
         codec = ["-c:v", "prores_ks", "-profile:v", "4444", "-pix_fmt", "yuva444p10le"]
         codec += ["-c:a", "pcm_s24le"]
+        layers: tuple[LayerSpec, ...] = ()
     else:
         if spec.background is None:
             raise ValueError(f"mode={spec.mode} には background が必要です")
+        layers = spec.frame.layers if spec.frame is not None else spec.layers
         inputs = background_input(spec.background, spec.fps)
+        for layer in layers:
+            inputs += layer_input(layer.file, spec.fps)
         # YUV 上で合成すると .ass の色が変換行列の違いでずれるため、RGB で合成してから YUV にする
         # 字幕は元の時刻のまま描いてから、setpts で 0 秒に戻す。.ass の時刻をずらすと、区間の頭を
         # またぐ行の \move・\fad がずれる（docs/verification/20260918-shorts.md）
@@ -206,7 +369,10 @@ def build_args(spec: RenderSpec) -> list[str]:
             fit = _fit_to_rgb(
                 spec.size, spec.fit, spec.focus, flags=spec.scale_flags, pad_color=spec.pad_color
             )
-            video = f"[0:v]{cut}fps={spec.fps},{fit},{subtitles_filter(spec.subtitles, spec.fontsdir)},{tail}"
+            first_stage = f"{cut}fps={spec.fps},{fit}"
+            video = _compose_layers(
+                "0:v", first_stage, spec.layers, spec.subtitles, spec.fontsdir, tail, spec.fps
+            )
         if spec.mode == "final":
             codec = ["-c:v", "libx264", "-preset", spec.preset, "-crf", str(spec.crf)]
             codec += ["-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "320k", "-movflags", "+faststart"]
@@ -219,6 +385,7 @@ def build_args(spec: RenderSpec) -> list[str]:
     if clip is not None and spec.loudnorm is not None:
         raise ValueError("clip と loudnorm は同時に指定できません")
     audio_filter = _clip_audio(clip, spec.fps) if clip else _audio_filter(spec.pitch, spec.loudnorm)
+    audio_index = 1 + len(layers)
 
     return [
         "ffmpeg",
@@ -227,7 +394,7 @@ def build_args(spec: RenderSpec) -> list[str]:
         "-i", str(spec.audio),
         "-filter_complex", video + (f";{audio_filter}" if audio_filter else ""),
         "-map", "[v]",
-        "-map", "[a]" if audio_filter else "1:a:0",
+        "-map", "[a]" if audio_filter else f"{audio_index}:a:0",
         *codec,
         *_BT709,
         "-ar", "48000",
@@ -288,16 +455,18 @@ def _blur_video(spec: RenderSpec, frame: Frame, cut: str, tail: str) -> str:
     帯は背景だけをぼかすので、本編の歌詞・曲名表示は上下に写り込まない。
     本編の映像は幅いっぱいに縮める（高さは frame_height で偶数にする）。
     fps は split の前に置く（帯と本編で二重にコマを合わせない）。
+    frame.layers は本編と同じ画面（[frame]）に、字幕の前後で重ねる（帯には重ねない）。
     """
     width = spec.size[0]
     main = _fit_to_rgb(frame.size, frame.fit, frame.focus, flags=spec.scale_flags, pad_color=spec.pad_color)
     # 高さは frame_height で決める（検査（cli）と描画で同じ値にする）
     height = frame_height(frame.size, width)
+    scale_expr = f"scale={width}:{height}:flags={spec.scale_flags}[fg]"
+    fg = _compose_layers("frame", main, frame.layers, frame.subtitles, spec.fontsdir, scale_expr, spec.fps)
     return (
         f"[0:v]{cut}fps={spec.fps},split[band][frame];"
         f"[band]{_blur_band(spec.size, spec.focus, spec.pad_color)}[bg];"
-        f"[frame]{main},{subtitles_filter(frame.subtitles, spec.fontsdir)},"
-        f"scale={width}:{height}:flags={spec.scale_flags}[fg];"
+        f"{fg};"
         f"[bg][fg]overlay=y=(H-h)/2:format=rgb,"
         f"{subtitles_filter(spec.subtitles, spec.fontsdir)},{tail}"
     )
@@ -391,22 +560,48 @@ class StillSpec:
     fit: Fit = "cover"
     scale_flags: ScaleFlags = "lanczos"
     pad_color: str = "black"
+    # enable は使わない（呼び出し側で表示するかを選別済み。utavideo.layers.spec の docstring 参照）
+    layers: tuple[LayerSpec, ...] = ()
+
+
+def _compose_still(fit: str, layers: tuple[LayerSpec, ...], subs_expr: str | None) -> str:
+    if not layers:
+        video = f"[0:v]{fit}"
+        if subs_expr is not None:
+            video += f",{subs_expr}"
+        return f"{video}[v]"
+    back, front = _split_by_layer(layers)
+    parts = [f"[0:v]{fit}[bg0]"]
+    back_parts, label = _stack_layers("bg0", back, _layer_scale_filter)
+    parts += back_parts
+    if subs_expr is not None:
+        parts.append(f"[{label}]{subs_expr}[subs0]")
+        label = "subs0"
+    front_parts, label = _stack_layers(label, front, _layer_scale_filter)
+    parts += front_parts
+    if label != "v":
+        parts.append(f"[{label}]null[v]")
+    return ";".join(parts)
 
 
 def build_still_args(spec: StillSpec) -> list[str]:
     """出力ファイル名（.png）を除いた ffmpeg の引数。"""
     # 動画と同じく RGB で合成する。PNG なので YUV には戻さない
     fit = _fit_to_rgb(spec.size, spec.fit, spec.focus, flags=spec.scale_flags, pad_color=spec.pad_color)
-    video = f"[0:v]{fit}"
+    subs_expr: str | None = None
     if spec.subtitles is not None:
         if spec.fontsdir is None:
             raise ValueError("subtitles には fontsdir が必要です")
-        video += f",{subtitles_filter(spec.subtitles, spec.fontsdir)}"
+        subs_expr = subtitles_filter(spec.subtitles, spec.fontsdir)
+    video = _compose_still(fit, spec.layers, subs_expr)
+    inputs = frame_input(spec.background, spec.at)
+    for layer in spec.layers:
+        inputs += layer_still_input(layer.file, spec.at)
     return [
         "ffmpeg",
         *_COMMON,
-        *frame_input(spec.background, spec.at),
-        "-filter_complex", f"{video}[v]",
+        *inputs,
+        "-filter_complex", video,
         "-map", "[v]",
         # 1枚だけ書く。-update 1 が無いと、連番でない名前に image2 が警告を出す
         "-frames:v", "1",

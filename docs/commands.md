@@ -114,9 +114,9 @@ utavideo overlay [-C <曲フォルダ>]
 
 | コマンド | 出力 | 入るもの |
 |---|---|---|
-| `preview-bg` | `build/preview/bg.mp4` | 背景・曲名表示・音声（歌詞の行は入れない） |
-| `build` | `build/main.mp4` | 背景・歌詞・曲名表示・音声 |
-| `overlay` | `build/overlay.mov` | 歌詞・曲名表示（背景は透明）・音声。背景のファイルは不要 |
+| `preview-bg` | `build/preview/bg.mp4` | 背景・`[[layers]]`・曲名表示・音声（歌詞の行は入れない） |
+| `build` | `build/main.mp4` | 背景・`[[layers]]`・歌詞・曲名表示・音声 |
+| `overlay` | `build/overlay.mov` | 歌詞・曲名表示（背景・`[[layers]]` は無し）・音声。背景のファイルは不要 |
 
 - 書き出す前に[検査](#検査項目)し、エラーがあれば書き出しません。警告は表示して続けます
 - `preview-bg` は、歌詞の行についての検査を行いません
@@ -161,7 +161,7 @@ utavideo overlay [-C <曲フォルダ>]
 
 縦の下敷きを書き出すとき:
 
-- 本編の映像（本編の .ass の歌詞入り。曲名表示は入れません）を帯の上に置いた、完成図と同じ画面にします。曲名表示は帯（縦用 .ass の `VerticalBand` スタイル）に描きます。本編の合成とぼかしの分だけ、本編の下敷きより時間がかかります。描画に使った本編の .ass は `build/.work/vertical-preview-frame.ass` に書きます
+- 本編の映像（本編の .ass の歌詞入り、`[[layers]]` も重ねる。曲名表示は入れません）を帯の上に置いた、完成図と同じ画面にします。曲名表示は帯（縦用 .ass の `VerticalBand` スタイル）に描きます。本編の合成とぼかしの分だけ、本編の下敷きより時間がかかります。描画に使った本編の .ass は `build/.work/vertical-preview-frame.ass` に書きます
 - `[[shorts]]` は無くてもかまいません（区間を置く前に使うため）。検査は[ショートの検査](#ショートの検査)の表の `preview-bg` の列のとおりです
 - 曲名表示は `vertical.overlay_text = false` で消せます（`shorts` と同じ）
 
@@ -183,7 +183,7 @@ utavideo thumbnail [-C <曲フォルダ>] [--name <name>]
 
 | 出力 | 入るもの |
 |---|---|
-| `build/thumbnail/<name>.png` | 背景のフレーム＋ .ass |
+| `build/thumbnail/<name>.png` | 背景のフレーム＋ `[[layers]]`（`at` の時刻に区間が入っているものだけ）＋ .ass |
 
 - 背景が GIF・動画のときは、`at` 秒以降の最初のフレームを使います（繰り返しません）
 - .ass は加工せずに、**0 秒**の状態を描きます。`lyrics.fade_ms` の自動フェードと `[overlay_text]` の曲名表示は入りません。`\t`・`\move`・`\k` なども 0 秒の状態になります

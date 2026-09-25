@@ -23,7 +23,7 @@ from pydantic import (
 from pydantic_core import to_jsonable_python
 
 from utavideo.errors import UtavideoError
-from utavideo.graph import Fit, Preset, ScaleFlags
+from utavideo.graph import Fit, LayerAnchor, Preset, ScaleFlags
 from utavideo.names import casefold_duplicates, output_name_error, slug_error
 from utavideo.timecode import parse_time
 
@@ -160,6 +160,19 @@ class Lyrics(_Model):
     fade_ms: FadeMs = (150, 150)
 
 
+class Layer(_Model):
+    """背景の上に重ねる画像・GIF・アルファ付き動画（1個）。前後関係は .ass の Layer と同じ尺度。"""
+
+    name: OutputName
+    file: Path
+    start: Time | None = None  # None なら動画の最初から
+    end: Time | None = None  # None なら動画の最後まで
+    scale: float = 1.0
+    anchor: LayerAnchor = "center"
+    margin: tuple[int, int] = (0, 0)  # 余白（横, 縦）。ピクセル、負の値も許す
+    layer: int = 0  # 大きいほど手前。0 未満は歌詞より奥、0 以上（既定）は歌詞より手前
+
+
 class OverlayText(_Model):
     enabled: bool = True
     style: str = "Title"
@@ -248,6 +261,7 @@ class ProjectConfig(_Model):
     audio: Audio
     video: Video
     lyrics: Lyrics = Field(default_factory=Lyrics)
+    layers: tuple[Layer, ...] = ()  # 本編の描画に効くので NOT_RENDERED は付けない
     overlay_text: OverlayText = Field(default_factory=OverlayText)
     credits: Annotated[tuple[Credit, ...], NOT_RENDERED] = ()
     materials: Annotated[tuple[Material, ...], NOT_RENDERED] = ()
@@ -258,6 +272,11 @@ class ProjectConfig(_Model):
     uploads: Annotated[tuple[Upload, ...], NOT_RENDERED] = ()
     announce: Annotated[Announce | None, NOT_RENDERED] = None
     inst: Annotated[Inst, NOT_RENDERED] = Field(default_factory=Inst)
+
+    @field_validator("layers")
+    @classmethod
+    def _unique_layer_names(cls, layers: tuple[Layer, ...]) -> tuple[Layer, ...]:
+        return check_unique_names(layers, lambda layer: layer.name)
 
     @field_validator("thumbnails")
     @classmethod

@@ -7,6 +7,7 @@ from utavideo.ffmpeg import LoudnormMeasurement, LoudnormTarget
 from utavideo.graph import (
     Clip,
     Frame,
+    LayerSpec,
     Loudnorm,
     Pitch,
     RenderSpec,
@@ -99,6 +100,96 @@ def test_focus_moves_crop_and_pad() -> None:
     assert "pad=1920:1080:(ow-iw)*0.25:(oh-ih)*0.000001:color=black" in contain
 
 
+def _logo(**overrides: object) -> LayerSpec:
+    defaults: dict[str, object] = dict(
+        file=Path("/a/logo.png"), scale=1.0, anchor="top-right", margin=(40, 40), layer=50
+    )
+    return LayerSpec(**{**defaults, **overrides})  # pyright: ignore[reportArgumentType]
+
+
+def test_layer_input_follows_the_background_and_precedes_audio() -> None:
+    args = build_args(replace(SPEC, layers=(_logo(),)))
+    assert _contains(args, ["-loop", "1", "-framerate", "30", "-i", "/a/logo.png"])
+    # 背景（入力 0）の次（1）がレイヤー、音声は入力 2 に押し出される
+    assert _contains(args, ["-map", "2:a:0"])
+
+
+def test_two_layers_shift_the_audio_input_by_two() -> None:
+    args = build_args(replace(SPEC, layers=(_logo(), _logo(file=Path("/a/second.png")))))
+    assert _contains(args, ["-map", "3:a:0"])
+
+
+def test_layer_zero_or_more_is_composited_after_the_subtitles() -> None:
+    video = _filter(build_args(replace(SPEC, layers=(_logo(layer=0),))))
+    assert video.index("subtitles=") < video.index("[layer1]")
+
+
+def test_negative_layer_is_composited_before_the_subtitles() -> None:
+    video = _filter(build_args(replace(SPEC, layers=(_logo(layer=-1),))))
+    assert video.index("[layer1]") < video.index("subtitles=")
+
+
+def test_layers_on_the_same_side_stack_in_ascending_order() -> None:
+    # 設定に書いた順ではなく、layer の昇順（奥から手前）に重ねる。入力の番号は書いた順のまま
+    back = _logo(file=Path("/a/back.png"), layer=10)
+    front = _logo(file=Path("/a/front.png"), layer=5)
+    video = _filter(build_args(replace(SPEC, layers=(back, front))))
+    # front（layer=5、入力 2）が back（layer=10、入力 1）より先に重なる
+    assert video.index("[layer2]") < video.index("[layer1]")
+    assert _contains(build_args(replace(SPEC, layers=(back, front))), ["-i", "/a/back.png"])
+
+
+def test_layer_anchor_and_margin_build_the_overlay_position() -> None:
+    top_right = _filter(build_args(replace(SPEC, layers=(_logo(anchor="top-right", margin=(40, 20)),))))
+    assert "overlay=x=(W-w)-(40):y=20:format=rgb" in top_right
+    bottom_left = _filter(build_args(replace(SPEC, layers=(_logo(anchor="bottom-left", margin=(5, -10)),))))
+    assert "overlay=x=5:y=(H-h)-(-10):format=rgb" in bottom_left
+    center = _filter(build_args(replace(SPEC, layers=(_logo(anchor="center", margin=(99, 99)),))))
+    # 中央寄せの軸では margin を無視する
+    assert "overlay=x=(W-w)/2:y=(H-h)/2:format=rgb" in center
+
+
+def test_layer_scale_is_applied_before_overlay() -> None:
+    video = _filter(build_args(replace(SPEC, layers=(_logo(scale=0.5),))))
+    assert "[1:v]fps=30,scale=iw*0.5:ih*0.5[layer1]" in video
+
+
+def test_layer_without_a_time_range_has_no_enable_clause() -> None:
+    video = _filter(build_args(replace(SPEC, layers=(_logo(),))))
+    assert "enable" not in video
+
+
+def test_layer_time_range_becomes_an_enable_clause() -> None:
+    both = _filter(build_args(replace(SPEC, layers=(_logo(start=5.0, end=12.0),))))
+    assert ":enable='between(t,5.000000,12.000000)'" in both
+    start_only = _filter(build_args(replace(SPEC, layers=(_logo(start=5.0),))))
+    assert ":enable='gte(t,5.000000)'" in start_only
+    end_only = _filter(build_args(replace(SPEC, layers=(_logo(end=12.0),))))
+    assert ":enable='lte(t,12.000000)'" in end_only
+
+
+def test_webm_layer_uses_the_vp9_decoder_for_alpha() -> None:
+    # .webm は静止画ではなくループする素材として扱う（-stream_loop -1）ので、その直前に付く
+    args = build_args(replace(SPEC, layers=(_logo(file=Path("/a/logo.webm")),)))
+    assert _contains(args, ["-c:v", "libvpx-vp9", "-stream_loop", "-1", "-i", "/a/logo.webm"])
+
+
+def test_animated_layer_loops_like_the_background() -> None:
+    args = build_args(replace(SPEC, layers=(_logo(file=Path("/a/logo.gif")),)))
+    assert _contains(args, ["-stream_loop", "-1", "-i", "/a/logo.gif"])
+
+
+def test_without_layers_the_filtergraph_is_unchanged() -> None:
+    # layers=() の既定では、以前と同じ1本の comma 区切りの文字列のまま（filtergraph を変えない）
+    assert ";" not in _filter(build_args(SPEC))
+
+
+def test_overlay_mode_ignores_layers() -> None:
+    args = build_args(replace(SPEC, mode="overlay", layers=(_logo(),)))
+    assert "/a/logo.png" not in args
+    assert _contains(args, ["-map", "1:a:0"])
+
+
 STILL = StillSpec(
     size=(1080, 1080),
     background=Path("/a/bg.png"),
@@ -133,6 +224,44 @@ def test_still_seeks_only_animated_backgrounds() -> None:
 def test_still_background_only() -> None:
     args = build_still_args(replace(STILL, subtitles=None, fontsdir=None))
     assert "subtitles" not in _filter(args)
+
+
+def test_still_layer_is_composited_without_looping() -> None:
+    # サムネイルは1フレームだけなので、レイヤーもループさせない（frame_input と同じ判定を使い回す）
+    args = build_still_args(replace(STILL, layers=(_logo(file=Path("/a/logo.gif")),), at=6.0))
+    assert _contains(args, ["-ss", "6.000", "-i", "/a/logo.gif"])
+    assert "-loop" not in args and "-stream_loop" not in args
+    video = _filter(args)
+    assert "enable" not in video
+    assert video == (
+        "[0:v]scale=1080:1080:force_original_aspect_ratio=increase:flags=lanczos,"
+        "crop=1080:1080:(iw-ow)*0.5:(ih-oh)*0.5,setsar=1,format=rgb24[bg0];"
+        "[bg0]subtitles=filename=/s/thumbnail.ass:fontsdir=/c/fonts[subs0];"
+        "[1:v]scale=iw*1:ih*1[layer1];"
+        "[subs0][layer1]overlay=x=(W-w)-(40):y=40:format=rgb[ov1];"
+        "[ov1]null[v]"
+    )
+
+
+def test_still_layer_enable_clause_follows_the_same_rules_as_video() -> None:
+    # graph.py 自体は timed かどうかを判定しない（呼び出し側の utavideo.layers.spec が選別する）。
+    # start・end を渡せば、静止画でも build_args と同じ enable 式になる
+    video = _filter(build_still_args(replace(STILL, layers=(_logo(start=5.0, end=12.0),))))
+    assert ":enable='between(t,5.000000,12.000000)'" in video
+
+
+def test_still_layer_without_subtitles_still_relabels_to_v() -> None:
+    args = build_still_args(replace(STILL, subtitles=None, fontsdir=None, layers=(_logo(),)))
+    video = _filter(args)
+    assert video.endswith("[ov1]null[v]")
+
+
+def test_still_layers_split_by_layer_side_like_video() -> None:
+    back = _logo(file=Path("/a/back.png"), layer=-1)
+    front = _logo(file=Path("/a/front.png"), layer=1)
+    video = _filter(build_still_args(replace(STILL, layers=(front, back))))
+    # front（layer=1、入力 1）は字幕の後、back（layer=-1、入力 2）は字幕の前
+    assert video.index("[layer2]") < video.index("subtitles=") < video.index("[layer1]")
 
 
 # 区間は 345〜820 フレーム（30fps で 11.5〜27.333… 秒）
@@ -245,12 +374,13 @@ def test_loudnorm_and_clip_are_rejected_together() -> None:
         build_args(replace(CLIP_SPEC, loudnorm=loudnorm))
 
 
+BLUR_FRAME = Frame(size=(1920, 1080), focus=(0.5, 0.5), subtitles=Path("/w/main.ass"))
 BLUR_SPEC = replace(
     SPEC,
     size=(1080, 1920),
     subtitles=Path("/w/vertical.ass"),
     focus=(0.5, 1.0),
-    frame=Frame(size=(1920, 1080), focus=(0.5, 0.5), subtitles=Path("/w/main.ass")),
+    frame=BLUR_FRAME,
 )
 
 
@@ -276,6 +406,30 @@ def test_blur_puts_the_main_video_on_a_blurred_band() -> None:
         "subtitles=filename=/w/vertical.ass:fontsdir=/c/fonts,"
         "scale=out_color_matrix=bt709:out_range=tv,format=yuv420p[v]"
     )
+
+
+def test_blur_composites_frame_layers_around_the_main_videos_subtitles() -> None:
+    # frame.layers は帯には重ねず、本編と同じ画面（[frame]）の字幕の前後にだけ重ねる
+    spec = replace(BLUR_SPEC, frame=replace(BLUR_FRAME, layers=(_logo(layer=-1),)))
+    parts = _filter(build_args(spec)).split(";")
+    assert parts[0] == "[0:v]fps=30,split[band][frame]"
+    assert parts[1].startswith("[band]")  # 帯は変わらない
+    fg = ";".join(parts[2:-1])
+    assert fg.index("[layer1]") < fg.index("subtitles=filename=/w/main.ass")
+    assert _contains(build_args(spec), ["-i", "/a/logo.png"])
+    # 音声の入力番号は frame.layers の数だけ動く（spec.layers は frame があると使わない）
+    assert _contains(build_args(spec), ["-map", "2:a:0"])
+
+
+def test_blur_ignores_spec_layers_and_uses_frame_layers_instead() -> None:
+    spec = replace(
+        BLUR_SPEC,
+        layers=(_logo(file=Path("/a/ignored.png")),),
+        frame=replace(BLUR_FRAME, layers=(_logo(file=Path("/a/used.png")),)),
+    )
+    args = build_args(spec)
+    assert "/a/used.png" in args
+    assert "/a/ignored.png" not in args
 
 
 def test_blur_cuts_the_section_once_before_the_split() -> None:
