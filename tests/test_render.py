@@ -1438,7 +1438,7 @@ def test_inst_composites_the_score_scroll(project: Path, mscz_file: Path) -> Non
 
     output = project / "build/inst/test-key0.mp4"
     assert output.is_file()
-    assert (project / "build/.work/inst/score.png").is_file()  # 楽譜のPNGがwork_dirに書き出されている
+    assert (project / "build/.work/inst/score-key0.png").is_file()  # 楽譜のPNGがwork_dirに書き出されている
 
     # 楽譜の帯（y=20）が、楽譜を重ねなかったときと違う絵になっている（=何か描かれた）ことを確かめる
     row_with_score = _row_bytes(output, at=0.5, y=20, width=320)

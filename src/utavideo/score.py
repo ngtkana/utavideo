@@ -4,6 +4,7 @@
 音源との同期・ffmpegへの統合・inst コマンドへの組み込みはここでは扱わない。
 """
 
+import json
 import os
 import re
 import shutil
@@ -51,22 +52,71 @@ def require_musescore() -> str:
     return musescore
 
 
-def to_musicxml(mscz_path: Path, musescore: str) -> str:
-    """.mscz を MusicXML に変換して読む（元のファイルは書き換えない）。"""
+def _run_musescore_export(
+    musescore: str, input_path: Path, out_path: Path, *, transpose_interval: int | None = None
+) -> None:
+    """MuseScore CLIで input_path を out_path（拡張子で書式が決まる）に書き出す。
+
+    transpose_interval を渡すと、書き出す前にその分だけ移調する（0以上25以下、実測で
+    半音±12相当。範囲外の値は書き出し先ファイルが作られないまま黙って失敗する）。
+    """
+    args = [musescore]
+    if transpose_interval is not None:
+        options = {
+            "mode": "by_interval",
+            "direction": "up" if transpose_interval >= 0 else "down",
+            "transposeInterval": abs(transpose_interval),
+            "transposeKeySignatures": True,
+            "transposeChordNames": True,
+        }
+        args += ["--transpose", json.dumps(options)]
+    args += ["-o", str(out_path), str(input_path)]
+    try:
+        result = subprocess.run(args, capture_output=True, text=True, errors="replace")
+    except OSError as e:
+        raise ScoreError(f"{musescore} を実行できません: {e}") from e
+    if result.returncode != 0 or not out_path.exists():
+        tail = (result.stderr.strip() or result.stdout.strip())[-500:]
+        raise ScoreError(f"MuseScore での書き出しに失敗しました: {tail}")
+
+
+# MuseScore CLIの--transposeのtransposeIntervalは半音に線形対応しないので実測で対応表を作った
+# （検証: issue #144）。1回のtransposeで移調できるのは1オクターブ分（実測で半音±12相当、
+# transposeInterval 0〜25）までなので、1オクターブを超える分はtransposeInterval=25
+# （半音12相当）を繰り返し適用して稼ぐ。
+_SEMITONE_TO_INTERVAL = {
+    0: 0,
+    1: 3,
+    2: 4,
+    3: 7,
+    4: 8,
+    5: 11,
+    6: 12,
+    7: 14,
+    8: 17,
+    9: 18,
+    10: 21,
+    11: 22,
+    12: 25,
+}
+
+
+def to_musicxml(mscz_path: Path, musescore: str, *, semitones: int = 0) -> str:
+    """.mscz を MusicXML に変換して読む（元のファイルは書き換えない）。
+
+    semitones を指定すると、その半音数だけ移調してから変換する（--keysとの連動。issue #144）。
+    調号・臨時記号の♯系/♭系のスペリング判断はMuseScore側に任せ、utavideoでは行わない。
+    """
     with tempfile.TemporaryDirectory() as tmp_dir:
+        current = mscz_path
+        octaves, remainder = divmod(semitones, 12)
+        for i in range(abs(octaves)):
+            step_out = Path(tmp_dir) / f"octave{i}.mscz"
+            _run_musescore_export(musescore, current, step_out, transpose_interval=25 if octaves > 0 else -25)
+            current = step_out
         out_path = Path(tmp_dir) / "score.musicxml"
-        try:
-            result = subprocess.run(
-                [musescore, "-o", str(out_path), str(mscz_path)],
-                capture_output=True,
-                text=True,
-                errors="replace",
-            )
-        except OSError as e:
-            raise ScoreError(f"{musescore} を実行できません: {e}") from e
-        if result.returncode != 0 or not out_path.exists():
-            tail = (result.stderr.strip() or result.stdout.strip())[-500:]
-            raise ScoreError(f"MuseScore での MusicXML への変換に失敗しました: {tail}")
+        interval = _SEMITONE_TO_INTERVAL[remainder] if remainder else None
+        _run_musescore_export(musescore, current, out_path, transpose_interval=interval)
         return out_path.read_text(encoding="utf-8")
 
 
@@ -207,8 +257,11 @@ class RenderedScore:
     events: list[NoteEvent]
 
 
-def render(mscz_path: Path, musescore: str, *, scale: int = 40) -> RenderedScore:
-    """.mscz → MusicXML → 横1段のPNG・音符イベントを一度に作る（MusicXMLへの変換を1回で済ませる）。"""
-    musicxml = to_musicxml(mscz_path, musescore)
+def render(mscz_path: Path, musescore: str, *, scale: int = 40, semitones: int = 0) -> RenderedScore:
+    """.mscz → MusicXML → 横1段のPNG・音符イベントを一度に作る（MusicXMLへの変換を1回で済ませる）。
+
+    semitones は `to_musicxml` に渡す（--keysとの連動。issue #144）。
+    """
+    musicxml = to_musicxml(mscz_path, musescore, semitones=semitones)
     svg = render_horizontal_svg(musicxml, scale=scale)
     return RenderedScore(png=svg_to_png(svg), events=note_events(musicxml, scale=scale))

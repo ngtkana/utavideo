@@ -197,3 +197,58 @@ def test_to_musicxml_round_trips_without_modifying_input(tmp_path: Path) -> None
 
     assert "major-seventh" in xml
     assert hashlib.sha256(mscz_path.read_bytes()).digest() == digest_before
+
+
+def _make_mscz(tmp_path: Path, musescore: str) -> Path:
+    source_path = tmp_path / "source.musicxml"
+    source_path.write_text(_MUSICXML, encoding="utf-8")
+    mscz_path = tmp_path / "score.mscz"
+    subprocess.run([musescore, "-o", str(mscz_path), str(source_path)], check=True, capture_output=True)
+    return mscz_path
+
+
+def _first_pitch(xml: str) -> str:
+    match = re.search(r"<pitch>.*?</pitch>", xml, re.S)
+    assert match is not None
+    return match.group(0)
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_to_musicxml_transposes_by_semitones(tmp_path: Path) -> None:
+    """先頭の音符（C4）が、--keysと同じ半音数だけ移調される（issue #144）。"""
+    musescore = score.require_musescore()
+    mscz_path = _make_mscz(tmp_path, musescore)
+
+    xml = score.to_musicxml(mscz_path, musescore, semitones=2)
+
+    pitch = _first_pitch(xml)
+    assert "<step>D</step>" in pitch
+    assert "<octave>4</octave>" in pitch
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_to_musicxml_transposes_across_multiple_octaves(tmp_path: Path) -> None:
+    """MuseScore CLIの--transposeは1回では1オクターブ分（実測で半音±12相当）までしか
+    動かせないので、それを超える分はtransposeを繰り返し適用する（issue #144）。"""
+    musescore = score.require_musescore()
+    mscz_path = _make_mscz(tmp_path, musescore)
+
+    xml = score.to_musicxml(mscz_path, musescore, semitones=24)
+
+    pitch = _first_pitch(xml)
+    assert "<step>C</step>" in pitch
+    assert "<octave>6</octave>" in pitch
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_to_musicxml_transposes_down_with_negative_semitones(tmp_path: Path) -> None:
+    """オクターブの繰り返し適用と、残りの半音の適用の両方が符号違いでも正しく動く。"""
+    musescore = score.require_musescore()
+    mscz_path = _make_mscz(tmp_path, musescore)
+
+    xml = score.to_musicxml(mscz_path, musescore, semitones=-14)
+
+    pitch = _first_pitch(xml)
+    assert "<step>B</step>" in pitch
+    assert "<alter>-1</alter>" in pitch
+    assert "<octave>2</octave>" in pitch

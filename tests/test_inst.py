@@ -70,10 +70,12 @@ def test_parse_keys_rejects_bad_input(raw: str) -> None:
         inst.parse_keys(raw)
 
 
-def test_score_image_path_is_shared_across_keys() -> None:
-    """楽譜は--keysの移調とは連動しない（issue #143の範囲外）ので、キーごとに分けない。"""
+def test_score_image_path_is_split_by_key() -> None:
+    """楽譜は--keysの移調に連動して中身が変わる（issue #144）ので、キーごとに分ける。"""
     work_dir = Path("/a/build/.work")
-    assert inst.score_image_path(work_dir) == work_dir / "inst" / "score.png"
+    assert inst.score_image_path(work_dir, -1) == work_dir / "inst" / "score-key-1.png"
+    assert inst.score_image_path(work_dir, 2) == work_dir / "inst" / "score-key+2.png"
+    assert inst.score_image_path(work_dir, 0) == work_dir / "inst" / "score-key0.png"
 
 
 def test_score_overlay_shifts_time_by_the_first_bar_offset() -> None:

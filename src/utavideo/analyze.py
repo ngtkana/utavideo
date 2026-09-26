@@ -25,9 +25,6 @@ class Analysis:
     # sync = "auto" の頭出しの結果（analyze() が既に計算済みのものを、呼び出し側が
     # avatar.prepare() 等に渡して二重計算を避けるため。issue #133）
     avatar_sync: avatar.SyncResult | None = None
-    # [inst.score] の描画結果（analyze_inst が既に計算済みのものを、write_video 側で
-    # 使い回して二重計算を避ける。issue #143。avatar_sync と同じ考え方）
-    rendered_score: "score.RenderedScore | None" = None
 
 
 def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = None) -> Analysis:
@@ -140,26 +137,31 @@ def font_missing_message(name: str, font_dirs: list[Path]) -> str:
     return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
-def _score_issues(
-    project: Project, config_score: Score | None
-) -> tuple[list[subs.Issue], "score.RenderedScore | None"]:
-    """[inst.score]が設定されていれば、.msczとMuseScore CLIの有無を確かめてから描画する。"""
+def _score_issues(project: Project, config_score: Score | None) -> list[subs.Issue]:
+    """[inst.score]が設定されていれば、.msczとMuseScore CLIの有無・音符の数を確かめる。
+
+    実際の描画（PNG化）は --keys の値ごとに移調が変わるため、ここでは行わない
+    （build時にキーごとに行う。issue #144）。移調自体は0半音でも±nオクターブでも同じ
+    経路（MuseScore CLIでのMusicXML変換・Verovioでの読み込み）を通るので、0半音での
+    検査で代表させて問題ない。
+    """
     if config_score is None:
-        return [], None
+        return []
     path = project.score_path
     if not path.is_file():
-        return [subs.Issue("error", f"inst.score.file のファイルがありません: {path}")], None
+        return [subs.Issue("error", f"inst.score.file のファイルがありません: {path}")]
     try:
         musescore = score.require_musescore()
-        rendered = score.render(path, musescore)
+        musicxml = score.to_musicxml(path, musescore)
+        note_count = len(score.note_events(musicxml))
     except score.ScoreError as e:
-        return [subs.Issue("error", str(e))], None
-    if len(rendered.events) < 2:
+        return [subs.Issue("error", str(e))]
+    if note_count < 2:
         # graph.score_scroll_filter は2点以上を要求する。音符が無い・1個しか無い楽譜は
         # スクロールさせようが無いので、ここで検査エラーにする（実運用の楽曲ではまず起きない）
         message = f"{path} に音符が2個未満しかなく、楽譜を流せません"
-        return [subs.Issue("error", message)], None
-    return [], rendered
+        return [subs.Issue("error", message)]
+    return []
 
 
 def analyze_inst(
@@ -188,8 +190,7 @@ def analyze_inst(
     if duration_s is None:
         return Analysis(issues, duration_s, lyrics, ())
 
-    score_issues, rendered_score = _score_issues(project, config.inst.score)
-    issues += score_issues
+    issues += _score_issues(project, config.inst.score)
 
     duration_ms = round(duration_s * 1000)
     overlay = inst.overlay_text(config.overlay_text, config.inst)
@@ -206,9 +207,7 @@ def analyze_inst(
         project, lyrics, duration_ms, search.index, inst.key_label(widest_key), include_lyrics=include_lyrics
     )
     font_issues, font_files = check_fonts(script, search)
-    return Analysis(
-        issues + font_issues, duration_s, lyrics, font_files, search.index, rendered_score=rendered_score
-    )
+    return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index)
 
 
 @dataclass(frozen=True)
