@@ -337,6 +337,28 @@ def test_lint_warnings() -> None:
     assert not any("位置指定" in m and "重なって" in m for m in warnings)
 
 
+def test_lint_lines_groups_the_same_kind_of_issue_into_one_message() -> None:
+    """同種の指摘（ここでは表示時間 0 以下）が複数あっても、1件のメッセージにまとめる（issue #128）。"""
+    script = _make(
+        [
+            _line("0:00:01.00", "0:00:00.50", "壊れた行1"),
+            _line("0:00:02.00", "0:00:01.50", "壊れた行2"),
+        ]
+    )
+    warnings = _messages(subs.lint(script, size=(1920, 1080), duration_ms=10_000, overlay=OVERLAY), "warning")
+    zero_duration = [m for m in warnings if "表示時間が 0 以下です" in m]
+    assert len(zero_duration) == 1
+    assert "2 行" in zero_duration[0] and "壊れた行1" in zero_duration[0] and "壊れた行2" in zero_duration[0]
+
+
+def test_grouped_message_truncates_after_the_limit() -> None:
+    message = subs.grouped_message([f"行{i}" for i in range(7)], "が壊れています")
+    assert message.startswith("7 行が壊れています: ")
+    assert "行0" in message and "行4" in message
+    assert "行5" not in message and "行6" not in message
+    assert message.endswith(" ほか")
+
+
 def test_lint_still_checks_what_is_drawn_at_zero() -> None:
     script = _make(
         [

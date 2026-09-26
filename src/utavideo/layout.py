@@ -192,9 +192,10 @@ def _overflow_issues(overflowing: list[tuple[pysubs2.SSAEvent, float, int]]) -> 
             f"（推定 {width:.0f}px ＞ 表示幅 {available}px）。\\N で改行してください"
         )
         return [subs.Issue("warning", message)]
-    where = ", ".join(subs.describe(event) for event, _, _ in overflowing[:5])
-    more = " ほか" if len(overflowing) > 5 else ""
-    message = f"{len(overflowing)} 行が画面からはみ出しそうです（\\N で改行してください）: {where}{more}"
+    message = subs.grouped_message(
+        [subs.describe(event) for event, _, _ in overflowing],
+        "が画面からはみ出しそうです（\\N で改行してください）",
+    )
     return [subs.Issue("warning", message)]
 
 
