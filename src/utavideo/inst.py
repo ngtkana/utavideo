@@ -33,9 +33,9 @@ def work_ass_path(work_dir: Path, key: int) -> Path:
     return work_dir / "inst" / f"key{key_label(key)}.ass"
 
 
-def score_image_path(work_dir: Path) -> Path:
-    """楽譜を描いたPNGの置き場所。移調（--keys）とは連動しないので、キーによらず1個だけ作る。"""
-    return work_dir / "inst" / "score.png"
+def score_image_path(work_dir: Path, key: int) -> Path:
+    """楽譜を描いたPNGの置き場所。移調（--keys）に連動するので、キーごとに作る（issue #144）。"""
+    return work_dir / "inst" / f"score-key{key_label(key)}.png"
 
 
 def score_overlay(

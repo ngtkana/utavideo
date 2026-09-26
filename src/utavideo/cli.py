@@ -24,6 +24,7 @@ from utavideo import (
     layers,
     preview,
     sample,
+    score,
     shorts,
     status,
     subs,
@@ -853,17 +854,7 @@ def inst_command(
     loudnorm_target = LoudnormTarget()
     measured = measure_loudness(project.inst_audio_path.absolute(), loudnorm_target)
 
-    score_overlay = None
-    if project.config.inst.score is not None:
-        assert analysis.rendered_score is not None
-        image_path = inst.score_image_path(project.work_dir)
-        write_bytes(image_path, analysis.rendered_score.png)
-        score_overlay = inst.score_overlay(
-            project.config.inst.score,
-            image_path.absolute(),
-            analysis.rendered_score,
-            project.config.video.size[0],
-        )
+    musescore = score.require_musescore() if project.config.inst.score is not None else None
 
     duration_ms = round(analysis.duration_s * 1000)
     video = project.config.video
@@ -872,6 +863,14 @@ def inst_command(
         script = compose_inst(
             project, analysis.lyrics, duration_ms, analysis.font_index, label, include_lyrics=include_lyrics
         )
+        score_overlay = None
+        if (config_score := project.config.inst.score) is not None:
+            assert musescore is not None
+            # 楽譜もキーに合わせて移調する（--keysとの連動。issue #144）
+            rendered = score.render(project.score_path, musescore, semitones=key)
+            image_path = inst.score_image_path(project.work_dir, key)
+            write_bytes(image_path, rendered.png)
+            score_overlay = inst.score_overlay(config_score, image_path.absolute(), rendered, video.size[0])
         target = VideoTarget(
             "final",
             video.size,
