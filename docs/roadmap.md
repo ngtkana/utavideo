@@ -14,6 +14,7 @@
 - 縦型のショート（2段目）: `preview-bg` で縦の下敷き（`vertical.focus`）。区間は縦用 .ass のコメント行（スタイル `Short`、本文がショートの名前）に置き、`[[shorts]]` の `name` とつなぐ。`check` で縦用 .ass と区間を検査する
 - 縦型のショート（3段目）: `utavideo shorts` で区間を書き出す（`build/shorts/<name>.mp4`、`wide = true` の 16:9 版、区間のフレームの丸め、区間の端の音声のフェード、`shorts[].focus`、`vertical.overlay_text`、投稿先の長さの上限の警告）。本編の映像を上下中央に置き、上下を背景だけをぼかした帯で埋める（`preview-bg` の下敷きも同じ画面にする）
 - 歌唱練習用のカラオケ動画（issue #69・#70・#71・#72）: `utavideo inst --keys -1,-2,-3` で、ffmpeg の `rubberband`（無ければ `asetrate`+`atempo`）によりキーを変えた伴奏動画を、キーごとに別ファイルで書き出す（`build/inst/<slug>-key<キー>.mp4`）。`loudnorm`（2パス）で音量をそろえる。画面には既定で曲名・アーティスト・キーだけを表示する（YouTube 限定公開／非公開で自分が聴く用途なので、クレジット画面は作らない）。`--lyrics` を付けると本編と同じ歌詞も焼き込める（`--keys` によるキー変更と両立）
+- MuseScore で作るボーカル用楽譜との連携（issue #139〜#147）: `[inst.score]` に MuseScore 4 の楽譜（`.mscz`）を指定すると、音源のテンポに合わせて画面上を横スクロール表示する（`.mscz` → MusicXML → Verovio → PNG の描画パイプライン、音符ごとの発音時刻とx座標の対応づけ、ffmpegでの可変速スクロール、`inst` への組み込み、`--keys` の移調との連動、`--lyrics` との画面配置、楽譜と音源の食い違いの検査、`utavideo sample` の見本）
 - 曲フォルダの状態の一覧（issue #77・#78・#79）: `utavideo status` で、`build`・概要欄・告知文・`[[shorts]]`・`[[thumbnails]]`・release の状態を git status 風に一覧する。`check`（今書き出しても大丈夫か）とは別に「前回書き出したときから何が変わったか」を見る。入力の比較は size・mtime_ns が一致すれば読まずに済ませ、違うときだけ中身で確かめる二層判定にした（ショート・サムネイルはフォント依存の検出を簡略化し、歌詞・設定ファイル自体の変化だけを見る）
 - 今作れるものをまとめて作る（issue #85）: `utavideo build-all` で、`build`・`description`・`announce`・`thumbnail` について、既に済んでいるものはスキップし、書き出し前の検査（`analyze.py`）でエラーがあるものは「要対応」として案内し、それ以外を書き出す
 - 素材を重ねる（issue #111）: `[[layers]]` で、ユーザーが用意した画像・GIF・アルファ付き動画を背景の上に重ねる（位置・大きさ・表示する区間）。本編・`preview-bg`（本編・縦の両方）・サムネイルに共通で効く。`layer`（`.ass` の `Layer` と同じ尺度）で歌詞との前後関係を決める
@@ -40,7 +41,7 @@
 
 ### 歌唱練習用のカラオケ動画（続き）
 
-- MuseScore で作るボーカル用楽譜との連携（issue #139）：`inst` に楽譜を音源に合わせて横に流して表示する。要件・調査を issue #139 にまとめ、実装単位のissue（#140〜#147）に分解して進めている。楽譜の描画パイプライン（`.mscz` → MusicXML → Verovio → PNG、issue #140）は実装済み（`inst` コマンドへの組み込みはこれから）
+- DAW（StudioOne など）のテンポトラックとの連携（構想）：楽譜の rit. のような連続的なテンポ変化や、`[inst.score]` の `first_bar_offset_s`（1小節目のオフセット、今は手入力）の自動化に使える可能性がある（issue #139のコメント）
 
 ### サムネイル（続き）
 

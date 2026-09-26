@@ -3,7 +3,7 @@
 公開リポジトリに実際の曲は置けないので、確認したい要素（背景に負けない文字、歌詞と音の合い方、
 位置を指定した行、はみ出す行、概要欄のクレジット）だけを持つ曲フォルダを作る。静止画の背景と
 音源はリポジトリ作者本人が用意した素材を、楽譜（[inst.score]）は見本用に作成したオリジナルの
-旋律（CC0）を同梱し、ループ動画・GIF・フォントはその場で合成する
+旋律（CC0 1.0）を同梱し、ループ動画・GIF・フォントはその場で合成する
 （フォントは既定では環境に要求せず、--font に実在のフォント名を渡すと、そのフォントで描く）。
 
 寸法は固定にする。座標もスタイルの大きさもここで一緒に作るので、--small で小さくしても
@@ -48,7 +48,7 @@ _MATERIAL_TEMPLATE_DIR = "sample-materials"
 _MATERIAL_CREDIT = "Kana Nagata（背景: VRoid Studio で制作・VRM Posing Desktop で撮影 / 音源: 作曲）"
 SCORE_FILE = Path("src/score.mscz")  # [inst.score] の見本（issue #147）
 _SCORE_TEMPLATE_DIR = "sample-score"
-_SCORE_CREDIT = "utavideo（見本用に作成したオリジナルの旋律。CC0 1.0）"
+_SCORE_CREDIT = "この見本用に作成したオリジナルの旋律（CC0 1.0）"
 
 # 1920x1080 を基準にして、--small では全部を同じ比率で縮める
 BASE_SIZE = (1920, 1080)
@@ -209,7 +209,7 @@ def material_note() -> str:
     return (
         f"背景の静止画（`{STILL_BACKGROUND.as_posix()}`）と音源（`{AUDIO_FILE.as_posix()}`）は、"
         f"{_MATERIAL_CREDIT}によるものです。楽譜（`{SCORE_FILE.as_posix()}`）は"
-        f"{_SCORE_CREDIT}によるものです（`utavideo inst` の楽譜表示を試すための見本で、"
+        f"{_SCORE_CREDIT}です（`utavideo inst` の楽譜表示を試すための見本で、"
         "音源そのものの旋律とは一致しません）。ループする背景"
         f"（`{VIDEO_BACKGROUND.as_posix()}`・`{GIF_BACKGROUND.as_posix()}`）、"
         f"[[layers]] の見本（`{LOGO_FILE.as_posix()}`）、"
