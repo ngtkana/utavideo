@@ -21,7 +21,7 @@ from utavideo.analyze import FontSearch, analyze
 from utavideo.config import Video, cache_dir
 from utavideo.console import console, err_console
 from utavideo.errors import UtavideoError
-from utavideo.ffmpeg import NoOutputError, run, write_text
+from utavideo.ffmpeg import NoOutputError, probe_duration, run, write_text
 from utavideo.project import Project
 from utavideo.render import VideoTarget, compose, write_video
 from utavideo.subs import Issue
@@ -96,11 +96,18 @@ def _render_still(
     )
     if project.config.avatar is not None:
         active_layers += (avatar.layer_spec(project),)  # 区間の無いレイヤーなので常に表示する
+    # 動画・GIF の背景はループ再生されるので、素材の実長を超える at はループに合わせて折り返す
+    # （素材そのものの長さは -ss でしか読めないため。曲中の時刻である at 自体は変えない）
+    background_at = at
+    if not graph.is_image(project.background_path):
+        duration = probe_duration(project.background_path)
+        if duration:
+            background_at = at % duration
     spec = graph.StillSpec(
         size=video.size,
         background=project.background_path.absolute(),
         focus=video.focus,
-        at=at,
+        at=background_at,
         subtitles=subtitles_path.absolute(),
         fontsdir=fontsdir,
         fit=video.fit,
