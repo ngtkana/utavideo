@@ -431,6 +431,16 @@ def test_preview_writes_a_short_video_for_the_given_duration(project: Path) -> N
     assert float(info["format"]["duration"]) == pytest.approx(1.0, abs=0.2)
 
 
+def test_preview_still_wraps_at_for_a_looping_background(project: Path) -> None:
+    # loop.gif は 0.5 秒。素材の実長を超える --at でも、build と同じくループして書き出せる（issue #131）
+    (project / "utavideo.toml").write_text(TOML.format(background="loop.gif"), encoding="utf-8")
+    result = invoke("preview", "-C", str(project), "--at", "1.7")
+
+    output = project / "build/.work/preview.png"
+    assert str(output) in result.output
+    assert _stream(_probe(output), "video")["codec_name"] == "png"
+
+
 def test_preview_rejects_a_duration_shorter_than_one_frame(project: Path) -> None:
     result = runner.invoke(app, ["preview", "-C", str(project), "--duration", "0.02"])
     assert result.exit_code == 1
