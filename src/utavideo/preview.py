@@ -113,6 +113,7 @@ def _render_still(
         background=project.background_path.absolute(),
         focus=video.focus,
         at=background_at,
+        pts_offset=at,
         subtitles=subtitles_path.absolute(),
         fontsdir=fontsdir,
         fit=video.fit,
