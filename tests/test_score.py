@@ -1,0 +1,115 @@
+"""score.py: .mscz→MusicXML→Verovio→PNG の描画パイプライン。"""
+
+from pathlib import Path
+
+import pytest
+
+from utavideo import score
+
+# 拍子/調号変更・臨時記号・3連符・タイ・歌詞・コード記号・リハーサルマークを含む最小の楽譜。
+# テンポのメトロノーム記号はSMuFLの私用領域の文字(U+ECA5)で埋め込まれることが多く、MuseScoreは
+# "Leland Text"のようなフォント名で書き出すが、Verovioは実在しない"Leipzig"というフォント名に
+# 書き換えて出力する(issue #140で発見)。ここではその文字を直接埋め込んで再現する。
+_MUSICXML = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd">
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Vocal</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>6</divisions><key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction placement="above"><direction-type><rehearsal>A</rehearsal></direction-type></direction>
+      <direction placement="above">
+        <direction-type>
+          <words font-family="Leland Text" font-size="12">&#xECA5; = 120</words>
+        </direction-type>
+      </direction>
+      <harmony><root><root-step>C</root-step></root><kind>major-seventh</kind></harmony>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type>
+        <lyric number="1"><syllabic>begin</syllabic><text>ね</text></lyric></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type>
+        <lyric number="1"><syllabic>end</syllabic><text>こ</text></lyric></note>
+      <note><pitch><step>F</step><alter>1</alter><octave>4</octave></pitch><duration>3</duration><voice>1</voice><type>eighth</type>
+        <accidental>sharp</accidental>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="start" bracket="yes"/></notations>
+        <lyric number="1"><text>ろ</text></lyric></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <lyric number="1"><text>ば</text></lyric></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice><type>eighth</type>
+        <time-modification><actual-notes>3</actual-notes><normal-notes>2</normal-notes></time-modification>
+        <notations><tuplet type="stop"/></notations>
+        <lyric number="1"><text>え</text></lyric></note>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type>
+        <tie type="start"/><notations><tied type="start"/></notations>
+        <lyric number="1"><text>し</text></lyric></note>
+    </measure>
+    <measure number="2">
+      <attributes><key><fifths>1</fifths></key><time><beats>3</beats><beat-type>4</beat-type></time></attributes>
+      <direction placement="above"><direction-type><rehearsal>B</rehearsal></direction-type></direction>
+      <harmony><root><root-step>G</root-step></root><kind>major</kind></harmony>
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type>
+        <tie type="stop"/><notations><tied type="stop"/></notations>
+        <lyric number="1"><text>て</text></lyric></note>
+      <note><pitch><step>C</step><alter>1</alter><octave>5</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type>
+        <accidental>sharp</accidental>
+        <lyric number="1"><text>な</text></lyric></note>
+      <note><rest/><duration>6</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+
+
+def test_render_horizontal_svg_returns_svg() -> None:
+    svg = score.render_horizontal_svg(_MUSICXML)
+    assert svg.startswith("<?xml") or "<svg" in svg[:200]
+
+
+def test_substitute_missing_font_with_wrong_font_name() -> None:
+    """Verovioは実在しない"Leipzig"フォント名でSMuFL文字を書き出すことがある(issue #140)。"""
+    svg = f'<tspan font-family="Leipzig" font-size="720px">{chr(0xECA5)}</tspan>'
+    substituted = score._substitute_missing_font(svg)
+    assert "Leipzig" not in substituted
+    assert 'font-family="Bravura Text"' in substituted
+    assert chr(0xECA5) in substituted
+
+
+def test_substitute_missing_font_without_font_attribute() -> None:
+    """font-family属性自体が無いままSMuFL文字が出てくることもある(実データで確認済み)。"""
+    svg = f'<tspan font-size="405px">{chr(0xECA5)} = 120</tspan>'
+    substituted = score._substitute_missing_font(svg)
+    assert 'font-family="Bravura Text"' in substituted
+
+
+def test_substitute_missing_font_leaves_normal_text_alone() -> None:
+    """SMuFL文字を含まない歌詞・コード文字はフォントを変えない(日本語フォントが必要なため)。"""
+    svg = '<tspan font-size="405px">こんにちは</tspan>'
+    assert score._substitute_missing_font(svg) == svg
+
+
+def test_svg_to_png_produces_valid_png() -> None:
+    svg = score.render_horizontal_svg(_MUSICXML)
+    png = score.svg_to_png(svg)
+    assert png.startswith(b"\x89PNG\r\n\x1a\n")
+    assert len(png) > 1000
+
+
+def test_find_musescore_prefers_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("UTAVIDEO_MUSESCORE", "/path/to/mscore")
+    assert score.find_musescore() == "/path/to/mscore"
+
+
+def test_require_musescore_raises_when_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(score, "find_musescore", lambda: None)
+    with pytest.raises(score.ScoreError):
+        score.require_musescore()
+
+
+def test_to_musicxml_raises_when_musescore_missing(tmp_path: Path) -> None:
+    with pytest.raises(score.ScoreError):
+        score.to_musicxml(tmp_path / "no-such-file.mscz", "/no/such/musescore")
