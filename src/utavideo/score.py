@@ -122,8 +122,22 @@ class NoteEvent:
 
 
 _BBOX_RENDER_OPTIONS = {**_RENDER_OPTIONS, "svgBoundingBoxes": True}
-_NOTE_BBOX = re.compile(r'<g id="bbox-([\w-]+)" class="note bounding-box">\s*(<rect\b[^>]*/>)')
+_BBOX_GROUP = re.compile(r"<g\b([^>]*)>\s*(<rect\b[^>]*/>)")
 _ATTR = re.compile(r'(\w[\w-]*)="([^"]*)"')
+
+
+def _parse_note_bboxes(svg: str) -> dict[str, float]:
+    """音符ごとのbboxから、譜面上のx座標(中心)を取り出す。属性の並び順には依存しない。"""
+    x_by_note_id: dict[str, float] = {}
+    for group_attrs, rect_tag in _BBOX_GROUP.findall(svg):
+        attrs = dict(_ATTR.findall(group_attrs))
+        note_id = attrs.get("id", "")
+        if attrs.get("class") != "note bounding-box" or not note_id.startswith("bbox-"):
+            continue
+        rect_attrs = dict(_ATTR.findall(rect_tag))
+        x = float(rect_attrs["x"]) + float(rect_attrs["width"]) / 2
+        x_by_note_id[note_id.removeprefix("bbox-")] = x
+    return x_by_note_id
 
 
 def note_events(musicxml: str, *, scale: int = 40) -> list[NoteEvent]:
@@ -138,17 +152,15 @@ def note_events(musicxml: str, *, scale: int = 40) -> list[NoteEvent]:
 
     和音は同時に鳴る全音符が同じ発音時刻になるので、1つの点にまとめる。休符には発音時刻が
     無いため、その前後の音符を結ぶ直線で近似することになる。
+
+    表示用の画像（`render_horizontal_svg`）と組み合わせるときは、同じ`scale`を渡すこと
+    （座標系がずれる）。
     """
     tk = verovio.toolkit()
     tk.setOptions({**_BBOX_RENDER_OPTIONS, "scale": scale})
     if not tk.loadData(musicxml):
         raise ScoreError("MusicXML を読み込めませんでした")
-    svg = tk.renderToSVG(1)
-
-    x_by_note_id = {}
-    for note_id, rect_tag in _NOTE_BBOX.findall(svg):
-        attrs = dict(_ATTR.findall(rect_tag))
-        x_by_note_id[note_id] = float(attrs["x"]) + float(attrs["width"]) / 2
+    x_by_note_id = _parse_note_bboxes(tk.renderToSVG(1))
 
     xs_by_time_ms: dict[float, list[float]] = {}
     for entry in tk.renderToTimemap():
