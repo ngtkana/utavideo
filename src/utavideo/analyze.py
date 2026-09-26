@@ -137,8 +137,17 @@ def font_missing_message(name: str, font_dirs: list[Path]) -> str:
     return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
-def _score_issues(project: Project, config_score: Score | None, keys: list[int]) -> list[subs.Issue]:
-    """[inst.score]が設定されていれば、.msczとMuseScore CLIの有無・音符の数を確かめる。
+# 楽譜の理論値計算による総演奏時間の誤差は、テンポ・拍子の変化が多い曲でも実測で0.3〜1秒程度に
+# 収まる（issue #139のコメント）。小節の抜け・重複のような食い違いは1小節ぶん（実測で見つかった
+# 例は約2秒）以上のずれになるので、その間を取って3秒を閾値にする（検査は警告どまりで、書き出しは
+# 止めない。曲の最後に楽譜が無い長い間奏があるときなど、正常でもずれることがあるため）
+_END_MISMATCH_THRESHOLD_S = 3.0
+
+
+def _score_issues(
+    project: Project, config_score: Score | None, keys: list[int], audio_duration_s: float
+) -> list[subs.Issue]:
+    """[inst.score]が設定されていれば、.msczとMuseScore CLIの有無・音符の数・音源との食い違いを確かめる。
 
     実際の描画（PNG化）は --keys の値ごとに移調が変わるため、ここでは行わない（build時に
     キーごとに行う。issue #144）。ただし移調（MuseScore CLIの--transpose）自体がこの環境・
@@ -163,6 +172,18 @@ def _score_issues(project: Project, config_score: Score | None, keys: list[int])
         # スクロールさせようが無いので、ここで検査エラーにする（実運用の楽曲ではまず起きない）
         message = f"{path} に音符が2個未満しかなく、楽譜を流せません"
         return [subs.Issue("error", message)]
+    # 楽譜と音源の食い違い（要件6。issue #146）：楽譜の1小節目のオフセット＋理論値の総演奏時間が、
+    # 音源の長さとかけ離れていれば、小節数・間が合っていないおそれがあるとして警告する
+    expected_end_s = config_score.first_bar_offset_s + score.total_duration_s(musicxml)
+    mismatch_s = expected_end_s - audio_duration_s
+    if abs(mismatch_s) > _END_MISMATCH_THRESHOLD_S:
+        message = (
+            f"楽譜の終端（1小節目のオフセット + 理論値の総演奏時間 = {expected_end_s:.1f}秒）が"
+            f"inst.audioの長さ（{audio_duration_s:.1f}秒）と{abs(mismatch_s):.1f}秒ずれています。"
+            "楽譜の小節数・間が音源と合っていないかもしれません（曲の最後に楽譜の無い間奏がある"
+            "など、正常な場合もあります）"
+        )
+        return [subs.Issue("warning", message)]
     return []
 
 
@@ -192,7 +213,7 @@ def analyze_inst(
     if duration_s is None:
         return Analysis(issues, duration_s, lyrics, ())
 
-    issues += _score_issues(project, config.inst.score, keys)
+    issues += _score_issues(project, config.inst.score, keys, duration_s)
 
     duration_ms = round(duration_s * 1000)
     overlay = inst.overlay_text(config.overlay_text, config.inst)

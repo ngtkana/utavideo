@@ -1440,6 +1440,21 @@ def test_inst_reports_a_score_with_fewer_than_two_notes(project: Path, tmp_path:
     assert "音符が2個未満しかなく" in result.output
 
 
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_inst_warns_when_the_score_end_does_not_match_the_audio(project: Path, mscz_file: Path) -> None:
+    """楽譜の終端（1小節目のオフセット＋理論値の総演奏時間）が音源の長さと大きくずれると、
+    小節数・間が音源と合っていないおそれがあるとして警告する（書き出しは止めない。issue #146）。"""
+    (project / "utavideo.toml").write_text(
+        TOML.format(background="bg.png")
+        + f'[inst.score]\nfile = "{mscz_file.as_posix()}"\nfirst_bar_offset_s = 5.0\n',
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["inst", "-C", str(project)])
+    assert result.exit_code == 0
+    assert "楽譜の終端" in result.output
+    assert "ずれています" in result.output
+
+
 def _row_bytes(video: Path, *, at: float, y: int, width: int) -> bytes:
     """指定した時刻のフレームを読み、y行目だけ切り出す（ffmpegからは1フレーム全体で受け取る）。"""
     out = subprocess.run(
