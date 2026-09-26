@@ -46,6 +46,8 @@ def score_overlay(
     events.time_s に first_bar_offset_s を足し込んで音源上の秒に揃え、play_x（画面幅に対する
     比率）を実際のピクセル数に変える。y を省略したときは、画面の縦方向の中央に自動配置する
     （曲名・キーの表示は画面上部、--lyricsの歌詞は画面下部にあるので重ならない。issue #145）。
+    楽譜の帯が画面より高い（scaleを大きくしすぎた等）ときは自動配置の y が負になるが、
+    ffmpegのoverlayは画面外にはみ出した分を黙って切り取るだけなので、エラーにはしない。
     """
     video_width, video_height = video_size
     events = tuple(

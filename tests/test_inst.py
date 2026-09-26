@@ -110,3 +110,14 @@ def test_score_overlay_centers_vertically_when_y_is_omitted() -> None:
     overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_size=(1920, 1080))
 
     assert overlay.y == (1080 - 120) // 2
+
+
+def test_score_overlay_allows_a_negative_y_when_the_score_is_taller_than_the_screen() -> None:
+    """楽譜の帯が画面より高いと自動配置のyは負になるが、エラーにはしない（ffmpegのoverlayが
+    画面外にはみ出した分を黙って切り取るだけのため。issue #145）。"""
+    config_score = Score(file=Path("/a/song.mscz"))
+    rendered = RenderedScore(png=b"", width=9000, height=1200, events=[NoteEvent(x=0.0, time_s=0.0)])
+
+    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_size=(1920, 1080))
+
+    assert overlay.y == (1080 - 1200) // 2 == -60
