@@ -1,6 +1,7 @@
 """score.py: .mscz→MusicXML→Verovio→PNG の描画パイプライン。"""
 
 import hashlib
+import re
 import subprocess
 from pathlib import Path
 
@@ -124,6 +125,17 @@ def test_note_events_merges_chord_into_one_point() -> None:
     """和音（同時に鳴る音符）は1つの点にまとめる。"""
     events = score.note_events(_TEMPO_CHANGE_MUSICXML)
     assert len(events) == 5  # C, D, E, [G+C5], A の5点（休符は含まない）
+
+
+def test_note_events_x_is_in_the_same_pixels_as_the_rendered_image() -> None:
+    """bboxの座標はSVG内側のviewBox単位で書かれており、外側の<svg>の実際のピクセル幅とは
+    縮尺が異なる。ピクセル単位に変換し忘れると、実際の画像よりずっと大きい値になってしまう
+    （issue #142で実データにより発覚）。"""
+    svg = score.render_horizontal_svg(_TEMPO_CHANGE_MUSICXML)
+    m = re.search(r'<svg width="(\d+)px"', svg)
+    assert m is not None
+    events = score.note_events(_TEMPO_CHANGE_MUSICXML)
+    assert events[-1].x < int(m.group(1))
 
 
 def test_substitute_missing_font_with_wrong_font_name() -> None:

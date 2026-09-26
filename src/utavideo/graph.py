@@ -1,12 +1,13 @@
 """ffmpeg の引数（入力・filtergraph・エンコード設定）を組み立てる。実行は ffmpeg.py が行う。"""
 
 import math
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
 from utavideo.ffmpeg import LoudnormMeasurement, LoudnormTarget
+from utavideo.score import NoteEvent
 
 IMAGE_EXTS = frozenset({".png", ".jpg", ".jpeg", ".webp", ".bmp"})
 ANIMATED_EXTS = frozenset({".gif", ".mp4", ".mov", ".webm", ".mkv", ".m4v", ".avi"})
@@ -295,6 +296,71 @@ def _split_by_layer(
     back = sorted((item for item in indexed if item[1].layer < 0), key=lambda item: item[1].layer)
     front = sorted((item for item in indexed if item[1].layer >= 0), key=lambda item: item[1].layer)
     return back, front
+
+
+# ffmpegの式パーサは if(lt(t,...),...) のネストが約96段までしか通らない（実測。検証: issue #142）。
+# 音符レベルの区切り（1曲あたり数百〜千）には全く足りないため、overlayをenable=between(t,...)で
+# 区切って連結する方式にする。1チャンクあたりの区間数は、上限の96より安全側に少なく取る
+SCORE_SCROLL_CHUNK_SIZE = 80
+
+
+def _score_scroll_segment_expr(play_x: int, cur: NoteEvent, nxt: NoteEvent | None) -> str:
+    """区間 [cur.time_s, nxt.time_s) での overlay の x の式（1次式）。nxt が無ければ速度0で静止する。"""
+    slope = (nxt.x - cur.x) / (nxt.time_s - cur.time_s) if nxt is not None else 0.0
+    return f"({play_x}-({_ratio(cur.x)}+{_ratio(slope)}*(t-{_seconds(cur.time_s)})))"
+
+
+def _score_scroll_expr(chunk: Sequence[NoteEvent], play_x: int) -> str:
+    """chunk（隣り合う区間を結ぶ点列）を、区分線形の1本の式にする。"""
+    expr = _score_scroll_segment_expr(play_x, chunk[-1], None)
+    for i in range(len(chunk) - 2, -1, -1):
+        seg = _score_scroll_segment_expr(play_x, chunk[i], chunk[i + 1])
+        expr = f"if(lt(t,{_seconds(chunk[i + 1].time_s)}),{seg},{expr})"
+    return expr
+
+
+def score_scroll_filter(
+    events: Sequence[NoteEvent],
+    *,
+    input_label: str,
+    image_label: str,
+    play_x: int,
+    y: int = 0,
+    chunk_size: int = SCORE_SCROLL_CHUNK_SIZE,
+) -> tuple[str, str]:
+    """楽譜画像（image_label）を、events（音符ごとのx・発音時刻）に従って画面上の play_x へ向けて
+    可変速でスクロールさせる filtergraph の断片を組み立てる。(断片, 出力ラベル) を返す。
+
+    events の時刻の範囲外は、最初の音符より前は最初の区間の速度のまま延長し、最後の音符より後は
+    そこで速度0になり位置が留まる（曲が終わったらそこで止まる）。1小節目の音源上のオフセット
+    （events の時刻をどれだけずらすか）はここでは扱わない（呼び出し側で events.time_s に足し込む）。
+
+    image_label には、`format` 等のフィルタを一度だけ通した出力ではなく、入力ストリームへの
+    生の参照（`1:v` など）を渡すこと。チャンクが複数（チェーンする overlay が複数）になる場合、
+    フィルタ出力を素で複数の overlay にファンアウトすると、2つ目以降の overlay に画像が渡らず
+    背景が透けて見える不具合を確認した（ffmpeg 9.0.2 で実測。原因は不明だが、`split` フィルタで
+    明示的に複製すれば起きない。検証: issue #142）。画像に前処理が要るなら `split` で複製してから
+    渡すこと。
+    """
+    if len(events) < 2:
+        raise ValueError("events は2点以上必要です")
+    chunks = [events[i : i + chunk_size + 1] for i in range(0, len(events) - 1, chunk_size)]
+    parts: list[str] = []
+    label = input_label
+    for i, chunk in enumerate(chunks):
+        expr = _score_scroll_expr(chunk, play_x)
+        is_first, is_last = i == 0, i == len(chunks) - 1
+        lower = "-inf" if is_first else _seconds(chunk[0].time_s)
+        upper = "+inf" if is_last else _seconds(chunk[-1].time_s)
+        out_label = f"score{i}"
+        # format=rgb を付けないと、既定のYUV420でのブレンドになり、楽譜の細い線が滲む
+        # （.ass の合成と同じ理由。_stack_layers 参照）
+        parts.append(
+            f"[{label}][{image_label}]overlay=eval=frame:x='{expr}':y={y}:format=rgb"
+            f":enable='between(t,{lower},{upper})'[{out_label}]"
+        )
+        label = out_label
+    return ";".join(parts), label
 
 
 def subtitles_filter(subtitles: Path, fontsdir: Path, *, alpha: bool = False) -> str:

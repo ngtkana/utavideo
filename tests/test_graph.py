@@ -1,3 +1,6 @@
+import json
+import shutil
+import subprocess
 from dataclasses import replace
 from pathlib import Path
 
@@ -15,7 +18,9 @@ from utavideo.graph import (
     build_args,
     build_still_args,
     escape_filter_arg,
+    score_scroll_filter,
 )
+from utavideo.score import NoteEvent
 
 MEASURED = LoudnormMeasurement(
     input_i="-23.71", input_tp="-2.3", input_lra="4.5", input_thresh="-34.1", target_offset="0.51"
@@ -448,3 +453,144 @@ def test_blur_cuts_the_section_once_before_the_split() -> None:
     # 0 秒に戻すのも、重ねた後の1回だけ
     assert parts[3].count("setpts=PTS-STARTPTS") == 1
     assert "setpts=PTS-STARTPTS" not in parts[1] + parts[2]
+
+
+def _events(*pairs: tuple[float, float]) -> list[NoteEvent]:
+    return [NoteEvent(x=x, time_s=t) for x, t in pairs]
+
+
+def test_score_scroll_filter_rejects_fewer_than_two_events() -> None:
+    with pytest.raises(ValueError):
+        score_scroll_filter(_events((0, 0)), input_label="0:v", image_label="1:v", play_x=400)
+
+
+def test_score_scroll_filter_single_chunk_spans_whole_timeline() -> None:
+    events = _events((0, 0), (100, 1), (300, 2))
+    frag, label = score_scroll_filter(events, input_label="0:v", image_label="1:v", play_x=400)
+    assert frag.count("overlay=") == 1
+    assert label == "score0"
+    assert frag.startswith("[0:v][1:v]overlay=")
+    # 区間が1チャンクに収まるときは、最初から最後まで常時有効
+    assert "enable='between(t,-inf,+inf)'" in frag
+    assert "if(lt(t,1.000000)" in frag
+    assert "if(lt(t,2.000000)" in frag
+
+
+def test_score_scroll_filter_chains_multiple_overlays() -> None:
+    events = _events((0, 0), (100, 1), (300, 2), (700, 3), (1000, 4))
+    frag, label = score_scroll_filter(events, input_label="0:v", image_label="1:v", play_x=400, chunk_size=2)
+    # 5点・chunk_size=2 → チャンクは [0,1,2] と [2,3,4] の2つ
+    assert frag.count("overlay=") == 2
+    assert label == "score1"
+    parts = frag.split(";")
+    assert parts[0].startswith("[0:v][1:v]overlay=") and parts[0].endswith("[score0]")
+    assert parts[1].startswith("[score0][1:v]overlay=") and parts[1].endswith("[score1]")
+    # 最初のチャンクは -inf から、最後のチャンクは +inf まで延長する
+    assert "enable='between(t,-inf,2.000000)'" in parts[0]
+    assert "enable='between(t,2.000000,+inf)'" in parts[1]
+    # 境界の点(t=2)は両方のチャンクの式に出てくる(値が連続することの前提)
+    assert "t-2.000000" in parts[0]
+    assert "if(lt(t,3.000000)" in parts[1]
+
+
+def test_score_scroll_filter_holds_position_after_last_event() -> None:
+    """最後の音符より後は、速度0でその位置に留まる。"""
+    events = _events((0, 0), (100, 1))
+    frag, _ = score_scroll_filter(events, input_label="0:v", image_label="1:v", play_x=400)
+    assert "+0*(t-1.000000)" in frag
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+def test_score_scroll_filter_runs_in_ffmpeg_at_realistic_scale(tmp_path: Path) -> None:
+    """拍子変更・テンポ変更が多い曲を想定した規模（500点・7チャンク）でも書き出しが破綻しないことを確かめる。"""
+    events = []
+    t = x = 0.0
+    for _ in range(500):
+        t += 0.3
+        x += 80
+        events.append(NoteEvent(x=x, time_s=t))
+    frag, label = score_scroll_filter(events, input_label="0:v", image_label="1:v", play_x=400, chunk_size=80)
+    assert frag.count("overlay=") == 7
+
+    image = tmp_path / "score.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi", "-i", "testsrc=size=40100x50:rate=1",
+            "-frames:v", "1", str(image),
+        ],
+        check=True,
+    )  # fmt: skip
+    out = tmp_path / "out.mp4"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi", "-i", f"color=size=800x200:rate=25:duration={events[-1].time_s:.3f}:color=gray",
+            "-i", str(image),
+            "-filter_complex", frag,
+            "-map", f"[{label}]",
+            str(out),
+        ],
+        check=True,
+    )  # fmt: skip
+
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "json", str(out)],
+        capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    duration = float(json.loads(probe.stdout)["format"]["duration"])
+    assert duration == pytest.approx(events[-1].time_s, abs=0.1)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+def test_score_scroll_filter_positions_pixels_correctly_across_a_chunk_boundary(tmp_path: Path) -> None:
+    """overlayにformat=rgbを付け忘れると、既定のYUV420でのブレンドで位置がずれる（レビューで発覚）。
+
+    輝度(Y)はYUV420でも解像度が落ちないため、x座標を輝度だけでエンコードしても再現しない。
+    x座標をR・G・Bの3バイトに分けてエンコードした画像を使い（色差成分に情報を持たせる）、
+    画面上のplay_x位置に写る画素値を読んで、期待するx座標と厳密に一致することを確かめる
+    （format=rgbを外すと、実際にこの一部が大きく食い違うことを確認済み）。
+    """
+    events = _events((0, 0), (200, 1), (400, 2), (600, 3), (800, 4))
+    frag, label = score_scroll_filter(events, input_label="0:v", image_label="1:v", play_x=0, chunk_size=2)
+
+    image = tmp_path / "gradient.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi",
+            "-i", r"color=size=1000x10,geq=r='trunc(X/65536)':g='trunc(mod(X\,65536)/256)':b='mod(X\,256)'",
+            "-frames:v", "1", str(image),
+        ],
+        check=True,
+    )  # fmt: skip
+    out = tmp_path / "out.mkv"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi", "-i", f"color=size=100x10:rate=10:duration={events[-1].time_s:.3f}:color=gray",
+            "-i", str(image),
+            "-filter_complex", frag,
+            "-map", f"[{label}]",
+            "-c:v", "ffv1", "-pix_fmt", "bgr0", str(out),
+        ],
+        check=True,
+    )  # fmt: skip
+    proc = subprocess.run(
+        ["ffmpeg", "-i", str(out), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        stdout=subprocess.PIPE, check=True,
+    )  # fmt: skip
+    frames = proc.stdout
+    width, height = 100, 10
+
+    def pixel_at_play_x(t: float) -> int:
+        # play_x=0 なので、画面のx=0に写る画像の座標がそのまま events.x(t) になるはず
+        offset = (round(t * 10) * width * height) * 3
+        r, g, b = frames[offset], frames[offset + 1], frames[offset + 2]
+        return (r << 16) | (g << 8) | b
+
+    # t=2 はチャンク0([0,200,400])とチャンク1([400,600,800])の境界
+    assert pixel_at_play_x(0.5) == 100
+    assert pixel_at_play_x(1.5) == 300
+    assert pixel_at_play_x(2.5) == 500
+    assert pixel_at_play_x(3.5) == 700

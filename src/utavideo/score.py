@@ -126,8 +126,15 @@ _BBOX_GROUP = re.compile(r"<g\b([^>]*)>\s*(<rect\b[^>]*/>)")
 _ATTR = re.compile(r'(\w[\w-]*)="([^"]*)"')
 
 
-def _parse_note_bboxes(svg: str) -> dict[str, float]:
-    """音符ごとのbboxから、譜面上のx座標(中心)を取り出す。属性の並び順には依存しない。"""
+def _parse_note_bboxes(svg: str, scale: int) -> dict[str, float]:
+    """音符ごとのbboxから、譜面上のx座標(中心、実際に描かれるPNGと同じピクセル単位)を取り出す。
+
+    bboxの座標はSVG内側の<svg>要素のviewBox（Verovioの内部単位）で書かれており、外側の<svg>の
+    width（実際に書き出されるピクセル数）とは異なる縮尺になっている。実測では
+    viewBox単位 / ピクセル = 1000 / scale だったので、その逆数を掛けてピクセル単位に直す
+    （検証: issue #142。render_horizontal_svgが返すSVG自体はresvg-pyがviewBoxを見て正しく
+    ラスタライズするので影響しないが、bboxの数値を直接読むnote_eventsだけこの変換が要る）。
+    """
     x_by_note_id: dict[str, float] = {}
     for group_attrs, rect_tag in _BBOX_GROUP.findall(svg):
         attrs = dict(_ATTR.findall(group_attrs))
@@ -135,7 +142,7 @@ def _parse_note_bboxes(svg: str) -> dict[str, float]:
         if attrs.get("class") != "note bounding-box" or not note_id.startswith("bbox-"):
             continue
         rect_attrs = dict(_ATTR.findall(rect_tag))
-        x = float(rect_attrs["x"]) + float(rect_attrs["width"]) / 2
+        x = (float(rect_attrs["x"]) + float(rect_attrs["width"]) / 2) * scale / 1000
         x_by_note_id[note_id.removeprefix("bbox-")] = x
     return x_by_note_id
 
@@ -160,7 +167,7 @@ def note_events(musicxml: str, *, scale: int = 40) -> list[NoteEvent]:
     tk.setOptions({**_BBOX_RENDER_OPTIONS, "scale": scale})
     if not tk.loadData(musicxml):
         raise ScoreError("MusicXML を読み込めませんでした")
-    x_by_note_id = _parse_note_bboxes(tk.renderToSVG(1))
+    x_by_note_id = _parse_note_bboxes(tk.renderToSVG(1), scale)
 
     xs_by_time_ms: dict[float, list[float]] = {}
     for entry in tk.renderToTimemap():
