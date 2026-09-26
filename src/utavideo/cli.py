@@ -61,6 +61,7 @@ from utavideo.ffmpeg import (
     rubberband_filter_error,
     run,
     subtitles_filter_error,
+    write_bytes,
     write_text,
 )
 from utavideo.names import has_date_prefix, slug_error, slug_from_dir_name
@@ -852,6 +853,18 @@ def inst_command(
     loudnorm_target = LoudnormTarget()
     measured = measure_loudness(project.inst_audio_path.absolute(), loudnorm_target)
 
+    score_overlay = None
+    if project.config.inst.score is not None:
+        assert analysis.rendered_score is not None
+        image_path = inst.score_image_path(project.work_dir)
+        write_bytes(image_path, analysis.rendered_score.png)
+        score_overlay = inst.score_overlay(
+            project.config.inst.score,
+            image_path.absolute(),
+            analysis.rendered_score,
+            project.config.video.size[0],
+        )
+
     duration_ms = round(analysis.duration_s * 1000)
     video = project.config.video
     for key in parsed_keys:
@@ -869,6 +882,7 @@ def inst_command(
             pitch=graph.Pitch(inst.pitch_ratio(key), method),
             loudnorm=graph.Loudnorm(loudnorm_target, measured),
             audio=project.inst_audio_path,
+            score=score_overlay,
         )
         write_video(project, script, target, analysis.duration_s, analysis.font_files, records[key])
 

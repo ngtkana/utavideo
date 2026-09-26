@@ -79,6 +79,15 @@ class Project:
         return self.resolve(self.config.video.background)
 
     @property
+    def score_path(self) -> Path:
+        """inst に重ねる楽譜(.mscz)。曲フォルダの外（MuseScoreの既定の保存先など）でもよい。
+
+        呼ぶ前に inst.score が設定されていることを確かめておくこと。
+        """
+        assert self.config.inst.score is not None
+        return self.resolve(self.config.inst.score.file)
+
+    @property
     def lyrics_path(self) -> Path:
         return self.resolve(self.config.lyrics.file)
 

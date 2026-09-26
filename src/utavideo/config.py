@@ -280,11 +280,27 @@ class Announce(_Model):
     hashtags: Hashtags = ()
 
 
+class Score(_Model):
+    """楽譜(.mscz)をinstの画面に音源に合わせて横スクロールで表示する（issue #139）。
+
+    MuseScore 4のCLIとVerovioで描く（MuseScoreのインストールが要る）。移調（--keysとの連動）・
+    --lyricsとの配置調整・楽譜と音源の食い違いの検知はまだ扱わない（それぞれ別issue）。
+    """
+
+    file: Path
+    # 1小節目の頭が音源上の何秒目にあたるか（弱起の楽譜では負の値もありうる）。楽譜・音源とも
+    # 頭出しが揃っている保証が無いため、利用者が手で合わせる（issue #139のコメントの方針）
+    first_bar_offset_s: float = 0.0
+    play_x: Ratio = 0.5  # 再生位置。画面の横幅に対する比率（0が左端、1が右端）
+    y: int = 0  # 画面上の縦位置(px)。楽譜の帯の上端
+
+
 class Inst(_Model):
     """歌唱練習用の動画（inst）に描く、曲名・キーの表示と、使う音源。"""
 
     text: str = "{title} / {artist}（Key: {key}）"
     audio: Path | None = None
+    score: Score | None = None
 
 
 class ProjectConfig(_Model):

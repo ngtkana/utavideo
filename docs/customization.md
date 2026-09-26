@@ -161,6 +161,7 @@ libass のタグはすべて使えます。次のタグは utavideo の検査に
 |---|---|
 | 音源 | `audio.file`。ffmpeg が読める形式なら可（`init` の自動設定は wav / flac / mp3 / m4a / aac / ogg / opus） |
 | 歌唱練習用の動画（inst）の音源 | `inst.audio`。本編の `audio.file` とは別に、声を抜いた伴奏などを指定する必須の項目（[commands.md](commands.md#inst)） |
+| inst に楽譜を表示 | `[inst.score]` の `file` に MuseScore 4 の楽譜(`.mscz`)を指定する。MuseScore 4 のインストールが要る。`first_bar_offset_s` で1小節目と音源の頭を合わせ、`play_x`・`y` で画面上の位置を決める（[config-reference.md](config-reference.md#score)） |
 | バージョン | 音源のファイル名の `v1.2` など。公開する動画には、その音源で何本目かも付く（規則は [project-layout.md](project-layout.md#名前の付け方)） |
 | 音源のバージョンを指定して公開 | `release --version v1.2`（小文字の `v`） |
 | `build` の後に入力が変わっていても公開 | `release --allow-stale` |
