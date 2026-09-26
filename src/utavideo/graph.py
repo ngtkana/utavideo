@@ -310,17 +310,13 @@ def _score_scroll_segment_expr(play_x: int, cur: NoteEvent, nxt: NoteEvent | Non
     return f"({play_x}-({_ratio(cur.x)}+{_ratio(slope)}*(t-{_seconds(cur.time_s)})))"
 
 
-def _score_scroll_expr(chunk: Sequence[NoteEvent]) -> Callable[[int], str]:
-    """chunk（隣り合う区間を結ぶ点列）を、区分線形の1本の式にする関数を返す（play_xは呼び出し時に渡す）。"""
-
-    def build(play_x: int) -> str:
-        expr = _score_scroll_segment_expr(play_x, chunk[-1], None)
-        for i in range(len(chunk) - 2, -1, -1):
-            seg = _score_scroll_segment_expr(play_x, chunk[i], chunk[i + 1])
-            expr = f"if(lt(t,{_seconds(chunk[i + 1].time_s)}),{seg},{expr})"
-        return expr
-
-    return build
+def _score_scroll_expr(chunk: Sequence[NoteEvent], play_x: int) -> str:
+    """chunk（隣り合う区間を結ぶ点列）を、区分線形の1本の式にする。"""
+    expr = _score_scroll_segment_expr(play_x, chunk[-1], None)
+    for i in range(len(chunk) - 2, -1, -1):
+        seg = _score_scroll_segment_expr(play_x, chunk[i], chunk[i + 1])
+        expr = f"if(lt(t,{_seconds(chunk[i + 1].time_s)}),{seg},{expr})"
+    return expr
 
 
 def score_scroll_filter(
@@ -335,9 +331,9 @@ def score_scroll_filter(
     """楽譜画像（image_label）を、events（音符ごとのx・発音時刻）に従って画面上の play_x へ向けて
     可変速でスクロールさせる filtergraph の断片を組み立てる。(断片, 出力ラベル) を返す。
 
-    events の時刻の範囲外（最初の音符より前・最後の音符より後）は、それぞれ最初・最後の区間の
-    速度のまま延長する。1小節目の音源上のオフセット（events の時刻をどれだけずらすか）はここでは
-    扱わない（呼び出し側で events.time_s に足し込む）。
+    events の時刻の範囲外は、最初の音符より前は最初の区間の速度のまま延長し、最後の音符より後は
+    そこで速度0になり位置が留まる（曲が終わったらそこで止まる）。1小節目の音源上のオフセット
+    （events の時刻をどれだけずらすか）はここでは扱わない（呼び出し側で events.time_s に足し込む）。
 
     image_label には、`format` 等のフィルタを一度だけ通した出力ではなく、入力ストリームへの
     生の参照（`1:v` など）を渡すこと。チャンクが複数（チェーンする overlay が複数）になる場合、
@@ -352,13 +348,15 @@ def score_scroll_filter(
     parts: list[str] = []
     label = input_label
     for i, chunk in enumerate(chunks):
-        expr = _score_scroll_expr(chunk)(play_x)
+        expr = _score_scroll_expr(chunk, play_x)
         is_first, is_last = i == 0, i == len(chunks) - 1
         lower = "-inf" if is_first else _seconds(chunk[0].time_s)
         upper = "+inf" if is_last else _seconds(chunk[-1].time_s)
         out_label = f"score{i}"
+        # format=rgb を付けないと、既定のYUV420でのブレンドになり、楽譜の細い線が滲む
+        # （.ass の合成と同じ理由。_stack_layers 参照）
         parts.append(
-            f"[{label}][{image_label}]overlay=eval=frame:x='{expr}':y={y}"
+            f"[{label}][{image_label}]overlay=eval=frame:x='{expr}':y={y}:format=rgb"
             f":enable='between(t,{lower},{upper})'[{out_label}]"
         )
         label = out_label

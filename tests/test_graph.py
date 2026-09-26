@@ -540,3 +540,57 @@ def test_score_scroll_filter_runs_in_ffmpeg_at_realistic_scale(tmp_path: Path) -
     )  # fmt: skip
     duration = float(json.loads(probe.stdout)["format"]["duration"])
     assert duration == pytest.approx(events[-1].time_s, abs=0.1)
+
+
+@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg が必要")
+def test_score_scroll_filter_positions_pixels_correctly_across_a_chunk_boundary(tmp_path: Path) -> None:
+    """overlayにformat=rgbを付け忘れると、既定のYUV420でのブレンドで位置がずれる（レビューで発覚）。
+
+    輝度(Y)はYUV420でも解像度が落ちないため、x座標を輝度だけでエンコードしても再現しない。
+    x座標をR・G・Bの3バイトに分けてエンコードした画像を使い（色差成分に情報を持たせる）、
+    画面上のplay_x位置に写る画素値を読んで、期待するx座標と厳密に一致することを確かめる
+    （format=rgbを外すと、実際にこの一部が大きく食い違うことを確認済み）。
+    """
+    events = _events((0, 0), (200, 1), (400, 2), (600, 3), (800, 4))
+    frag, label = score_scroll_filter(events, input_label="0:v", image_label="1:v", play_x=0, chunk_size=2)
+
+    image = tmp_path / "gradient.png"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi",
+            "-i", r"color=size=1000x10,geq=r='trunc(X/65536)':g='trunc(mod(X\,65536)/256)':b='mod(X\,256)'",
+            "-frames:v", "1", str(image),
+        ],
+        check=True,
+    )  # fmt: skip
+    out = tmp_path / "out.mkv"
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-v", "error",
+            "-f", "lavfi", "-i", f"color=size=100x10:rate=10:duration={events[-1].time_s:.3f}:color=gray",
+            "-i", str(image),
+            "-filter_complex", frag,
+            "-map", f"[{label}]",
+            "-c:v", "ffv1", "-pix_fmt", "bgr0", str(out),
+        ],
+        check=True,
+    )  # fmt: skip
+    proc = subprocess.run(
+        ["ffmpeg", "-i", str(out), "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+        stdout=subprocess.PIPE, check=True,
+    )  # fmt: skip
+    frames = proc.stdout
+    width, height = 100, 10
+
+    def pixel_at_play_x(t: float) -> int:
+        # play_x=0 なので、画面のx=0に写る画像の座標がそのまま events.x(t) になるはず
+        offset = (round(t * 10) * width * height) * 3
+        r, g, b = frames[offset], frames[offset + 1], frames[offset + 2]
+        return (r << 16) | (g << 8) | b
+
+    # t=2 はチャンク0([0,200,400])とチャンク1([400,600,800])の境界
+    assert pixel_at_play_x(0.5) == 100
+    assert pixel_at_play_x(1.5) == 300
+    assert pixel_at_play_x(2.5) == 500
+    assert pixel_at_play_x(3.5) == 700
