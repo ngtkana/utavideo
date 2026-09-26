@@ -2,6 +2,7 @@
 
 import copy
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -235,29 +236,58 @@ def lint(
     return issues + lint_lines(dialogues(subs), duration_ms=duration_ms)
 
 
+def grouped_message(descriptions: Sequence[str], plural: str, *, limit: int = 5) -> str:
+    """同種の指摘を1件のメッセージにまとめる（雑音を増やさないため。issue #124・#128）。
+
+    plural は「{N} 行」に続く文（例: "で \\pos を使っています"）。1件でもこの形で書く
+    （「1 行で...」は不自然ではないため、単数専用の文言が要る場合は呼び出し側で分ける）。
+    """
+    where = ", ".join(descriptions[:limit])
+    more = " ほか" if len(descriptions) > limit else ""
+    return f"{len(descriptions)} 行{plural}: {where}{more}"
+
+
 def lint_lines(events: list[pysubs2.SSAEvent], *, duration_ms: int) -> list[Issue]:
     """歌詞の行ごとの警告（\\pos・表示時間・音源の長さ・重なり）。events は Dialogue 行。"""
     issues: list[Issue] = []
     positioned = [e for e in events if POS_TAG.search(e.text)]
     if positioned:
-        where = ", ".join(describe(e) for e in positioned[:5])
-        more = " ほか" if len(positioned) > 5 else ""
-        issues.append(
-            Issue(
-                "warning",
-                f"{len(positioned)} 行で \\pos / \\move を使っています"
-                f"（位置は基本スタイルで決める）: {where}{more}",
-            )
+        message = grouped_message(
+            [describe(e) for e in positioned],
+            "で \\pos / \\move を使っています（位置は基本スタイルで決める）",
         )
+        issues.append(Issue("warning", message))
 
+    zero_duration: list[pysubs2.SSAEvent] = []
+    after_audio: list[pysubs2.SSAEvent] = []
+    cut_by_audio_end: list[pysubs2.SSAEvent] = []
     for event in events:
         if event.end <= event.start:
-            issues.append(Issue("warning", f"表示時間が 0 以下の行があります: {describe(event)}"))
+            zero_duration.append(event)
         elif event.start >= duration_ms:
-            issues.append(Issue("warning", f"音声が終わった後に始まる行があります: {describe(event)}"))
+            after_audio.append(event)
         elif event.end > duration_ms:
             # 書き出しは音源の長さで切られるので、最後まで表示されない
-            issues.append(Issue("warning", f"音声の終わりで途中で切られます: {describe(event)}"))
+            cut_by_audio_end.append(event)
+
+    if zero_duration:
+        message = grouped_message(
+            [describe(e) for e in zero_duration],
+            "の表示時間が 0 以下です（開始・終了の時刻を見直してください）",
+        )
+        issues.append(Issue("warning", message))
+    if after_audio:
+        message = grouped_message(
+            [describe(e) for e in after_audio],
+            "は音声が終わった後に始まります（時刻を音源の範囲内に収めてください）",
+        )
+        issues.append(Issue("warning", message))
+    if cut_by_audio_end:
+        message = grouped_message(
+            [describe(e) for e in cut_by_audio_end],
+            "は音声の終わりで途中で切られます（終了時刻を音源の長さ以内にしてください）",
+        )
+        issues.append(Issue("warning", message))
 
     issues.extend(_overlaps(events))
     return issues
@@ -279,7 +309,9 @@ def _overlaps(events: list[pysubs2.SSAEvent]) -> list[Issue]:
                 issues.append(
                     Issue(
                         "warning",
-                        f"スタイル {style!r} の行が重なっています: {describe(latest)} と {describe(event)}",
+                        f"スタイル {style!r} の行が重なっています"
+                        f"（同時に出す意図があるならレイヤーを分けてください）: "
+                        f"{describe(latest)} と {describe(event)}",
                     )
                 )
             if event.end > latest.end:
