@@ -2,6 +2,7 @@
 
 import hashlib
 import re
+import struct
 import subprocess
 from pathlib import Path
 
@@ -205,6 +206,19 @@ def _make_mscz(tmp_path: Path, musescore: str) -> Path:
     mscz_path = tmp_path / "score.mscz"
     subprocess.run([musescore, "-o", str(mscz_path), str(source_path)], check=True, capture_output=True)
     return mscz_path
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_render_reports_the_actual_png_size(tmp_path: Path) -> None:
+    """RenderedScore.width・heightは、実際に書き出したPNGの大きさ（IHDRチャンク）と一致する
+    （画面の縦方向の中央に自動配置するために使う。issue #145）。"""
+    musescore = score.require_musescore()
+    mscz_path = _make_mscz(tmp_path, musescore)
+
+    rendered = score.render(mscz_path, musescore)
+
+    png_width, png_height = struct.unpack(">II", rendered.png[16:24])
+    assert (rendered.width, rendered.height) == (png_width, png_height)
 
 
 _STEP_SEMITONE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}

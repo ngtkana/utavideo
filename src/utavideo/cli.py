@@ -870,7 +870,7 @@ def inst_command(
             rendered = score.render(project.score_path, musescore, semitones=key)
             image_path = inst.score_image_path(project.work_dir, key)
             write_bytes(image_path, rendered.png)
-            score_overlay = inst.score_overlay(config_score, image_path.absolute(), rendered, video.size[0])
+            score_overlay = inst.score_overlay(config_score, image_path.absolute(), rendered, video.size)
         target = VideoTarget(
             "final",
             video.size,

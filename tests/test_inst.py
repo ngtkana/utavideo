@@ -80,20 +80,44 @@ def test_score_image_path_is_split_by_key() -> None:
 
 def test_score_overlay_shifts_time_by_the_first_bar_offset() -> None:
     config_score = Score(file=Path("/a/song.mscz"), first_bar_offset_s=1.5, play_x=0.5, y=100)
-    rendered = RenderedScore(png=b"", events=[NoteEvent(x=10.0, time_s=0.0), NoteEvent(x=20.0, time_s=2.0)])
+    rendered = RenderedScore(
+        png=b"", width=200, height=50, events=[NoteEvent(x=10.0, time_s=0.0), NoteEvent(x=20.0, time_s=2.0)]
+    )
 
-    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_width=1000)
+    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_size=(1000, 1000))
 
     assert overlay.events == (NoteEvent(x=10.0, time_s=1.5), NoteEvent(x=20.0, time_s=3.5))
     assert overlay.play_x == 500  # play_x=0.5 * 幅1000
-    assert overlay.y == 100
+    assert overlay.y == 100  # y を指定したときは、自動配置せずそのまま使う
     assert overlay.image == Path("/a/score.png")
 
 
 def test_score_overlay_rounds_play_x_to_the_nearest_pixel() -> None:
     config_score = Score(file=Path("/a/song.mscz"), play_x=1 / 3)
-    rendered = RenderedScore(png=b"", events=[NoteEvent(x=0.0, time_s=0.0)])
+    rendered = RenderedScore(png=b"", width=200, height=50, events=[NoteEvent(x=0.0, time_s=0.0)])
 
-    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_width=1920)
+    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_size=(1920, 1080))
 
     assert overlay.play_x == round(1920 / 3)
+
+
+def test_score_overlay_centers_vertically_when_y_is_omitted() -> None:
+    """yを省略すると、画面の縦方向の中央に自動配置する（曲名は上部、--lyricsの歌詞は下部にあり
+    重ならないため。issue #145）。"""
+    config_score = Score(file=Path("/a/song.mscz"))
+    rendered = RenderedScore(png=b"", width=9000, height=120, events=[NoteEvent(x=0.0, time_s=0.0)])
+
+    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_size=(1920, 1080))
+
+    assert overlay.y == (1080 - 120) // 2
+
+
+def test_score_overlay_allows_a_negative_y_when_the_score_is_taller_than_the_screen() -> None:
+    """楽譜の帯が画面より高いと自動配置のyは負になるが、エラーにはしない（ffmpegのoverlayが
+    画面外にはみ出した分を黙って切り取るだけのため。issue #145）。"""
+    config_score = Score(file=Path("/a/song.mscz"))
+    rendered = RenderedScore(png=b"", width=9000, height=1200, events=[NoteEvent(x=0.0, time_s=0.0)])
+
+    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_size=(1920, 1080))
+
+    assert overlay.y == (1080 - 1200) // 2 == -60
