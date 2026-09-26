@@ -2,8 +2,10 @@
 
 from pathlib import Path
 
-from utavideo.config import Inst, OverlayText
+from utavideo import graph
+from utavideo.config import Inst, OverlayText, Score
 from utavideo.errors import UtavideoError
+from utavideo.score import NoteEvent, RenderedScore
 
 
 def directory(build_dir: Path) -> Path:
@@ -29,6 +31,27 @@ def output_path(build_dir: Path, slug: str, key: int) -> Path:
 
 def work_ass_path(work_dir: Path, key: int) -> Path:
     return work_dir / "inst" / f"key{key_label(key)}.ass"
+
+
+def score_image_path(work_dir: Path) -> Path:
+    """楽譜を描いたPNGの置き場所。移調（--keys）とは連動しないので、キーによらず1個だけ作る。"""
+    return work_dir / "inst" / "score.png"
+
+
+def score_overlay(
+    config_score: Score, image_path: Path, rendered: RenderedScore, video_width: int
+) -> graph.ScoreOverlay:
+    """[inst.score]の設定と楽譜の描画結果から、画面に重ねるための情報を組み立てる。
+
+    events.time_s に first_bar_offset_s を足し込んで音源上の秒に揃え、play_x（画面幅に対する
+    比率）を実際のピクセル数に変える。
+    """
+    events = tuple(
+        NoteEvent(x=e.x, time_s=e.time_s + config_score.first_bar_offset_s) for e in rendered.events
+    )
+    return graph.ScoreOverlay(
+        image=image_path, events=events, play_x=round(config_score.play_x * video_width), y=config_score.y
+    )
 
 
 def keys_in_build(build_dir: Path, slug: str) -> list[int]:

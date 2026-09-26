@@ -282,6 +282,8 @@ utavideo inst [-C <曲フォルダ>] [--keys <キー>] [--lyrics]
 - 音量は `loudnorm`（2パス）でそろえます（目標: 統合ラウドネス -16 LUFS、True Peak -1.5 dBTP、ラウドネスレンジ 11 LU）。計測は音源全体に対して1回だけ行い、`--keys` で複数指定したときも使い回します
 - 背景は本編と同じです（`video.background`）。音源は本編と別に、`[inst]` の `audio` に指定します（声を抜いた伴奏など）
 - 表示する文字は `[inst]` の `text`、スタイルは `[overlay_text]` の `style` です
+- `[inst.score]` を設定すると、MuseScore 4 で作った楽譜（`.mscz`）を、音源のテンポに合わせて画面上を横スクロールで表示します（[config-reference.md](config-reference.md#score)）。MuseScore 4 のインストールが要ります（見つからない場所は環境変数 [`UTAVIDEO_MUSESCORE`](config-reference.md#環境変数) で指定できます）。移調（`--keys`）との連動・`--lyrics` との配置調整・楽譜と音源の食い違いの検知はまだ対応していません
+  - 描いた楽譜のPNGを `build/.work/inst/score.png` に書きます（`--keys` で複数のキーを指定しても、楽譜は移調しないため1個だけ作ります）
 - `--lyrics` を付けると、`lyrics.file` の歌詞行も本編と同じ基準（[検査項目](#検査項目)のフォント・はみ出し・重なり等）で検査し、フェード（`lyrics.fade_ms`）も本編と同じように入れます。付けないときは歌詞の中身を問わず、曲名表示のスタイルがあるかだけを確かめます
 - 書き出す前に検査し、エラーがあれば1本も書き出しません
 - 描画に使った .ass を `build/.work/inst/key<キー>.ass` に書きます

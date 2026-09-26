@@ -197,3 +197,18 @@ def svg_to_png(svg: str) -> bytes:
     finally:
         Path(font_path).unlink()
     return bytes(png)
+
+
+@dataclass(frozen=True)
+class RenderedScore:
+    """.mscz から作った、横1段のPNG（png）と、音符ごとのx・発音時刻（events）。"""
+
+    png: bytes
+    events: list[NoteEvent]
+
+
+def render(mscz_path: Path, musescore: str, *, scale: int = 40) -> RenderedScore:
+    """.mscz → MusicXML → 横1段のPNG・音符イベントを一度に作る（MusicXMLへの変換を1回で済ませる）。"""
+    musicxml = to_musicxml(mscz_path, musescore)
+    svg = render_horizontal_svg(musicxml, scale=scale)
+    return RenderedScore(png=svg_to_png(svg), events=note_events(musicxml, scale=scale))

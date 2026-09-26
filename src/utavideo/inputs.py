@@ -144,12 +144,14 @@ def inst_target(project: Project, key: int) -> RecordTarget:
     config = project.config
     output = inst.output_path(project.build_dir, project.slug, key)
     audio_file = (("inst.audio", project.inst_audio_path),) if config.inst.audio is not None else ()
+    score_file = (("inst.score.file", project.score_path),) if config.inst.score is not None else ()
     return RecordTarget(
         output,
         project.inst_inputs_record(inst.key_label(key)),
         (
             (PROJECT_CONFIG_NAME, project.config_path),
             *audio_file,
+            *score_file,
             ("video.background", project.background_path),
             ("lyrics.file", project.lyrics_path),
         ),

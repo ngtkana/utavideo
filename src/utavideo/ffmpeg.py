@@ -189,6 +189,14 @@ def write_text(path: Path, text: str) -> None:
     replace_partial(tmp, path)
 
 
+def write_bytes(path: Path, data: bytes) -> None:
+    """バイト列を .partial に書いてから名前を変える（楽譜のPNGなど）。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = partial_path(path)
+    tmp.write_bytes(data)
+    replace_partial(tmp, path)
+
+
 def run(
     args: Sequence[str],
     output: Path,

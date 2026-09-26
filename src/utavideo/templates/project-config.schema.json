@@ -821,6 +821,47 @@
           ],
           "default": null,
           "title": "Audio"
+        },
+        "score": {
+          "anyOf": [
+            {
+              "additionalProperties": false,
+              "description": "楽譜(.mscz)をinstの画面に音源に合わせて横スクロールで表示する（issue #139）。\n\nMuseScore 4のCLIとVerovioで描く（MuseScoreのインストールが要る）。移調（--keysとの連動）・\n--lyricsとの配置調整・楽譜と音源の食い違いの検知はまだ扱わない（それぞれ別issue）。",
+              "properties": {
+                "file": {
+                  "format": "path",
+                  "title": "File",
+                  "type": "string"
+                },
+                "first_bar_offset_s": {
+                  "default": 0.0,
+                  "title": "First Bar Offset S",
+                  "type": "number"
+                },
+                "play_x": {
+                  "default": 0.5,
+                  "maximum": 1,
+                  "minimum": 0,
+                  "title": "Play X",
+                  "type": "number"
+                },
+                "y": {
+                  "default": 0,
+                  "title": "Y",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "file"
+              ],
+              "title": "Score",
+              "type": "object"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "title": "Inst",
