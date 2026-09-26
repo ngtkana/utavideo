@@ -295,6 +295,7 @@ utavideo inst [-C <曲フォルダ>] [--keys <キー>] [--lyrics]
 - `[inst]` の `audio` が設定されていない、そのファイルが無い、`video.background` のファイルが無い、背景の形式に対応していない、音源に音声が入っていない（[検査項目](#検査項目)の「素材」と同じ）
 - `lyrics.file` のファイルが無い（曲名表示のスタイルに使う）、`PlayResX`・`PlayResY` が無い、`video.size` と違う、`LayoutResX`・`LayoutResY` が2つともあって縦横比が `PlayRes` と違う
 - `overlay_text.style` のスタイルが `lyrics.file` に無い、`[inst].text` の書式が不正
+- `[inst.score]` を設定したときは、`file` のファイルが無い、MuseScore 4 の実行ファイルが見つからない、楽譜の変換・描画に失敗した
 - `--lyrics` のときは、歌詞の行が未定義のスタイルを使っている、表示幅からはみ出しそう、など本編の check と同じ検査項目
 - 音量の計測に失敗した
 - ffmpeg が正常に終わっても何も書き出さなかった

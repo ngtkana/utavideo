@@ -14,6 +14,7 @@ from utavideo.graph import (
     Loudnorm,
     Pitch,
     RenderSpec,
+    ScoreOverlay,
     StillSpec,
     build_args,
     build_still_args,
@@ -331,6 +332,24 @@ def test_pitch_is_rejected_in_overlay_mode() -> None:
 def test_pitch_and_clip_are_rejected_together() -> None:
     with pytest.raises(ValueError, match="pitch"):
         build_args(replace(CLIP_SPEC, pitch=Pitch(1.122462, "rubberband")))
+
+
+_SCORE = ScoreOverlay(
+    image=Path("/a/score.png"),
+    events=(NoteEvent(x=0, time_s=0), NoteEvent(x=100, time_s=1)),
+    play_x=400,
+    y=800,
+)
+
+
+def test_score_is_rejected_in_overlay_mode() -> None:
+    with pytest.raises(ValueError, match="overlay"):
+        build_args(replace(SPEC, mode="overlay", score=_SCORE))
+
+
+def test_score_and_clip_are_rejected_together() -> None:
+    with pytest.raises(ValueError, match="楽譜"):
+        build_args(replace(CLIP_SPEC, score=_SCORE))
 
 
 def test_atempo_method_builds_asetrate_and_atempo_chain() -> None:

@@ -1352,15 +1352,37 @@ _SCORE_MUSICXML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
-@pytest.fixture
-def mscz_file(tmp_path: Path) -> Path:
+# 音符が1個しか無い（issue #143: score_scroll_filterが要求する2点に満たない）楽譜
+_SINGLE_NOTE_MUSICXML = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Vocal</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>2</divisions><key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>8</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+
+
+def _make_mscz(tmp_path: Path, musicxml: str, name: str) -> Path:
     """MuseScore CLIでその場限りの.msczを作る（バイナリのfixtureは固定コミットしない。issue #140と同じ）。"""
     musescore = score.require_musescore()
-    musicxml_path = tmp_path / "score.musicxml"
-    musicxml_path.write_text(_SCORE_MUSICXML, encoding="utf-8")
-    mscz_path = tmp_path / "score.mscz"
+    musicxml_path = tmp_path / f"{name}.musicxml"
+    musicxml_path.write_text(musicxml, encoding="utf-8")
+    mscz_path = tmp_path / f"{name}.mscz"
     subprocess.run([musescore, "-o", str(mscz_path), str(musicxml_path)], check=True, capture_output=True)
     return mscz_path
+
+
+@pytest.fixture
+def mscz_file(tmp_path: Path) -> Path:
+    return _make_mscz(tmp_path, _SCORE_MUSICXML, "score")
 
 
 @pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が無い環境の確認用")
@@ -1373,6 +1395,19 @@ def test_inst_reports_missing_score_file(project: Path) -> None:
     result = runner.invoke(app, ["inst", "-C", str(project)])
     assert result.exit_code == 1
     assert "inst.score.file のファイルがありません" in result.output
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_inst_reports_a_score_with_fewer_than_two_notes(project: Path, tmp_path: Path) -> None:
+    """score_scroll_filterは2点以上を要求するので、音符が1個しか無い楽譜は検査エラーにする。"""
+    mscz = _make_mscz(tmp_path, _SINGLE_NOTE_MUSICXML, "single-note")
+    (project / "utavideo.toml").write_text(
+        TOML.format(background="bg.png") + f'[inst.score]\nfile = "{mscz.as_posix()}"\n',
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["inst", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "音符が2個未満しかなく" in result.output
 
 
 def _row_bytes(video: Path, *, at: float, y: int, width: int) -> bytes:

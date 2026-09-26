@@ -154,6 +154,11 @@ def _score_issues(
         rendered = score.render(path, musescore)
     except score.ScoreError as e:
         return [subs.Issue("error", str(e))], None
+    if len(rendered.events) < 2:
+        # graph.score_scroll_filter は2点以上を要求する。音符が無い・1個しか無い楽譜は
+        # スクロールさせようが無いので、ここで検査エラーにする（実運用の楽曲ではまず起きない）
+        message = f"{path} に音符が2個未満しかなく、楽譜を流せません"
+        return [subs.Issue("error", message)], None
     return [], rendered
 
 

@@ -285,7 +285,7 @@ SNS の告知文の書式です。長さの上限は X の数え方に合わせ�
 | 変数 | 内容 |
 |---|---|
 | `UTAVIDEO_FONT_DIRS` | フォントを探すディレクトリ（`:` 区切り。Windows では `;`）。`font_dirs` より優先 |
-| `UTAVIDEO_MUSESCORE` | MuseScore 4 の実行ファイルのパス。PATH・既定のインストール先から見つからないときに指定する（楽譜の描画に使う。まだコマンドからは呼ばれない） |
+| `UTAVIDEO_MUSESCORE` | MuseScore 4 の実行ファイルのパス。PATH・既定のインストール先から見つからないときに指定する（`[inst.score]` を設定したときの `inst` が使う） |
 | `XDG_CONFIG_HOME` | ユーザー設定の場所（既定は `~/.config`。`utavideo/config.toml` を読む） |
 | `XDG_CACHE_HOME` | キャッシュの場所（既定は `~/.cache`。`utavideo/` の下に置く） |
 | `XDG_DATA_HOME` | `font_dirs` の既定値に含める `fonts/` の場所（既定は `~/.local/share`） |
