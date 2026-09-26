@@ -1,5 +1,7 @@
 """score.py: .mscz→MusicXML→Verovio→PNG の描画パイプライン。"""
 
+import hashlib
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -113,3 +115,19 @@ def test_require_musescore_raises_when_not_found(monkeypatch: pytest.MonkeyPatch
 def test_to_musicxml_raises_when_musescore_missing(tmp_path: Path) -> None:
     with pytest.raises(score.ScoreError):
         score.to_musicxml(tmp_path / "no-such-file.mscz", "/no/such/musescore")
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_to_musicxml_round_trips_without_modifying_input(tmp_path: Path) -> None:
+    """MuseScore CLIでMusicXML→.msczと作ってから読み直し、内容が読めて元ファイルも壊れないことを確かめる。"""
+    musescore = score.require_musescore()
+    source_path = tmp_path / "source.musicxml"
+    source_path.write_text(_MUSICXML, encoding="utf-8")
+    mscz_path = tmp_path / "score.mscz"
+    subprocess.run([musescore, "-o", str(mscz_path), str(source_path)], check=True, capture_output=True)
+    digest_before = hashlib.sha256(mscz_path.read_bytes()).digest()
+
+    xml = score.to_musicxml(mscz_path, musescore)
+
+    assert "major-seventh" in xml
+    assert hashlib.sha256(mscz_path.read_bytes()).digest() == digest_before

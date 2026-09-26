@@ -22,7 +22,6 @@ class ScoreError(UtavideoError):
     """MuseScore CLI が見つからない、または楽譜を描けなかった。"""
 
 
-_MUSESCORE_ENV = "UTAVIDEO_MUSESCORE"
 _MUSESCORE_NAMES = ("mscore", "musescore4", "MuseScore4", "mscore4portable")
 # Homebrew等でPATHに入らないことが多いmacOSのアプリバンドル内バイナリ
 _MACOS_APP_PATH = Path("/Applications/MuseScore 4.app/Contents/MacOS/mscore")
@@ -30,7 +29,7 @@ _MACOS_APP_PATH = Path("/Applications/MuseScore 4.app/Contents/MacOS/mscore")
 
 def find_musescore() -> str | None:
     """MuseScore 4 の実行ファイルを探す。見つからなければ None。"""
-    if env := os.environ.get(_MUSESCORE_ENV):
+    if env := os.environ.get("UTAVIDEO_MUSESCORE"):
         return env
     for name in _MUSESCORE_NAMES:
         if path := shutil.which(name):
@@ -46,7 +45,7 @@ def require_musescore() -> str:
     if musescore is None:
         raise ScoreError(
             "MuseScore 4 の実行ファイルが見つかりません。MuseScore 4 をインストールするか、"
-            f"環境変数 {_MUSESCORE_ENV} に実行ファイルのパスを指定してください"
+            "環境変数 UTAVIDEO_MUSESCORE に実行ファイルのパスを指定してください"
         )
     return musescore
 
@@ -87,7 +86,7 @@ _RENDER_OPTIONS = {
 # 検出し、同梱のBravura Textを強制する(検証: issue #140)
 _BUNDLED_FONT_FAMILY = "Bravura Text"
 _BUNDLED_FONT_TEMPLATE = ("score-fonts", "BravuraText.otf")
-_SMUFL_PRIVATE_USE_AREA = re.compile(r"[-]")
+_SMUFL_PRIVATE_USE_AREA = re.compile("[\ue000-\uf8ff]")
 _TSPAN_WITH_TEXT = re.compile(r'(<tspan\b)((?:[^>"]|"[^"]*")*)(>)([^<]*)(</tspan>)')
 
 
@@ -119,8 +118,14 @@ def _bundled_font_bytes() -> bytes:
 
 def svg_to_png(svg: str) -> bytes:
     """SVGをPNGにラスタライズする。"""
-    with tempfile.NamedTemporaryFile(suffix=".otf") as font_file:
+    # resvg-py（ネイティブ拡張）にパスで渡して読ませるため、開いたハンドルを持ったままでは
+    # 別ハンドルから再オープンできないWindowsの制約を避け、閉じてから渡す（delete=Falseで
+    # クローズ時に消えないようにし、読み終えたら明示的に消す）
+    with tempfile.NamedTemporaryFile(suffix=".otf", delete=False) as font_file:
         font_file.write(_bundled_font_bytes())
-        font_file.flush()
-        png = resvg_py.svg_to_bytes(svg_string=svg, background="#ffffff", font_files=[font_file.name])
+        font_path = font_file.name
+    try:
+        png = resvg_py.svg_to_bytes(svg_string=svg, background="#ffffff", font_files=[font_path])
+    finally:
+        Path(font_path).unlink()
     return bytes(png)
