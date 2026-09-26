@@ -17,6 +17,11 @@ file = "$audio"
 # 歌唱練習用の動画（utavideo inst）用の音源。声を抜いた伴奏の代わりに、聞き分けやすいサイン波を使う
 audio = "$inst_audio"
 
+[inst.score]
+# 楽譜（MuseScore 4 の .mscz）を音源に合わせて横スクロール表示する見本。MuseScore 4 の
+# インストールが要る（無いと inst の実行時に案内が出て止まる）
+file = "$score"
+
 [video]
 # "$still"（4:3 の静止画）・"$gif"（GIF）に書き換えると、他の形式の背景も試せる
 background = "$background"
