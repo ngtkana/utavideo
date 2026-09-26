@@ -147,6 +147,33 @@ def test_inst_target_omits_audio_file_when_inst_audio_is_unset(project: Path) ->
     assert "inst.audio" not in names
 
 
+def test_inst_target_omits_score_file_when_inst_score_is_unset(project: Path) -> None:
+    """[inst.score] が無いときは、追う楽譜が無いので files に含めない。"""
+    loaded = Project.load(project)
+    names = [name for name, _ in inputs.inst_target(loaded, 0).files]
+    assert "inst.score.file" not in names
+
+
+def test_inst_target_includes_score_file_when_inst_score_is_set(project: Path) -> None:
+    (project / "utavideo.toml").write_text(TOML + '[inst.score]\nfile = "src/song.mscz"\n', encoding="utf-8")
+    loaded = Project.load(project)
+    names = [name for name, _ in inputs.inst_target(loaded, 0).files]
+    assert "inst.score.file" in names
+
+
+def test_inst_stale_detects_score_file_changes(project: Path) -> None:
+    """[inst.score].file の中身が変わったことを検出する（issue #143）。"""
+    (project / "utavideo.toml").write_text(TOML + '[inst.score]\nfile = "src/song.mscz"\n', encoding="utf-8")
+    (project / "src/song.mscz").write_text("楽譜1", encoding="utf-8")
+    _record_inst_build(project, -1)
+
+    (project / "src/song.mscz").write_text("楽譜2に変えた", encoding="utf-8")
+    loaded = Project.load(project)
+    stale = inputs.stale_inputs(inputs.inst_target(loaded, -1))
+    assert stale is not None
+    assert "inst.score.file" in stale
+
+
 def test_inst_stale_detects_inst_audio_content_changes(project: Path) -> None:
     (project / "src/mix/inst.wav").write_bytes(b"inst-audio")
     toml = (project / "utavideo.toml").read_text(encoding="utf-8")
