@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
+from tests.conftest import WINDOWS_ENGLISH, MakeFont, invoke, set_font_names, use_fake_ffmpeg
 from utavideo import analyze, cli, graph
 from utavideo.cli import app
 from utavideo.ffmpeg import (
@@ -176,6 +176,22 @@ def test_check_reports_missing_font(project: Path) -> None:
     result = runner.invoke(app, ["check", "-C", str(project)])
     assert result.exit_code == 1
     assert "Nope Sans" in result.output
+
+
+def test_check_reports_missing_font_when_only_matched_via_typographic_family(
+    project: Path, make_font: MakeFont
+) -> None:
+    """libass は typographic family（nameID 16）を照合しない。check も同じ基準で missing にする
+    （実測: docs/verification/20260927-libass-font-matching.md、issue #138）。"""
+    fonts_dir = Path(os.environ["UTAVIDEO_FONT_DIRS"])
+    font = make_font(fonts_dir / "TypoOnly.ttf", "placeholder")
+    set_font_names(font, {(16, WINDOWS_ENGLISH): "Typo Only Family"})
+    (project / "src/lyrics.ass").write_text(LYRICS.format(font="Typo Only Family"), encoding="utf-8")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+
+    assert result.exit_code == 1
+    assert "Typo Only Family" in result.output
 
 
 def test_check_reports_a_missing_layer_file(project: Path) -> None:

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.conftest import MakeFont
+from tests.conftest import MAC_ENGLISH, WINDOWS_ENGLISH, MakeFont, set_font_names
 from utavideo import fonts
 from utavideo.errors import UtavideoError
 
@@ -14,6 +14,37 @@ def test_index_looks_up_family_case_insensitively(tmp_path: Path, make_font: Mak
     index = fonts.load_index([tmp_path / "fonts"], tmp_path / "cache.json")
     assert index.lookup("test sans") == (font,)
     assert index.lookup("Other") == ()
+
+
+def test_index_ignores_names_libass_cannot_match(tmp_path: Path, make_font: MakeFont) -> None:
+    """libass（fontsdir 経由）が実際に照合するのは Windows platform の family・full name だけ。
+
+    Mac platform の名前・PostScript name（nameID 6）・typographic family（nameID 16）は、
+    索引にあっても libass では見つからずフォールバックになる
+    （実測: docs/verification/20260927-libass-font-matching.md、issue #138）。
+    """
+    font = make_font(tmp_path / "fonts" / "Test.ttf", "placeholder")
+    set_font_names(
+        font,
+        {
+            (1, MAC_ENGLISH): "MacOnlyFamily",
+            (16, WINDOWS_ENGLISH): "TypoOnlyFamily",
+            (16, MAC_ENGLISH): "MacTypoOnlyFamily",
+            (6, WINDOWS_ENGLISH): "WindowsPostScriptOnlyName",
+            (6, MAC_ENGLISH): "MacPostScriptOnlyName",
+            (1, WINDOWS_ENGLISH): "WindowsFamily",
+            (4, WINDOWS_ENGLISH): "WindowsFullName",
+        },
+    )
+    index = fonts.load_index([tmp_path / "fonts"], tmp_path / "cache.json")
+
+    assert index.lookup("WindowsFamily") == (font,)
+    assert index.lookup("WindowsFullName") == (font,)
+    assert index.lookup("MacOnlyFamily") == ()
+    assert index.lookup("TypoOnlyFamily") == ()
+    assert index.lookup("MacTypoOnlyFamily") == ()
+    assert index.lookup("WindowsPostScriptOnlyName") == ()
+    assert index.lookup("MacPostScriptOnlyName") == ()
 
 
 def test_index_reuses_cache_for_unchanged_files(
