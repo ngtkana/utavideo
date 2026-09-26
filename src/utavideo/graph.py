@@ -164,7 +164,9 @@ def background_input(path: Path, fps: int) -> list[str]:
 def frame_input(path: Path, at: float | None) -> list[str]:
     """背景の1フレームを読む入力。GIF・動画は at 秒へシークする（繰り返さない）。
 
-    入力側でシークしても最初のフレームの時刻は 0 になるので、.ass の 0 秒と重なる。
+    入力側でシークした後の最初のフレームの pts は、素材によっては 0 になるとは限らない
+    （docs/verification/20260927-preview-still-pts.md）。StillSpec.pts_offset は
+    setpts=PTS-STARTPTS で正規化してから足すので、この pts の値そのものには依存しない。
     画像に -ss を付けると ffmpeg は何も書かずに正常終了するので、画像では付けない
     （docs/verification/20260917-thumbnail.md）。
     """
@@ -624,9 +626,10 @@ def _loudnorm_filter(loudnorm: Loudnorm) -> str:
 class StillSpec:
     """背景の1フレームに .ass の pts_offset 秒の状態を描いた PNG。subtitles が None なら背景だけ。
 
-    at で -ss シークした背景フレームの t は 0 になる（frame_input 参照）ので、.ass 側の絶対時刻と
-    噛み合わせるには pts_offset で描画前に frame の pts を進める必要がある。既定の 0 は、専用の
-    .ass を 0 秒の状態のまま描くサムネイル向けの挙動（thumbnail._write_thumbnail）。
+    at で -ss シークした背景フレームの pts は 0 になるとは限らない（frame_input 参照）ので、
+    .ass 側の絶対時刻と噛み合わせるには、まず pts を 0 に正規化してから pts_offset を足す
+    （build_still_args の setpts=PTS-STARTPTS+pts_offset/TB 参照）。既定の 0 は、専用の .ass を
+    0 秒の状態のまま描くサムネイル向けの挙動（thumbnail._write_thumbnail）。
     """
 
     size: tuple[int, int]
