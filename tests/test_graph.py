@@ -352,6 +352,26 @@ def test_score_and_clip_are_rejected_together() -> None:
         build_args(replace(CLIP_SPEC, score=_SCORE))
 
 
+def test_score_adds_an_extra_input_and_remaps_the_output() -> None:
+    args = build_args(replace(SPEC, score=_SCORE))
+    # 背景（入力0）の次（1）が楽譜画像、音声は入力2に押し出される
+    assert _contains(args, ["-loop", "1", "-framerate", "30", "-i", "/a/score.png"])
+    assert _contains(args, ["-map", "2:a:0"])
+    # score_scroll_filter の出力（イベント2点・1チャンクなので score0）に -map が向く
+    assert _contains(args, ["-map", "[score0]"])
+    video = _filter(args)
+    assert "[v][1:v]overlay=eval=frame:x=" in video
+    assert ":format=rgb" in video
+
+
+def test_score_with_layers_uses_the_next_input_index() -> None:
+    args = build_args(replace(SPEC, layers=(_logo(),), score=_SCORE))
+    # 背景(0) → レイヤー(1) → 楽譜画像(2) → 音声(3) の順
+    assert _contains(args, ["-loop", "1", "-framerate", "30", "-i", "/a/logo.png"])
+    assert _contains(args, ["-loop", "1", "-framerate", "30", "-i", "/a/score.png"])
+    assert _contains(args, ["-map", "3:a:0"])
+
+
 def test_atempo_method_builds_asetrate_and_atempo_chain() -> None:
     # key=+2 相当（ratio が [0.5, 2.0] の範囲内）は atempo が1段だけになる
     pitch = Pitch(1.122462, "atempo")
