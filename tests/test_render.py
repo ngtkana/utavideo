@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
+from tests.conftest import WINDOWS_ENGLISH, MakeFont, invoke, set_font_names, use_fake_ffmpeg
 from utavideo import analyze, cli, graph, score
 from utavideo.cli import app
 from utavideo.ffmpeg import (
@@ -176,6 +176,22 @@ def test_check_reports_missing_font(project: Path) -> None:
     result = runner.invoke(app, ["check", "-C", str(project)])
     assert result.exit_code == 1
     assert "Nope Sans" in result.output
+
+
+def test_check_reports_missing_font_when_only_matched_via_typographic_family(
+    project: Path, make_font: MakeFont
+) -> None:
+    """libass は typographic family（nameID 16）を照合しない。check も同じ基準で missing にする
+    （実測: docs/verification/20260927-libass-font-matching.md、issue #138）。"""
+    fonts_dir = Path(os.environ["UTAVIDEO_FONT_DIRS"])
+    font = make_font(fonts_dir / "TypoOnly.ttf", "placeholder")
+    set_font_names(font, {(16, WINDOWS_ENGLISH): "Typo Only Family"})
+    (project / "src/lyrics.ass").write_text(LYRICS.format(font="Typo Only Family"), encoding="utf-8")
+
+    result = runner.invoke(app, ["check", "-C", str(project)])
+
+    assert result.exit_code == 1
+    assert "Typo Only Family" in result.output
 
 
 def test_check_reports_a_missing_layer_file(project: Path) -> None:
@@ -431,19 +447,33 @@ def test_preview_writes_a_short_video_for_the_given_duration(project: Path) -> N
     assert float(info["format"]["duration"]) == pytest.approx(1.0, abs=0.2)
 
 
+def test_preview_still_shows_lyrics_active_at_the_given_time(project: Path) -> None:
+    """--at の静止画は、その時刻の歌詞を描く（.ass の 0 秒の状態のままにならない、issue #137）。"""
+    output = project / "build/.work/preview.png"
+
+    invoke("preview", "-C", str(project), "--at", "1.0")  # AAAA の区間（0.2〜1.5秒）の途中
+    with_lyrics = _pixels(output)
+
+    invoke("preview", "-C", str(project), "--at", "1.9")  # AAAA の区間の後
+    without_lyrics = _pixels(output)
+
+    assert with_lyrics != without_lyrics
+
+
 def test_preview_still_wraps_at_for_a_looping_background(project: Path) -> None:
     # loop.gif は 0.5 秒。素材の実長を超える --at でも、build と同じくループして書き出せる（issue #131）。
-    # 1.7 % 0.5 == 0.2 なので、中身も --at 0.2 と同じフレームになるはず
+    # 1.6 % 0.5 == 0.1 なので、背景の中身は --at 0.1 と同じフレームになるはず。AAAA の区間
+    # （0.2〜1.5秒）の外を選び、歌詞は両方とも描かれない（issue #137: 歌詞は at をそのまま使うため）
     (project / "utavideo.toml").write_text(TOML.format(background="loop.gif"), encoding="utf-8")
     output = project / "build/.work/preview.png"
 
-    invoke("preview", "-C", str(project), "--at", "0.2")
-    pixels_at_0_2 = _pixels(output)
+    invoke("preview", "-C", str(project), "--at", "0.1")
+    pixels_at_0_1 = _pixels(output)
 
-    result = invoke("preview", "-C", str(project), "--at", "1.7")
+    result = invoke("preview", "-C", str(project), "--at", "1.6")
     assert str(output) in result.output
     assert _stream(_probe(output), "video")["codec_name"] == "png"
-    assert _pixels(output) == pixels_at_0_2
+    assert _pixels(output) == pixels_at_0_1
 
 
 def test_preview_rejects_a_duration_shorter_than_one_frame(project: Path) -> None:

@@ -18,9 +18,14 @@ from fontTools.ttLib import TTCollection, TTFont
 from utavideo.errors import UtavideoError
 
 FONT_EXTS = frozenset({".ttf", ".otf", ".ttc", ".otc"})
-# libass が照合する名前: family, full name, PostScript name, typographic family
-_NAME_IDS = frozenset({1, 4, 6, 16})
-_CACHE_FORMAT = 1
+# libass（fontsdir 経由で渡したフォント）が実際に照合するのは、Windows platform（3）の
+# family（nameID 1）・full name（nameID 4）だけ。Mac platform の名前・PostScript name
+# （nameID 6）・typographic family（nameID 16）は、check の索引に入っていても libass では
+# 見つからずフォールバックになる（実測: docs/verification/20260927-libass-font-matching.md）
+_MATCHABLE_NAME_IDS = frozenset({1, 4})
+_WINDOWS_PLATFORM_ID = 3
+# _MATCHABLE_NAME_IDS を絞ったので、古いキャッシュ（Mac・nameID 6・16 も含む）を使い回さない
+_CACHE_FORMAT = 2
 
 
 def to_nfc(name: str) -> str:
@@ -81,7 +86,7 @@ def read_font_names(path: Path) -> set[str]:
                 if "name" not in font:
                     continue
                 for record in font["name"].names:
-                    if record.nameID in _NAME_IDS:
+                    if record.nameID in _MATCHABLE_NAME_IDS and record.platformID == _WINDOWS_PLATFORM_ID:
                         text = record.toUnicode(errors="ignore").strip()
                         if text:
                             names.add(text)

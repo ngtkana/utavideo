@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from fontTools.fontBuilder import FontBuilder
 from fontTools.pens.ttGlyphPen import TTGlyphPen
+from fontTools.ttLib import TTFont
 from typer.testing import CliRunner
 
 from utavideo import cli
@@ -14,6 +15,23 @@ from utavideo.cli import app
 from utavideo.project import scaffold
 
 type MakeFont = Callable[[Path, str], Path]
+
+# platformID: 1 = Macintosh, 3 = Windows。langID は Mac=英語(0)、Windows=en-US(0x409)
+MAC_ENGLISH = (1, 0, 0)
+WINDOWS_ENGLISH = (3, 1, 0x409)
+
+
+def set_font_names(path: Path, records: dict[tuple[int, tuple[int, int, int]], str]) -> None:
+    """フォントファイルの name テーブルを、指定した (nameID, platform情報) の組だけにする。
+
+    libass が実際に照合する platform・nameID の組み合わせを、font ファイル単位で作り分けて
+    確かめるためのテスト用部品（issue #138）。
+    """
+    font = TTFont(path)
+    font["name"].names = []
+    for (name_id, (platform_id, enc_id, lang_id)), value in records.items():
+        font["name"].setName(value, name_id, platform_id, enc_id, lang_id)
+    font.save(path)
 
 
 def scaffold_named_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, toml: str) -> Path:
