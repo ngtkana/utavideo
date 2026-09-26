@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 
 from utavideo import inst
+from utavideo.config import Score
 from utavideo.errors import UtavideoError
+from utavideo.score import NoteEvent, RenderedScore
 
 
 @pytest.mark.parametrize(("key", "label"), [(0, "0"), (2, "+2"), (-1, "-1"), (-12, "-12")])
@@ -66,3 +68,30 @@ def test_parse_keys_reads_comma_separated_integers() -> None:
 def test_parse_keys_rejects_bad_input(raw: str) -> None:
     with pytest.raises(UtavideoError):
         inst.parse_keys(raw)
+
+
+def test_score_image_path_is_shared_across_keys() -> None:
+    """楽譜は--keysの移調とは連動しない（issue #143の範囲外）ので、キーごとに分けない。"""
+    work_dir = Path("/a/build/.work")
+    assert inst.score_image_path(work_dir) == work_dir / "inst" / "score.png"
+
+
+def test_score_overlay_shifts_time_by_the_first_bar_offset() -> None:
+    config_score = Score(file=Path("/a/song.mscz"), first_bar_offset_s=1.5, play_x=0.5, y=100)
+    rendered = RenderedScore(png=b"", events=[NoteEvent(x=10.0, time_s=0.0), NoteEvent(x=20.0, time_s=2.0)])
+
+    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_width=1000)
+
+    assert overlay.events == (NoteEvent(x=10.0, time_s=1.5), NoteEvent(x=20.0, time_s=3.5))
+    assert overlay.play_x == 500  # play_x=0.5 * 幅1000
+    assert overlay.y == 100
+    assert overlay.image == Path("/a/score.png")
+
+
+def test_score_overlay_rounds_play_x_to_the_nearest_pixel() -> None:
+    config_score = Score(file=Path("/a/song.mscz"), play_x=1 / 3)
+    rendered = RenderedScore(png=b"", events=[NoteEvent(x=0.0, time_s=0.0)])
+
+    overlay = inst.score_overlay(config_score, Path("/a/score.png"), rendered, video_width=1920)
+
+    assert overlay.play_x == round(1920 / 3)

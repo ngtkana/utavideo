@@ -199,6 +199,21 @@ SNS の告知文の中身です。この表があると、`check` が告知文�
 |---|---|---|---|
 | `text` | 文字列 | `"{title} / {artist}（Key: {key}）"` | 表示する文字。`{title}`・`{artist}`・`{label}`・`{key}` が使える。スタイルは `[overlay_text]` の `style` を使う |
 | `audio` | パス | 必須（`inst` を使うとき） | inst に使う音源。声を抜いた伴奏など、本編の `audio.file` とは別のファイルを指定する |
+| `score` | `[score]` | 無し | 楽譜を音源に合わせて横スクロールで表示する。指定しなければ楽譜は表示しない |
+
+### [score]
+
+`[inst]` の中の表です。MuseScore 4 で作った楽譜(`.mscz`)を、音源のテンポに合わせて画面上を
+横スクロールさせます（MuseScore 4 のインストールが要る。[commands.md](commands.md#inst)）。
+曲フォルダの外にあるファイルも指定できます。移調（`--keys`）との連動・`--lyrics`との配置調整・
+楽譜と音源の食い違いの検知はまだ対応していません。
+
+| 項目 | 型 | 既定値 | 説明 |
+|---|---|---|---|
+| `file` | パス | 必須 | 楽譜(`.mscz`)のパス |
+| `first_bar_offset_s` | 数値（秒） | `0.0` | 楽譜の1小節目の頭が、inst の音源上の何秒目にあたるか。楽譜と音源は頭出しが揃っている保証が無いため、目で見て合わせる（弱起の楽譜では負の値もありうる） |
+| `play_x` | 0〜1の比率 | `0.5` | 楽譜が流れていく先の再生位置。画面の横幅に対する比率（0が左端、1が右端） |
+| `y` | 整数（px） | `0` | 楽譜の帯を置く縦位置（上端） |
 
 ## ユーザー設定（~/.config/utavideo/config.toml）
 
@@ -270,7 +285,7 @@ SNS の告知文の書式です。長さの上限は X の数え方に合わせ�
 | 変数 | 内容 |
 |---|---|
 | `UTAVIDEO_FONT_DIRS` | フォントを探すディレクトリ（`:` 区切り。Windows では `;`）。`font_dirs` より優先 |
-| `UTAVIDEO_MUSESCORE` | MuseScore 4 の実行ファイルのパス。PATH・既定のインストール先から見つからないときに指定する（楽譜の描画に使う。まだコマンドからは呼ばれない） |
+| `UTAVIDEO_MUSESCORE` | MuseScore 4 の実行ファイルのパス。PATH・既定のインストール先から見つからないときに指定する（`[inst.score]` を設定したときの `inst` が使う） |
 | `XDG_CONFIG_HOME` | ユーザー設定の場所（既定は `~/.config`。`utavideo/config.toml` を読む） |
 | `XDG_CACHE_HOME` | キャッシュの場所（既定は `~/.cache`。`utavideo/` の下に置く） |
 | `XDG_DATA_HOME` | `font_dirs` の既定値に含める `fonts/` の場所（既定は `~/.local/share`） |

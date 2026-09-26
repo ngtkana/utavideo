@@ -10,7 +10,7 @@ import pytest
 from typer.testing import CliRunner
 
 from tests.conftest import MakeFont, invoke, use_fake_ffmpeg
-from utavideo import analyze, cli, graph
+from utavideo import analyze, cli, graph, score
 from utavideo.cli import app
 from utavideo.ffmpeg import (
     LoudnormMeasurement,
@@ -1342,3 +1342,118 @@ def test_inst_with_lyrics_reports_overflowing_line(project: Path) -> None:
 
     # --lyrics を付けなければ、はみ出しの検査もしない
     assert "はみ出しそう" not in invoke("inst", "-C", str(project)).output
+
+
+# 音符・休符・タイ・拍子変更を含む、[inst.score] の検証専用の最小の楽譜（issue #143）
+_SCORE_MUSICXML = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Vocal</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>2</divisions><key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction><sound tempo="120"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+
+
+# 音符が1個しか無い（issue #143: score_scroll_filterが要求する2点に満たない）楽譜
+_SINGLE_NOTE_MUSICXML = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Vocal</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>2</divisions><key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>8</duration><voice>1</voice><type>whole</type></note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+
+
+def _make_mscz(tmp_path: Path, musicxml: str, name: str) -> Path:
+    """MuseScore CLIでその場限りの.msczを作る（バイナリのfixtureは固定コミットしない。issue #140と同じ）。"""
+    musescore = score.require_musescore()
+    musicxml_path = tmp_path / f"{name}.musicxml"
+    musicxml_path.write_text(musicxml, encoding="utf-8")
+    mscz_path = tmp_path / f"{name}.mscz"
+    subprocess.run([musescore, "-o", str(mscz_path), str(musicxml_path)], check=True, capture_output=True)
+    return mscz_path
+
+
+@pytest.fixture
+def mscz_file(tmp_path: Path) -> Path:
+    return _make_mscz(tmp_path, _SCORE_MUSICXML, "score")
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が無い環境の確認用")
+def test_inst_reports_missing_score_file(project: Path) -> None:
+    """MuseScore 4 が無くても、.msczのファイル自体が無いことは検出できる。"""
+    (project / "utavideo.toml").write_text(
+        TOML.format(background="bg.png") + '[inst.score]\nfile = "src/no-such-file.mscz"\n',
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["inst", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "inst.score.file のファイルがありません" in result.output
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_inst_reports_a_score_with_fewer_than_two_notes(project: Path, tmp_path: Path) -> None:
+    """score_scroll_filterは2点以上を要求するので、音符が1個しか無い楽譜は検査エラーにする。"""
+    mscz = _make_mscz(tmp_path, _SINGLE_NOTE_MUSICXML, "single-note")
+    (project / "utavideo.toml").write_text(
+        TOML.format(background="bg.png") + f'[inst.score]\nfile = "{mscz.as_posix()}"\n',
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["inst", "-C", str(project)])
+    assert result.exit_code == 1
+    assert "音符が2個未満しかなく" in result.output
+
+
+def _row_bytes(video: Path, *, at: float, y: int, width: int) -> bytes:
+    """指定した時刻のフレームを読み、y行目だけ切り出す（ffmpegからは1フレーム全体で受け取る）。"""
+    out = subprocess.run(
+        ["ffmpeg", "-v", "error", "-ss", str(at), "-i", str(video), "-frames:v", "1",
+         "-f", "rawvideo", "-pix_fmt", "gray", "-"],
+        capture_output=True,
+    )  # fmt: skip
+    assert out.returncode == 0, out.stderr.decode(errors="replace")
+    return out.stdout[y * width : (y + 1) * width]
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_inst_composites_the_score_scroll(project: Path, mscz_file: Path) -> None:
+    """[inst.score] を設定すると、楽譜が横スクロールで重なった動画が書き出せる。"""
+    without_score = project / "build/inst/test-key0.mp4"
+    invoke("inst", "-C", str(project))
+    row_without_score = _row_bytes(without_score, at=0.5, y=20, width=320)
+    without_score.unlink()
+
+    (project / "utavideo.toml").write_text(
+        TOML.format(background="bg.png") + f'[inst.score]\nfile = "{mscz_file.as_posix()}"\ny = 20\n',
+        encoding="utf-8",
+    )
+    result = invoke("inst", "-C", str(project))
+    assert result.exit_code == 0
+
+    output = project / "build/inst/test-key0.mp4"
+    assert output.is_file()
+    assert (project / "build/.work/inst/score.png").is_file()  # 楽譜のPNGがwork_dirに書き出されている
+
+    # 楽譜の帯（y=20）が、楽譜を重ねなかったときと違う絵になっている（=何か描かれた）ことを確かめる
+    row_with_score = _row_bytes(output, at=0.5, y=20, width=320)
+    assert row_with_score != row_without_score

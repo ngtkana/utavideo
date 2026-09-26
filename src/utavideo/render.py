@@ -109,6 +109,7 @@ class VideoTarget:
     audio: Path | None = None  # None なら project.audio_path（inst は inst_audio_path を渡す）
     # [[layers]] を重ねる本編の画面用。frame があるときは無視される（frame.layers を使う）
     layers: tuple[graph.LayerSpec, ...] = ()
+    score: graph.ScoreOverlay | None = None  # inst に重ねる楽譜。None なら重ねない
 
 
 def write_video(
@@ -154,6 +155,7 @@ def write_video(
         pitch=target.pitch,
         loudnorm=target.loudnorm,
         layers=target.layers,
+        score=target.score,
     )
     inputs.unlink_stale_record(record)
 

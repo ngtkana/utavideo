@@ -112,6 +112,20 @@ class Loudnorm:
 
 
 @dataclass(frozen=True)
+class ScoreOverlay:
+    """instの画面に重ねる楽譜の横スクロール表示（issue #143）。
+
+    events の時刻は、1小節目の頭からのオフセット（[inst.score].first_bar_offset_s）を
+    呼び出し側で足し込んだ、音源上の秒に揃えてから渡すこと。
+    """
+
+    image: Path  # score.svg_to_png が書き出した横1段のPNG
+    events: tuple[NoteEvent, ...]
+    play_x: int  # 画面上の再生位置(px)
+    y: int  # 画面上の縦位置(px)。楽譜の帯の上端
+
+
+@dataclass(frozen=True)
 class RenderSpec:
     mode: Mode
     size: tuple[int, int]
@@ -136,6 +150,7 @@ class RenderSpec:
     loudnorm: Loudnorm | None = None  # None なら音量はそのまま（inst の正規化）
     # frame があるときは無視される（frame.layers を使う。同時に両方を重ねることはしない）
     layers: tuple[LayerSpec, ...] = ()
+    score: ScoreOverlay | None = None  # None なら楽譜を重ねない（inst の楽譜表示）
 
 
 def escape_filter_arg(value: str) -> str:
@@ -413,6 +428,8 @@ def build_args(spec: RenderSpec) -> list[str]:
             raise ValueError("mode=overlay ではキーを変えられません")
         if spec.loudnorm is not None:
             raise ValueError("mode=overlay では音量をそろえられません")
+        if spec.score is not None:
+            raise ValueError("mode=overlay では楽譜を重ねられません")
         inputs = ["-f", "lavfi", "-i", f"color=c=black@0:s={w}x{h}:r={spec.fps},format=rgba"]
         subtitles = subtitles_filter(spec.subtitles, spec.fontsdir, alpha=True)
         video = f"[0:v]{subtitles},{_TO_BT709},format=yuva444p10le[v]"
@@ -452,7 +469,22 @@ def build_args(spec: RenderSpec) -> list[str]:
         raise ValueError("clip と pitch は同時に指定できません")
     if clip is not None and spec.loudnorm is not None:
         raise ValueError("clip と loudnorm は同時に指定できません")
-    audio_index = 1 + len(layers)
+    if clip is not None and spec.score is not None:
+        # score.events の時刻は曲全体の絶対時刻だが、clip は setpts で 0 秒に戻すため噛み合わない
+        raise ValueError("clip と楽譜の表示は同時に指定できません")
+    video_label = "v"
+    if spec.score is not None:
+        score_index = 1 + len(layers)
+        inputs += background_input(spec.score.image, spec.fps)
+        score_frag, video_label = score_scroll_filter(
+            spec.score.events,
+            input_label="v",
+            image_label=f"{score_index}:v",
+            play_x=spec.score.play_x,
+            y=spec.score.y,
+        )
+        video = f"{video};{score_frag}"
+    audio_index = 1 + len(layers) + (1 if spec.score is not None else 0)
     audio_filter = (
         _clip_audio(clip, spec.fps, audio_index)
         if clip
@@ -465,7 +497,7 @@ def build_args(spec: RenderSpec) -> list[str]:
         *inputs,
         "-i", str(spec.audio),
         "-filter_complex", video + (f";{audio_filter}" if audio_filter else ""),
-        "-map", "[v]",
+        "-map", f"[{video_label}]",
         "-map", "[a]" if audio_filter else f"{audio_index}:a:0",
         *codec,
         *_BT709,
