@@ -1480,6 +1480,7 @@ def test_inst_composites_the_score_scroll(project: Path, mscz_file: Path) -> Non
     )
     result = invoke("inst", "-C", str(project))
     assert result.exit_code == 0
+    assert "楽譜の終端" not in result.output  # 楽譜(2.0秒)とinst.audio(2.0秒)がほぼ一致し、警告が出ない
 
     output = project / "build/inst/test-key0.mp4"
     assert output.is_file()
