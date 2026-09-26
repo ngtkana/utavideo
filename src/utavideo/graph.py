@@ -622,12 +622,18 @@ def _loudnorm_filter(loudnorm: Loudnorm) -> str:
 
 @dataclass(frozen=True)
 class StillSpec:
-    """背景の1フレームに .ass の 0 秒を描いた PNG。subtitles が None なら背景だけ。"""
+    """背景の1フレームに .ass の pts_offset 秒の状態を描いた PNG。subtitles が None なら背景だけ。
+
+    at で -ss シークした背景フレームの t は 0 になる（frame_input 参照）ので、.ass 側の絶対時刻と
+    噛み合わせるには pts_offset で描画前に frame の pts を進める必要がある。既定の 0 は、専用の
+    .ass を 0 秒の状態のまま描くサムネイル向けの挙動（thumbnail._write_thumbnail）。
+    """
 
     size: tuple[int, int]
     background: Path
     focus: tuple[float, float]  # RenderSpec と同じく既定値を置かない
     at: float | None = None
+    pts_offset: float = 0.0
     subtitles: Path | None = None
     fontsdir: Path | None = None
     fit: Fit = "cover"
@@ -661,6 +667,12 @@ def build_still_args(spec: StillSpec) -> list[str]:
     """出力ファイル名（.png）を除いた ffmpeg の引数。"""
     # 動画と同じく RGB で合成する。PNG なので YUV には戻さない
     fit = _fit_to_rgb(spec.size, spec.fit, spec.focus, flags=spec.scale_flags, pad_color=spec.pad_color)
+    if spec.pts_offset:
+        # .ass は元の絶対時刻のまま描けるよう、フレームの pts を pts_offset に合わせて進めておく
+        # （.ass 側を巻き戻すと \fad・\move の相対時刻がずれるため。StillSpec の docstring参照）。
+        # PTS-STARTPTS で必ず 0 を基準にする。GIF・動画では -ss 後の pts が 0 に揃うとは限らない
+        # （実測: ffmpeg 9.0.2 では素材内の位置によって 0 にならないことがある。検証: issue #137）
+        fit = f"setpts=PTS-STARTPTS+{_seconds(spec.pts_offset)}/TB,{fit}"
     subs_expr: str | None = None
     if spec.subtitles is not None:
         if spec.fontsdir is None:
