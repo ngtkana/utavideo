@@ -283,8 +283,7 @@ class Announce(_Model):
 class Score(_Model):
     """楽譜(.mscz)をinstの画面に音源に合わせて横スクロールで表示する（issue #139）。
 
-    MuseScore 4のCLIとVerovioで描く（MuseScoreのインストールが要る）。楽譜と音源の食い違いの
-    検知はまだ扱わない（別issue）。
+    MuseScore 4のCLIとVerovioで描く（MuseScoreのインストールが要る）。
     """
 
     file: Path

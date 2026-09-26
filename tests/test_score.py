@@ -128,6 +128,15 @@ def test_note_events_merges_chord_into_one_point() -> None:
     assert len(events) == 5  # C, D, E, [G+C5], A の5点（休符は含まない）
 
 
+def test_total_duration_s_includes_the_last_notes_own_length() -> None:
+    """最後の音符（半音符）自身の長さぶんも含めて、鳴り終わりまでを計算する（issue #146）。
+
+    1小節目: 120bpmで4拍(2秒)。2小節目: 60bpmでG+C5の和音(1拍、1秒)の後にA(半音符、2拍、2秒)で
+    3拍ぶん(3秒)。2+3=5秒（`note_events`が返す最後の音符Aの発音時刻3.0秒より後ろまで含む）。
+    """
+    assert score.total_duration_s(_TEMPO_CHANGE_MUSICXML) == pytest.approx(5.0)
+
+
 def test_note_events_x_is_in_the_same_pixels_as_the_rendered_image() -> None:
     """bboxの座標はSVG内側のviewBox単位で書かれており、外側の<svg>の実際のピクセル幅とは
     縮尺が異なる。ピクセル単位に変換し忘れると、実際の画像よりずっと大きい値になってしまう

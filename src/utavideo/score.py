@@ -219,6 +219,20 @@ def note_events(musicxml: str, *, scale: int = 40) -> list[NoteEvent]:
     return events
 
 
+def total_duration_s(musicxml: str) -> float:
+    """楽譜の理論値の総演奏時間（最後の音符・休符が終わるまでの秒数）。
+
+    `note_events` と同じタイムマップ計算に基づく（rit.の扱いなどは`note_events`のdocstring参照）。
+    楽譜と音源の食い違い（小節数・間のずれ）を検査するのに使う（issue #146）。タイムマップは
+    描画結果に依存しないため、note_events・render_horizontal_svgと違い`scale`は取らない。
+    """
+    tk = verovio.toolkit()
+    tk.setOptions(_RENDER_OPTIONS)
+    if not tk.loadData(musicxml):
+        raise ScoreError("MusicXML を読み込めませんでした")
+    return max((entry["tstamp"] for entry in tk.renderToTimemap()), default=0.0) / 1000
+
+
 def _bundled_font_bytes() -> bytes:
     return resources.files("utavideo").joinpath("templates", *_BUNDLED_FONT_TEMPLATE).read_bytes()
 
