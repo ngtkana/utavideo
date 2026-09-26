@@ -283,8 +283,8 @@ class Announce(_Model):
 class Score(_Model):
     """楽譜(.mscz)をinstの画面に音源に合わせて横スクロールで表示する（issue #139）。
 
-    MuseScore 4のCLIとVerovioで描く（MuseScoreのインストールが要る）。移調（--keysとの連動）・
-    --lyricsとの配置調整・楽譜と音源の食い違いの検知はまだ扱わない（それぞれ別issue）。
+    MuseScore 4のCLIとVerovioで描く（MuseScoreのインストールが要る）。楽譜と音源の食い違いの
+    検知はまだ扱わない（別issue）。
     """
 
     file: Path
@@ -292,7 +292,10 @@ class Score(_Model):
     # 頭出しが揃っている保証が無いため、利用者が手で合わせる（issue #139のコメントの方針）
     first_bar_offset_s: float = 0.0
     play_x: Ratio = 0.5  # 再生位置。画面の横幅に対する比率（0が左端、1が右端）
-    y: int = 0  # 画面上の縦位置(px)。楽譜の帯の上端
+    # 画面上の縦位置(px)。楽譜の帯の上端。省略時は画面の縦方向の中央に自動配置する
+    # （曲名・キーの表示は画面上部、--lyricsの歌詞は画面下部にあるので、その間の中央なら
+    # 標準的なスタイルとは重ならない。issue #145）
+    y: int | None = None
 
 
 class Inst(_Model):

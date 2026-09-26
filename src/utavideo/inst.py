@@ -39,18 +39,21 @@ def score_image_path(work_dir: Path, key: int) -> Path:
 
 
 def score_overlay(
-    config_score: Score, image_path: Path, rendered: RenderedScore, video_width: int
+    config_score: Score, image_path: Path, rendered: RenderedScore, video_size: tuple[int, int]
 ) -> graph.ScoreOverlay:
     """[inst.score]の設定と楽譜の描画結果から、画面に重ねるための情報を組み立てる。
 
     events.time_s に first_bar_offset_s を足し込んで音源上の秒に揃え、play_x（画面幅に対する
-    比率）を実際のピクセル数に変える。
+    比率）を実際のピクセル数に変える。y を省略したときは、画面の縦方向の中央に自動配置する
+    （曲名・キーの表示は画面上部、--lyricsの歌詞は画面下部にあるので重ならない。issue #145）。
     """
+    video_width, video_height = video_size
     events = tuple(
         NoteEvent(x=e.x, time_s=e.time_s + config_score.first_bar_offset_s) for e in rendered.events
     )
+    y = config_score.y if config_score.y is not None else (video_height - rendered.height) // 2
     return graph.ScoreOverlay(
-        image=image_path, events=events, play_x=round(config_score.play_x * video_width), y=config_score.y
+        image=image_path, events=events, play_x=round(config_score.play_x * video_width), y=y
     )
 
 

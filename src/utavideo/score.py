@@ -240,10 +240,15 @@ def svg_to_png(svg: str) -> bytes:
 
 @dataclass(frozen=True)
 class RenderedScore:
-    """.mscz から作った、横1段のPNG（png）と、音符ごとのx・発音時刻（events）。"""
+    """.mscz から作った、横1段のPNG（png・width・height）と、音符ごとのx・発音時刻（events）。"""
 
     png: bytes
+    width: int
+    height: int
     events: list[NoteEvent]
+
+
+_SVG_SIZE = re.compile(r'<svg width="(\d+)px" height="(\d+)px"')
 
 
 def render(mscz_path: Path, musescore: str, *, scale: int = 40, semitones: int = 0) -> RenderedScore:
@@ -253,4 +258,10 @@ def render(mscz_path: Path, musescore: str, *, scale: int = 40, semitones: int =
     """
     musicxml = to_musicxml(mscz_path, musescore, semitones=semitones)
     svg = render_horizontal_svg(musicxml, scale=scale)
-    return RenderedScore(png=svg_to_png(svg), events=note_events(musicxml, scale=scale))
+    size = _SVG_SIZE.match(svg)
+    if size is None:
+        raise ScoreError("SVGの大きさ（width・height）を読み取れませんでした")
+    width, height = int(size.group(1)), int(size.group(2))
+    return RenderedScore(
+        png=svg_to_png(svg), width=width, height=height, events=note_events(musicxml, scale=scale)
+    )

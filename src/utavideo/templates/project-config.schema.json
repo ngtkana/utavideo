@@ -826,7 +826,7 @@
           "anyOf": [
             {
               "additionalProperties": false,
-              "description": "楽譜(.mscz)をinstの画面に音源に合わせて横スクロールで表示する（issue #139）。\n\nMuseScore 4のCLIとVerovioで描く（MuseScoreのインストールが要る）。移調（--keysとの連動）・\n--lyricsとの配置調整・楽譜と音源の食い違いの検知はまだ扱わない（それぞれ別issue）。",
+              "description": "楽譜(.mscz)をinstの画面に音源に合わせて横スクロールで表示する（issue #139）。\n\nMuseScore 4のCLIとVerovioで描く（MuseScoreのインストールが要る）。楽譜と音源の食い違いの\n検知はまだ扱わない（別issue）。",
               "properties": {
                 "file": {
                   "format": "path",
@@ -846,9 +846,16 @@
                   "type": "number"
                 },
                 "y": {
-                  "default": 0,
-                  "title": "Y",
-                  "type": "integer"
+                  "anyOf": [
+                    {
+                      "type": "integer"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Y"
                 }
               },
               "required": [
