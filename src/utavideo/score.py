@@ -81,24 +81,12 @@ def _run_musescore_export(
 
 
 # MuseScore CLIの--transposeのtransposeIntervalは半音に線形対応しないので実測で対応表を作った
-# （検証: issue #144）。1回のtransposeで移調できるのは1オクターブ分（実測で半音±12相当、
-# transposeInterval 0〜25）までなので、1オクターブを超える分はtransposeInterval=25
-# （半音12相当）を繰り返し適用して稼ぐ。
-_SEMITONE_TO_INTERVAL = {
-    0: 0,
-    1: 3,
-    2: 4,
-    3: 7,
-    4: 8,
-    5: 11,
-    6: 12,
-    7: 14,
-    8: 17,
-    9: 18,
-    10: 21,
-    11: 22,
-    12: 25,
-}
+# （検証: issue #144。docs/verification/20260927-transpose-interval-mapping.md）。1回のtransposeで
+# 移調できるのは1オクターブ分（実測で半音±12相当、transposeInterval 0〜25）までなので、
+# 1オクターブを超える分は_FULL_OCTAVE_INTERVAL（半音12相当）を繰り返し適用して稼ぐ
+# （divmod(semitones, 12)の余りは常に0〜11なので、この表に半音12のキーは無い）。
+_FULL_OCTAVE_INTERVAL = 25
+_SEMITONE_TO_INTERVAL = {0: 0, 1: 3, 2: 4, 3: 7, 4: 8, 5: 11, 6: 12, 7: 14, 8: 17, 9: 18, 10: 21, 11: 22}
 
 
 def to_musicxml(mscz_path: Path, musescore: str, *, semitones: int = 0) -> str:
@@ -112,7 +100,8 @@ def to_musicxml(mscz_path: Path, musescore: str, *, semitones: int = 0) -> str:
         octaves, remainder = divmod(semitones, 12)
         for i in range(abs(octaves)):
             step_out = Path(tmp_dir) / f"octave{i}.mscz"
-            _run_musescore_export(musescore, current, step_out, transpose_interval=25 if octaves > 0 else -25)
+            interval = _FULL_OCTAVE_INTERVAL if octaves > 0 else -_FULL_OCTAVE_INTERVAL
+            _run_musescore_export(musescore, current, step_out, transpose_interval=interval)
             current = step_out
         out_path = Path(tmp_dir) / "score.musicxml"
         interval = _SEMITONE_TO_INTERVAL[remainder] if remainder else None

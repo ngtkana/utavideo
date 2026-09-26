@@ -207,23 +207,33 @@ def _make_mscz(tmp_path: Path, musescore: str) -> Path:
     return mscz_path
 
 
-def _first_pitch(xml: str) -> str:
+_STEP_SEMITONE = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}
+
+
+def _pitch_midi(xml: str) -> int:
+    """先頭の音符のpitchを、MIDIのノート番号（移調前後の半音差の比較用）に変える。"""
     match = re.search(r"<pitch>.*?</pitch>", xml, re.S)
     assert match is not None
-    return match.group(0)
+    pitch = match.group(0)
+    step_match = re.search(r"<step>(\w)</step>", pitch)
+    octave_match = re.search(r"<octave>(-?\d+)</octave>", pitch)
+    assert step_match is not None and octave_match is not None
+    alter_match = re.search(r"<alter>(-?\d+)</alter>", pitch)
+    alter = int(alter_match.group(1)) if alter_match else 0
+    return (int(octave_match.group(1)) + 1) * 12 + _STEP_SEMITONE[step_match.group(1)] + alter
 
 
 @pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
-def test_to_musicxml_transposes_by_semitones(tmp_path: Path) -> None:
-    """先頭の音符（C4）が、--keysと同じ半音数だけ移調される（issue #144）。"""
+def test_to_musicxml_transposes_every_semitone_in_the_lookup_table(tmp_path: Path) -> None:
+    """_SEMITONE_TO_INTERVALは実測でしか分からない対応表なので、一部だけでなく全エントリ
+    （0〜11半音）が実際に期待した半音数だけ動くことを確かめる（issue #144）。"""
     musescore = score.require_musescore()
     mscz_path = _make_mscz(tmp_path, musescore)
+    base_midi = _pitch_midi(score.to_musicxml(mscz_path, musescore))
 
-    xml = score.to_musicxml(mscz_path, musescore, semitones=2)
-
-    pitch = _first_pitch(xml)
-    assert "<step>D</step>" in pitch
-    assert "<octave>4</octave>" in pitch
+    for semitones in score._SEMITONE_TO_INTERVAL:
+        xml = score.to_musicxml(mscz_path, musescore, semitones=semitones)
+        assert _pitch_midi(xml) == base_midi + semitones, semitones
 
 
 @pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
@@ -232,12 +242,11 @@ def test_to_musicxml_transposes_across_multiple_octaves(tmp_path: Path) -> None:
     動かせないので、それを超える分はtransposeを繰り返し適用する（issue #144）。"""
     musescore = score.require_musescore()
     mscz_path = _make_mscz(tmp_path, musescore)
+    base_midi = _pitch_midi(score.to_musicxml(mscz_path, musescore))
 
     xml = score.to_musicxml(mscz_path, musescore, semitones=24)
 
-    pitch = _first_pitch(xml)
-    assert "<step>C</step>" in pitch
-    assert "<octave>6</octave>" in pitch
+    assert _pitch_midi(xml) == base_midi + 24
 
 
 @pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
@@ -245,10 +254,8 @@ def test_to_musicxml_transposes_down_with_negative_semitones(tmp_path: Path) -> 
     """オクターブの繰り返し適用と、残りの半音の適用の両方が符号違いでも正しく動く。"""
     musescore = score.require_musescore()
     mscz_path = _make_mscz(tmp_path, musescore)
+    base_midi = _pitch_midi(score.to_musicxml(mscz_path, musescore))
 
     xml = score.to_musicxml(mscz_path, musescore, semitones=-14)
 
-    pitch = _first_pitch(xml)
-    assert "<step>B</step>" in pitch
-    assert "<alter>-1</alter>" in pitch
-    assert "<octave>2</octave>" in pitch
+    assert _pitch_midi(xml) == base_midi - 14

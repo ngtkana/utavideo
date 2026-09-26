@@ -137,22 +137,24 @@ def font_missing_message(name: str, font_dirs: list[Path]) -> str:
     return f"フォント {name!r} が見つかりません（探した場所: {searched}）{hint}"
 
 
-def _score_issues(project: Project, config_score: Score | None) -> list[subs.Issue]:
+def _score_issues(project: Project, config_score: Score | None, keys: list[int]) -> list[subs.Issue]:
     """[inst.score]が設定されていれば、.msczとMuseScore CLIの有無・音符の数を確かめる。
 
-    実際の描画（PNG化）は --keys の値ごとに移調が変わるため、ここでは行わない
-    （build時にキーごとに行う。issue #144）。移調自体は0半音でも±nオクターブでも同じ
-    経路（MuseScore CLIでのMusicXML変換・Verovioでの読み込み）を通るので、0半音での
-    検査で代表させて問題ない。
+    実際の描画（PNG化）は --keys の値ごとに移調が変わるため、ここでは行わない（build時に
+    キーごとに行う。issue #144）。ただし移調（MuseScore CLIの--transpose）自体がこの環境・
+    このファイルで動くかどうかは、実際に一番遠くまで移調するキー（絶対値が最大のもの）で
+    確かめる。0半音だけでは--transposeを一度も呼ばずに済んでしまい、build時に初めて
+    移調に失敗する（一部のキーだけ書き出し済みで止まる）おそれがあるため。
     """
     if config_score is None:
         return []
     path = project.score_path
     if not path.is_file():
         return [subs.Issue("error", f"inst.score.file のファイルがありません: {path}")]
+    widest_key = max(keys, key=abs)
     try:
         musescore = score.require_musescore()
-        musicxml = score.to_musicxml(path, musescore)
+        musicxml = score.to_musicxml(path, musescore, semitones=widest_key)
         note_count = len(score.note_events(musicxml))
     except score.ScoreError as e:
         return [subs.Issue("error", str(e))]
@@ -190,7 +192,7 @@ def analyze_inst(
     if duration_s is None:
         return Analysis(issues, duration_s, lyrics, ())
 
-    issues += _score_issues(project, config.inst.score)
+    issues += _score_issues(project, config.inst.score, keys)
 
     duration_ms = round(duration_s * 1000)
     overlay = inst.overlay_text(config.overlay_text, config.inst)

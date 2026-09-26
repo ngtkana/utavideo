@@ -1443,3 +1443,20 @@ def test_inst_composites_the_score_scroll(project: Path, mscz_file: Path) -> Non
     # 楽譜の帯（y=20）が、楽譜を重ねなかったときと違う絵になっている（=何か描かれた）ことを確かめる
     row_with_score = _row_bytes(output, at=0.5, y=20, width=320)
     assert row_with_score != row_without_score
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_inst_transposes_the_score_per_key(project: Path, mscz_file: Path) -> None:
+    """[inst.score]を設定して--keysを複数指定すると、キーごとに移調した楽譜のPNGが作られる（issue #144）。"""
+    (project / "utavideo.toml").write_text(
+        TOML.format(background="bg.png") + f'[inst.score]\nfile = "{mscz_file.as_posix()}"\n',
+        encoding="utf-8",
+    )
+    result = invoke("inst", "-C", str(project), "--keys=0,7")
+    assert result.exit_code == 0
+
+    assert (project / "build/inst/test-key0.mp4").is_file()
+    assert (project / "build/inst/test-key+7.mp4").is_file()
+    key0_png = (project / "build/.work/inst/score-key0.png").read_bytes()
+    key7_png = (project / "build/.work/inst/score-key+7.png").read_bytes()
+    assert key0_png != key7_png
