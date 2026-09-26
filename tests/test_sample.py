@@ -9,7 +9,7 @@ from typer.testing import CliRunner
 
 from tests.conftest import invoke
 from utavideo import sample as sample_module
-from utavideo import subs
+from utavideo import score, subs
 from utavideo.analyze import analyze
 from utavideo.cli import app
 from utavideo.errors import UtavideoError
@@ -91,6 +91,15 @@ def test_every_command_runs_on_the_sample(sample: Path) -> None:
     for rel in ("build/preview/bg.mp4", "build/main.mp4", "build/title.txt", "build/description.txt"):
         assert (sample / rel).is_file(), rel
     assert (sample / "release" / "sample-v1.0.0.mp4").is_file()
+
+
+@pytest.mark.skipif(score.find_musescore() is None, reason="MuseScore 4 が必要")
+def test_sample_includes_a_working_score(sample: Path) -> None:
+    """[inst.score] の見本が、音源（AUDIO_DURATION_S）と大きくずれずに書き出せる（issue #147）。"""
+    result = invoke("inst", "-C", str(sample), "--lyrics")
+
+    assert "楽譜の終端" not in result.output  # 見本の楽譜と inst.audio の長さがほぼ一致している
+    assert (sample / "build/inst/sample-key0.mp4").is_file()
 
 
 def test_sample_includes_a_working_avatar_with_correct_auto_sync(sample: Path) -> None:

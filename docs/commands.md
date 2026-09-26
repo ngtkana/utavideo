@@ -78,7 +78,8 @@ utavideo sample <パス> [--font <フォント名>] [--small]
 | `src/bg/loop.gif` | `loop.mp4` と同じ絵の GIF（480x270・2 秒、合成）。GIF の背景と、拡大の効き方を試す用 |
 | `src/fonts/NotoSansJP-Regular.ttf` | 同梱フォント Noto Sans JP（`--font` を渡したときは作らない） |
 | `src/fonts/OFL.txt` | 同梱フォントのライセンス（SIL Open Font License） |
-| `README.md` | 試すコマンドの一覧と、実素材（背景・音源）の出所 |
+| `src/score.mscz` | `[inst.score]` の見本（見本用に作成したオリジナルの旋律、CC0 1.0）。`inst` の楽譜表示を試せる（MuseScore 4 のインストールが要る） |
+| `README.md` | 試すコマンドの一覧と、実素材（背景・音源・楽譜）の出所 |
 
 - 同梱フォントを使うときは、見本の曲フォルダで `UTAVIDEO_FONT_DIRS=src/fonts utavideo check` のように、コマンドごとに場所を渡します（`UTAVIDEO_FONT_DIRS` は探す場所を置き換えるので、`export` すると同じシェルで自分の曲に戻ったときに自分のフォントが見つかりません）
 - 既定のまま実行すれば、実際の書体（Noto Sans JP）で見栄えを確かめられます。別の書体で確かめたいときは `--font` に手元のフォント名を渡します

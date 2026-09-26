@@ -16,6 +16,7 @@ ${prefix}utavideo build        # build/main.mp4
 ${prefix}utavideo description  # build/title.txt・build/description.txt
 ${prefix}utavideo release      # release/sample-v1.0.0.mp4
 ${prefix}utavideo overlay      # build/overlay.mov（透過。大きいので必要なときだけ）
+${prefix}utavideo inst --lyrics --keys=0,2  # build/inst/sample-key0.mp4・sample-key+2.mp4（歌唱練習用。楽譜が流れる。MuseScore 4 が要る）
 ```
 
 - 見本の中身とコマンドの説明: https://github.com/ngtkana/utavideo/blob/main/docs/commands.md
