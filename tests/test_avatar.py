@@ -236,6 +236,34 @@ def test_is_fresh_matches_a_recorded_cache(tmp_path: Path, monkeypatch: pytest.M
     assert avatar.is_fresh(project, cfg, raw, 1.0) is False
 
 
+def test_prepare_reuses_a_given_sync_instead_of_recomputing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """呼び出し側が sync を渡せば、resolve_sync（ffmpeg でのデコード＋FFT）をやり直さない（issue #133）。
+
+    analyze() が check・build 等の検査で既に求めた sync を、prepare() 系にそのまま渡すことで、
+    1回のコマンド実行で頭出しの計算が二重に走らないようにする、という設計の要になる部分。
+    """
+    project = _project_with_avatar(tmp_path, monkeypatch, 'file = "src/avatar/avatar-raw.mp4"\n')
+    monkeypatch.setattr(avatar, "is_fresh", lambda *a: True)  # ffmpeg でのキー抜きを避ける
+    calls = 0
+
+    def fake_resolve_sync(*args: object) -> avatar.SyncResult:
+        nonlocal calls
+        calls += 1
+        return avatar.SyncResult(0.0, 20.0)
+
+    monkeypatch.setattr(avatar, "resolve_sync", fake_resolve_sync)
+    given = avatar.SyncResult(1.23, 15.0)
+
+    _, sync = avatar.prepare(project, given)
+    assert sync is given
+    assert calls == 0  # 渡した sync をそのまま使い、計算し直さない
+
+    avatar.prepare(project)  # sync を渡さなければ、従来通り自分で求める
+    assert calls == 1
+
+
 # --- LayerSpec への変換 -------------------------------------------------------------------------
 
 
@@ -246,7 +274,7 @@ def test_layer_spec_converts_the_placement_fields(tmp_path: Path, monkeypatch: p
         'file = "src/avatar/avatar-raw.mp4"\nscale = 1.5\nanchor = "right"\nmargin = [40, 0]\nlayer = 50\n',
     )
     prepared = Path("/build/.work/avatar-prepared.mov")
-    monkeypatch.setattr(avatar, "prepare", lambda p: (prepared, avatar.SyncResult(1.0, 20.0)))
+    monkeypatch.setattr(avatar, "prepare", lambda p, sync=None: (prepared, avatar.SyncResult(1.0, 20.0)))
 
     spec = avatar.layer_spec(project)
 

@@ -22,6 +22,9 @@ class Analysis:
     lyrics: pysubs2.SSAFile | None
     font_files: tuple[Path, ...]
     font_index: fonts.FontIndex | None = None
+    # sync = "auto" の頭出しの結果（analyze() が既に計算済みのものを、呼び出し側が
+    # avatar.prepare() 等に渡して二重計算を避けるため。issue #133）
+    avatar_sync: avatar.SyncResult | None = None
 
 
 def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = None) -> Analysis:
@@ -30,14 +33,17 @@ def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = No
     issues, duration_s = audio_issues(project.audio_path, label="audio.file")
     if not project.lyrics_path.is_file():
         issues.append(subs.Issue("error", f"lyrics.file のファイルがありません: {project.lyrics_path}"))
+    avatar_sync = None
     if mode != "overlay":
         issues += background_issues(project)
         issues += layer_issues(project)
-        issues += subs.prefixed(avatar.analyze(project).issues, "[avatar] ")
+        avatar_analysis = avatar.analyze(project)
+        issues += subs.prefixed(avatar_analysis.issues, "[avatar] ")
+        avatar_sync = avatar_analysis.sync
 
     lyrics = subs.load(project.lyrics_path) if project.lyrics_path.is_file() else None
     if lyrics is None or duration_s is None:
-        return Analysis(issues, duration_s, lyrics, ())
+        return Analysis(issues, duration_s, lyrics, (), avatar_sync=avatar_sync)
 
     duration_ms = round(duration_s * 1000)
     target = lyrics if mode != "preview" else subs.without_events(lyrics)
@@ -46,7 +52,7 @@ def analyze(project: Project, mode: graph.Mode, search: "FontSearch | None" = No
     search = search or FontSearch.load()
     script = compose(project, lyrics, duration_ms, mode, search.index)
     font_issues, font_files = check_fonts(script, search)
-    return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index)
+    return Analysis(issues + font_issues, duration_s, lyrics, font_files, search.index, avatar_sync)
 
 
 def audio_issues(path: Path, *, label: str) -> tuple[list[subs.Issue], float | None]:

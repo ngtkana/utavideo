@@ -129,10 +129,6 @@ def _print_issues(issues: list[subs.Issue]) -> None:
         err_console.print(issue.message, markup=False)
 
 
-def _avatar_issues(project: Project) -> list[subs.Issue]:
-    return subs.prefixed(avatar.analyze(project).issues, "[avatar] ")
-
-
 def _load_project(project_dir: Path | None) -> Project:
     return Project.load(find_project_root(project_dir or Path.cwd()))
 
@@ -160,7 +156,7 @@ def _render(project_dir: Path | None, mode: graph.Mode, label: str) -> Path:
     video = project.config.video
     # overlay は背景の無い透過動画（動画編集ソフトで自分の背景に重ねる用）なので、
     # [[layers]]・[avatar] は重ねない
-    layer_specs = () if mode == "overlay" else avatar.all_layer_specs(project)
+    layer_specs = () if mode == "overlay" else avatar.all_layer_specs(project, analysis.avatar_sync)
     target = VideoTarget(
         mode, video.size, video.focus, project.work_dir / f"{mode}.ass", output, label, layers=layer_specs
     )
@@ -356,11 +352,7 @@ def check(project_dir: ProjectOption = None) -> None:
         console.print(f"  歌詞: {len(subs.dialogues(analysis.lyrics))} 行", markup=False)
     for file in analysis.font_files:
         console.print(f"  フォント: {file}", markup=False)
-    if (
-        config.avatar is not None
-        and (sync := avatar.analyze(project).sync) is not None
-        and sync.z is not None
-    ):
+    if config.avatar is not None and (sync := analysis.avatar_sync) is not None and sync.z is not None:
         console.print(f"  アバターの頭出し: {sync.offset_s:.3f} 秒（z = {sync.z:.1f}）", markup=False)
     issues = list(analysis.issues)
     if (error := subtitles_filter_error()) is not None:
@@ -458,7 +450,9 @@ def _render_thumbnail_bg(project_dir: Path | None, target: str) -> None:
     thumbnails = _select_named(
         project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
     )
-    issues = background_issues(project) + layer_issues(project) + _avatar_issues(project)
+    avatar_analysis = avatar.analyze(project)
+    issues = background_issues(project) + layer_issues(project)
+    issues += subs.prefixed(avatar_analysis.issues, "[avatar] ")
     analysis = analyze_thumbnails(project, thumbnails, bg_only=True)
     issues += analysis.issues
     _print_issues(issues)
@@ -467,7 +461,7 @@ def _render_thumbnail_bg(project_dir: Path | None, target: str) -> None:
 
     video = project.config.video
     for thumb in thumbnails:
-        output = _write_thumbnail(project, thumb, video, (), bg_only=True)
+        output = _write_thumbnail(project, thumb, video, (), bg_only=True, avatar_sync=avatar_analysis.sync)
         console.print(f"書き出しました: {output}（{output.stat().st_size:,} バイト）", markup=False)
         if windows_path := to_windows_path(output):
             console.print(f"  Windows: {windows_path}", markup=False)
@@ -493,7 +487,7 @@ def _render_vertical_preview(project: Project) -> None:
     # 下敷きも完成図と同じ画面にする。本編の歌詞は真ん中の映像に入れ、縦用 .ass の行は入れない
     assert inputs.lyrics is not None
     frame_ass = frame_script(project, inputs.lyrics, duration_ms, search.index)
-    layer_specs = avatar.all_layer_specs(project)
+    layer_specs = avatar.all_layer_specs(project, inputs.avatar_sync)
     frame = Frame(frame_ass, project.work_dir / "vertical-preview-frame.ass", layers=layer_specs)
     font_files = checked.font_files + inputs.font_files
     target = VideoTarget(
@@ -778,7 +772,7 @@ def shorts_command(
     default_focus = vertical.focus(config.vertical, config.video.focus)
     overlay = vertical.overlay_text(config.overlay_text, config.vertical)
     # [[layers]]・[avatar] はどのショートでも同じ。区間との重なりは本編と同じ enable の仕組みに任せる
-    layer_specs = avatar.all_layer_specs(project)
+    layer_specs = avatar.all_layer_specs(project, vertical_analysis.avatar_sync)
     for short in selected:
         section = analysis.sections[short.name]
         clip = graph.Clip(*shorts.clip_frames(section, fps), config.vertical.audio_fade_ms)
@@ -944,7 +938,9 @@ def thumbnail_command(
     thumbnails = _select_named(
         project.config.thumbnails, name, table="[[thumbnails]]", example=THUMBNAIL_EXAMPLE
     )
-    issues = background_issues(project) + layer_issues(project) + _avatar_issues(project)
+    avatar_analysis = avatar.analyze(project)
+    issues = background_issues(project) + layer_issues(project)
+    issues += subs.prefixed(avatar_analysis.issues, "[avatar] ")
     analysis = analyze_thumbnails(project, thumbnails, bg_only=False)
     issues += analysis.issues
     _print_issues(issues)
@@ -956,7 +952,9 @@ def thumbnail_command(
         font_files = analysis.font_files.get(thumb.name, ())
         target = inputs.thumbnail_target(project, thumb)
         record = inputs.Record(target, inputs.snapshot(target))
-        output = _write_thumbnail(project, thumb, video, font_files, bg_only=False, record=record)
+        output = _write_thumbnail(
+            project, thumb, video, font_files, bg_only=False, record=record, avatar_sync=avatar_analysis.sync
+        )
         console.print(f"書き出しました: {output}（{output.stat().st_size:,} バイト）", markup=False)
         if windows_path := to_windows_path(output):
             console.print(f"  Windows: {windows_path}", markup=False)
@@ -970,11 +968,14 @@ def _write_thumbnail(
     *,
     bg_only: bool,
     record: inputs.Record | None = None,
+    avatar_sync: avatar.SyncResult | None = None,
 ) -> Path:
     """背景のフレームに1本のサムネイルを書き出し、出力先を返す。
 
     thumbnail_command・preview-bg・build-all から呼ぶ（画面への表示はそれぞれの呼び出し側が行う）。
     record は bg_only のとき渡さない（bg は status の対象ではないので記録しない）。
+    avatar_sync は、呼び出し側が既に avatar.analyze() で求めた頭出しの結果があれば渡す
+    （二重計算を避けるため。issue #133）。
     """
     if bg_only:
         subtitles = fontsdir = None
@@ -991,7 +992,7 @@ def _write_thumbnail(
         if layers.active_at(layer, at)
     )
     if project.config.avatar is not None:
-        active_layers += (avatar.layer_spec(project),)  # 区間の無いレイヤーなので常に表示する
+        active_layers += (avatar.layer_spec(project, avatar_sync),)  # 区間の無いレイヤーなので常に表示する
     spec = graph.StillSpec(
         size=thumbnail.size(thumb, video.size),
         background=project.background_path.absolute(),
@@ -1058,7 +1059,9 @@ def _run_build_all_target(project: Project, search: FontSearch, name: str) -> No
     else:
         thumb_name = name.removeprefix("thumbnail:")
         thumb = next(t for t in project.config.thumbnails if t.name == thumb_name)
-        issues = background_issues(project) + layer_issues(project) + _avatar_issues(project)
+        avatar_analysis = avatar.analyze(project)
+        issues = background_issues(project) + layer_issues(project)
+        issues += subs.prefixed(avatar_analysis.issues, "[avatar] ")
         analysis = analyze_thumbnails(project, (thumb,), bg_only=False, search=search)
         issues += analysis.issues
         _print_issues(issues)
@@ -1067,4 +1070,12 @@ def _run_build_all_target(project: Project, search: FontSearch, name: str) -> No
         font_files = analysis.font_files.get(thumb_name, ())
         thumb_target = inputs.thumbnail_target(project, thumb)
         record = inputs.Record(thumb_target, inputs.snapshot(thumb_target))
-        _write_thumbnail(project, thumb, project.config.video, font_files, bg_only=False, record=record)
+        _write_thumbnail(
+            project,
+            thumb,
+            project.config.video,
+            font_files,
+            bg_only=False,
+            record=record,
+            avatar_sync=avatar_analysis.sync,
+        )

@@ -61,10 +61,10 @@ def render(project: Project, search: FontSearch, at: float, duration_s: float | 
     script = compose(project, analysis.lyrics, duration_ms, "final", analysis.font_index)
     video = project.config.video
     if duration_s is None:
-        return _render_still(project, script, video, at, analysis.font_files)
+        return _render_still(project, script, video, at, analysis.font_files, analysis.avatar_sync)
 
     clip = clip_for(at, duration_s, video.fps)
-    layer_specs = avatar.all_layer_specs(project)
+    layer_specs = avatar.all_layer_specs(project, analysis.avatar_sync)
     target = VideoTarget(
         "preview",
         video.size,
@@ -82,7 +82,12 @@ def render(project: Project, search: FontSearch, at: float, duration_s: float | 
 
 
 def _render_still(
-    project: Project, script: pysubs2.SSAFile, video: Video, at: float, font_files: tuple[Path, ...]
+    project: Project,
+    script: pysubs2.SSAFile,
+    video: Video,
+    at: float,
+    font_files: tuple[Path, ...],
+    avatar_sync: avatar.SyncResult | None = None,
 ) -> Path:
     subtitles_path = project.work_dir / "preview-still.ass"
     write_text(subtitles_path, script.to_string("ass"))
@@ -95,7 +100,7 @@ def _render_still(
         if layers.active_at(layer, at)
     )
     if project.config.avatar is not None:
-        active_layers += (avatar.layer_spec(project),)  # 区間の無いレイヤーなので常に表示する
+        active_layers += (avatar.layer_spec(project, avatar_sync),)  # 区間の無いレイヤーなので常に表示する
     # 動画・GIF の背景はループ再生されるので、素材の実長を超える at はループに合わせて折り返す
     # （素材そのものの長さは -ss でしか読めないため。曲中の時刻である at 自体は変えない）
     background_at = at

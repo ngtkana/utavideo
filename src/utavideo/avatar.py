@@ -280,17 +280,22 @@ def _prepare_args(avatar: Avatar, raw: Path, start_s: float) -> list[str]:
     return args
 
 
-def prepare(project: Project) -> tuple[Path, SyncResult]:
+def prepare(project: Project, sync: SyncResult | None = None) -> tuple[Path, SyncResult]:
     """[avatar] を、graph.LayerSpec に渡せるキー抜き・頭出し済みの動画（絶対パス）にする。
 
     生の録画・key 系の設定・sync/delay_ms が前回と変わっていなければ、build/.work/ の中間動画を
     使い回す（変わっていれば ffmpeg でキー抜き・頭出しをやり直す）。呼び出し側は
     project.config.avatar が None でないことを保証すること。
+
+    sync は、呼び出し側が analyze() 等で既に求めた結果があれば渡す（無ければここで求める）。
+    音の頭出し（ffmpeg でのデコード＋FFT）は軽くないので、1回のコマンド実行で二重に計算しない
+    ようにするため（issue #133）。
     """
     avatar = project.config.avatar
     assert avatar is not None
     raw = file_path(project.root, avatar)
-    sync = resolve_sync(project, avatar, raw)
+    if sync is None:
+        sync = resolve_sync(project, avatar, raw)
     start_s = max(0.0, sync.offset_s + avatar.delay_ms / 1000)
     output = _prepared_path(project)
 
@@ -304,28 +309,28 @@ def prepare(project: Project) -> tuple[Path, SyncResult]:
     return output.absolute(), sync
 
 
-def layer_spec(project: Project) -> graph.LayerSpec:
+def layer_spec(project: Project, sync: SyncResult | None = None) -> graph.LayerSpec:
     """[avatar] を、常に表示する（区間指定なしの）graph.LayerSpec に変換する。
 
     scale・anchor・margin・layer（気分で変えたいもの）をそのまま渡し、[[layers]] と同じ
     合成コード（utavideo.graph の overlay）に乗せる。呼び出し側は project.config.avatar が
-    None でないことを保証すること。
+    None でないことを保証すること。sync は prepare() と同じ（呼び出し側の analyze() の結果を渡せる）。
     """
     avatar = project.config.avatar
     assert avatar is not None
-    prepared, _ = prepare(project)
+    prepared, _ = prepare(project, sync)
     return graph.LayerSpec(
         file=prepared, scale=avatar.scale, anchor=avatar.anchor, margin=avatar.margin, layer=avatar.layer
     )
 
 
-def all_layer_specs(project: Project) -> tuple[graph.LayerSpec, ...]:
+def all_layer_specs(project: Project, sync: SyncResult | None = None) -> tuple[graph.LayerSpec, ...]:
     """project.config.layers（[[layers]]）に、あれば [avatar] を1個のレイヤーとして足したもの。
 
     build・preview-bg・shorts・preview など、layer_specs を組み立てるすべての場所で共通して使う
-    （cli.py・preview.py の間で同じ組み立てを重複させない）。
+    （cli.py・preview.py の間で同じ組み立てを重複させない）。sync は layer_spec() と同じ。
     """
     specs = tuple(layers.spec(project.root, layer) for layer in project.config.layers)
     if project.config.avatar is not None:
-        specs += (layer_spec(project),)
+        specs += (layer_spec(project, sync),)
     return specs
