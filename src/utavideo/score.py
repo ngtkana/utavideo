@@ -9,6 +9,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
 
@@ -110,6 +111,66 @@ def render_horizontal_svg(musicxml: str, *, scale: int = 40) -> str:
     if not tk.loadData(musicxml):
         raise ScoreError("MusicXML を読み込めませんでした")
     return _substitute_missing_font(tk.renderToSVG(1))
+
+
+@dataclass(frozen=True)
+class NoteEvent:
+    """1音符（和音は1まとめ）の、譜面上のx座標(px)と発音時刻(1小節目の頭を0秒とした秒)。"""
+
+    x: float
+    time_s: float
+
+
+_BBOX_RENDER_OPTIONS = {**_RENDER_OPTIONS, "svgBoundingBoxes": True}
+_BBOX_GROUP = re.compile(r"<g\b([^>]*)>\s*(<rect\b[^>]*/>)")
+_ATTR = re.compile(r'(\w[\w-]*)="([^"]*)"')
+
+
+def _parse_note_bboxes(svg: str) -> dict[str, float]:
+    """音符ごとのbboxから、譜面上のx座標(中心)を取り出す。属性の並び順には依存しない。"""
+    x_by_note_id: dict[str, float] = {}
+    for group_attrs, rect_tag in _BBOX_GROUP.findall(svg):
+        attrs = dict(_ATTR.findall(group_attrs))
+        note_id = attrs.get("id", "")
+        if attrs.get("class") != "note bounding-box" or not note_id.startswith("bbox-"):
+            continue
+        rect_attrs = dict(_ATTR.findall(rect_tag))
+        x = float(rect_attrs["x"]) + float(rect_attrs["width"]) / 2
+        x_by_note_id[note_id.removeprefix("bbox-")] = x
+    return x_by_note_id
+
+
+def note_events(musicxml: str, *, scale: int = 40) -> list[NoteEvent]:
+    """音符ごとの、譜面上のx座標と発音時刻を対応づける。
+
+    発音時刻はVerovioのタイムマップ計算（MusicXMLの`<sound tempo>`）に従う。テンポ変化・
+    拍子変化・♩=♩.のようなテンポの読み替えを反映する。rit.のような連続的なテンポ変化は、
+    `<words>rit.</words>`のような自由テキストとしてしか入らずプログラムから読み取れないので
+    使わない。MuseScoreは、その付近に`<sound tempo>`で（滑らかな曲線ではなく段階的な近似
+    ではあるが）実効テンポを一緒に書き出すことが多く、その場合はタイムマップに反映される
+    （検証: issue #141）。
+
+    和音は同時に鳴る全音符が同じ発音時刻になるので、1つの点にまとめる。休符には発音時刻が
+    無いため、その前後の音符を結ぶ直線で近似することになる。
+
+    表示用の画像（`render_horizontal_svg`）と組み合わせるときは、同じ`scale`を渡すこと
+    （座標系がずれる）。
+    """
+    tk = verovio.toolkit()
+    tk.setOptions({**_BBOX_RENDER_OPTIONS, "scale": scale})
+    if not tk.loadData(musicxml):
+        raise ScoreError("MusicXML を読み込めませんでした")
+    x_by_note_id = _parse_note_bboxes(tk.renderToSVG(1))
+
+    xs_by_time_ms: dict[float, list[float]] = {}
+    for entry in tk.renderToTimemap():
+        for note_id in entry.get("on", ()):
+            if (x := x_by_note_id.get(note_id)) is not None:
+                xs_by_time_ms.setdefault(entry["tstamp"], []).append(x)
+
+    events = [NoteEvent(x=sum(xs) / len(xs), time_s=time_ms / 1000) for time_ms, xs in xs_by_time_ms.items()]
+    events.sort(key=lambda e: e.time_s)
+    return events
 
 
 def _bundled_font_bytes() -> bytes:

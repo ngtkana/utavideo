@@ -67,9 +67,63 @@ _MUSICXML = """<?xml version="1.0" encoding="UTF-8"?>
 """
 
 
+# テンポ変化(120→60)・和音・休符を含む、note_events()の検証専用の楽譜。
+_TEMPO_CHANGE_MUSICXML = """<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Vocal</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes>
+        <divisions>6</divisions><key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <direction><sound tempo="120"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type></note>
+      <note><rest/><duration>6</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type></note>
+    </measure>
+    <measure number="2">
+      <direction><sound tempo="60"/></direction>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type></note>
+      <note><chord/><pitch><step>C</step><octave>5</octave></pitch><duration>6</duration><voice>1</voice><type>quarter</type></note>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>12</duration><voice>1</voice><type>half</type></note>
+    </measure>
+  </part>
+</score-partwise>
+"""
+
+
 def test_render_horizontal_svg_returns_svg() -> None:
     svg = score.render_horizontal_svg(_MUSICXML)
     assert svg.startswith("<?xml") or "<svg" in svg[:200]
+
+
+def test_note_events_are_sorted_by_time_and_increasing_in_x() -> None:
+    events = score.note_events(_TEMPO_CHANGE_MUSICXML)
+    times = [e.time_s for e in events]
+    xs = [e.x for e in events]
+    assert times == sorted(times)
+    assert xs == sorted(xs)
+
+
+def test_note_events_reflects_tempo_change() -> None:
+    """120bpmの四分音符は0.5秒、60bpmの四分音符は1.0秒(ちょうど2倍)になる。"""
+    events = score.note_events(_TEMPO_CHANGE_MUSICXML)
+    # 1小節目: C(120bpm, 0秒) D(0.5秒) 休符 E(1.5秒、休符ぶん1秒分空く)
+    assert events[0].time_s == pytest.approx(0.0)
+    assert events[1].time_s == pytest.approx(0.5)
+    assert events[2].time_s == pytest.approx(1.5)
+    # 2小節目: G+C5の和音(60bpmで2秒)、A(3秒)
+    assert events[3].time_s == pytest.approx(2.0)
+    assert events[4].time_s == pytest.approx(3.0)
+
+
+def test_note_events_merges_chord_into_one_point() -> None:
+    """和音（同時に鳴る音符）は1つの点にまとめる。"""
+    events = score.note_events(_TEMPO_CHANGE_MUSICXML)
+    assert len(events) == 5  # C, D, E, [G+C5], A の5点（休符は含まない）
 
 
 def test_substitute_missing_font_with_wrong_font_name() -> None:
